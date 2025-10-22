@@ -1,0 +1,8 @@
+Escaneo completado. Dispositivos encontrados:
+172.30.4.5 - Hostname: CTERM064.hefame.es - MAC: 00-10-40-dc-e8-82
+172.30.4.7 - Hostname: PT-HYB-zzvzbRZd.hefame.es - MAC: 00-24-9b-43-fc-17
+172.30.4.8 - Hostname: JUR02.hefame.es - MAC: ec-b1-d7-30-c1-9b
+172.30.4.9 - Hostname: WT008064e31d13.hefame.es - MAC: 00-80-64-e3-1d-13
+172.30.4.13 - Hostname: CTERM114.hefame.es - MAC: 00-10-40-d9-d1-25
+172.30.4.14 - Hostname: CPD11.hefame.es - MAC: 172.30.4.148
+172.30.4.16 - Hostname: CTERM073.hefame.es - MAC: 00-10-40-bb-a3-c2

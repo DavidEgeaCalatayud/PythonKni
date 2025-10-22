@@ -1,0 +1,4 @@
+PyQt5>=5.15.4
+rarfile>=4.0
+pyunpack>=0.3
+patool>=1.12
