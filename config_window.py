@@ -57,6 +57,9 @@ class ConfigWindow(QMainWindow):
         if app is not None:
             ThemeManager.apply_theme(app)
 
+        for widget in app.topLevelWidgets():
+            widget.update()
+
         # Guardar idioma seleccionado
         selected_language = self.language_combobox.currentText()
 
@@ -84,3 +87,4 @@ class ConfigWindow(QMainWindow):
                 ThemeManager.set_theme(theme)
         except FileNotFoundError:
             pass  # Si el archivo no existe, se usan los valores predeterminados
+

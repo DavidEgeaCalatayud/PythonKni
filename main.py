@@ -6,6 +6,10 @@ from wifi_handler import WifiWindow
 from networkScanner_handler import MainWindow
 from config_window import ConfigWindow
 from theme_manager import ThemeManager
+from archive_window import ArchiveWindow
+from duplicate_handler import DuplicateFinderWindow
+from temp_cleaner_handler import TempCleanerWindow
+from converter_handler import ConverterWindow
 
 class MenuWindow(QMainWindow):
     def __init__(self):
@@ -64,6 +68,26 @@ class MenuWindow(QMainWindow):
         self.network_button.clicked.connect(self.open_network_scanner)
         layout.addWidget(self.network_button)
 
+        # Botón para abrir el gestor de archivos (ZIP/7Z)
+        archive_button = QPushButton("Gestor de Archivos (ZIP/7Z)")
+        archive_button.clicked.connect(self.open_archive_window)
+        layout.addWidget(archive_button)
+
+        # Botón para buscador de duplicados
+        duplicate_button = QPushButton("Buscador de Archivos Duplicados")
+        duplicate_button.clicked.connect(self.open_duplicate_window)
+        layout.addWidget(duplicate_button)
+
+        # Botón para limpieza de temporales
+        temp_button = QPushButton("Limpieza de Temporales")
+        temp_button.clicked.connect(self.open_temp_cleaner)
+        layout.addWidget(temp_button)
+
+        # Botón para convertidor de archivos
+        converter_button = QPushButton("Convertidor de Archivos")
+        converter_button.clicked.connect(self.open_converter_window)
+        layout.addWidget(converter_button)
+
         # Botón para abrir la configuración
         self.config_button = QPushButton("Configuración")
         self.config_button.clicked.connect(self.open_config_window)
@@ -82,6 +106,22 @@ class MenuWindow(QMainWindow):
     def open_network_scanner(self):
         self.network_scanner = MainWindow()
         self.network_scanner.show()
+
+    def open_archive_window(self):
+        self.archive_window = ArchiveWindow()
+        self.archive_window.show()
+
+    def open_duplicate_window(self):
+        self.duplicate_window = DuplicateFinderWindow()
+        self.duplicate_window.show()
+
+    def open_temp_cleaner(self):
+        self.temp_cleaner_window = TempCleanerWindow()
+        self.temp_cleaner_window.show()
+
+    def open_converter_window(self):
+        self.converter_window = ConverterWindow()
+        self.converter_window.show()
 
     def open_config_window(self):
         """Abre la ventana de configuración."""
