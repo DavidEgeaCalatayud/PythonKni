@@ -1,0 +1,39 @@
+[project]
+name = "pythonkni"
+version = "0.1.0"
+description = "Aplicacion de escritorio en Python y PyQt5 con herramientas de mantenimiento, red y archivos."
+readme = "README.md"
+requires-python = ">=3.8"
+license = { file = "LICENSE" }
+authors = [
+  { name = "PythonKni contributors" }
+]
+dependencies = [
+  "PyQt5>=5.15",
+  "PyPDF2>=3.0",
+  "PyMuPDF>=1.23",
+  "reportlab>=4.0",
+  "Pillow>=10.0",
+  "python-docx>=1.1",
+  "psutil>=5.9",
+  "requests>=2.31",
+  "py7zr>=0.21",
+  "pytesseract>=0.3",
+  "pdf2image>=1.17"
+]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+
+[project.optional-dependencies]
+dev = [
+  "pytest>=8.0",
+  "ruff>=0.15"
+]
+
+[tool.ruff]
+line-length = 100
+target-version = "py38"
+
+[tool.ruff.lint]
+select = ["E9", "F63", "F7", "F82"]
