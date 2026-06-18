@@ -8,7 +8,7 @@
 ![Lint](https://img.shields.io/badge/lint-ruff-purple)
 ![License](https://img.shields.io/badge/license-MIT-lightgrey)
 
-PythonKni is a desktop utility suite developed in **Python** and **PyQt5**. It brings together file conversion, PDF processing, archive management, duplicate detection, network diagnostics, process inspection, temporary-file cleanup and local WiFi profile listing in a single graphical application.
+PythonKni is a desktop utility suite developed in **Python** and **PyQt5**. It brings together file conversion, PDF processing, archive management, duplicate detection, network diagnostics, process inspection, system diagnostics, disk analysis, startup management, Windows Event Viewer, temporary-file cleanup and local WiFi profile listing in a single graphical application.
 
 The project is designed as a practical “Swiss army knife” for local maintenance tasks, technical support workflows and everyday file operations on Windows.
 
@@ -75,6 +75,40 @@ The project is designed as a practical “Swiss army knife” for local maintena
 - Clean temporary files from local system/user folders.
 - Support safe maintenance operations from the desktop interface.
 
+### Disk Analyzer
+
+- Scan any folder and list files and subfolders with their sizes.
+- Identify the largest items at a glance.
+- Export results as CSV for further analysis.
+
+### Startup Manager
+
+- Read startup entries from the Windows registry (`HKCU\Run`, `HKLM\Run`).
+- Enable, disable or remove startup programs.
+- Add new custom startup entries.
+- Export the startup list as CSV or JSON.
+- Safe-edit mode: disabled entries are preserved and can be re-enabled.
+
+### System Report
+
+- Generate a full technical report of the local machine.
+- Includes CPU, RAM, disk, GPU, operating system, network adapters and installed processes.
+- Export the report as HTML, PDF or CSV.
+- Designed for technical support workflows and equipment inventories.
+
+### Windows Event Viewer
+
+- Read real Windows event logs (`Application`, `System`, `Security`).
+- Classify events by risk level: **Alto** (High), **Medio** (Medium), **Bajo** (Low), **Normal**.
+- Provide human-readable interpretations for common event IDs.
+- Filter events by period, log source, level, risk and free text search.
+- Color-coded risk column for fast visual triage.
+- Executive summary bar with counts of critical events, errors, warnings and risk levels.
+- Cancel long-running reads mid-operation.
+- Export results as CSV, HTML or PDF.
+- Open the native Windows Event Viewer from within the tool.
+- Integrate with the System Report tool for unified technical diagnostics.
+
 ### WiFi Profile Tools
 
 - List locally saved WiFi profiles.
@@ -133,10 +167,14 @@ tools/*_tool.py
   │
   ├── archive_tool.py
   ├── converter_tool.py
+  ├── disk_analyzer_tool.py
   ├── duplicate_tool.py
+  ├── event_viewer_tool.py
   ├── network_tool.py
   ├── pdf_merge_tool.py
   ├── process_manager_tool.py
+  ├── startup_manager_tool.py
+  ├── system_report_tool.py
   ├── temp_cleaner_tool.py
   ├── wifi_tool.py
   └── config_window_tool.py
@@ -184,6 +222,10 @@ requirements.txt         Runtime dependencies
 | Duplicate Finder | Detect duplicate files and move repeated copies |
 | Network Explorer | Scan local network devices and port ranges |
 | Process Manager | Inspect and manage local processes |
+| Disk Analyzer | Scan folders and list files and subfolders by size, export as CSV |
+| Startup Manager | Read, enable, disable and remove Windows startup entries |
+| System Report | Generate full technical hardware and software reports, export as HTML/PDF/CSV |
+| Windows Event Viewer | Read, classify by risk and interpret Windows event logs with search and export |
 | Temporary Cleaner | Clean temporary files |
 | WiFi Tool | List saved local WiFi profiles |
 | Configuration | Manage local application settings |
@@ -475,6 +517,9 @@ PythonKni includes tools that interact with:
 - local network devices;
 - port ranges;
 - saved WiFi profiles;
+- Windows registry startup entries;
+- Windows event logs;
+- local hardware and system information;
 - optional external analysis services.
 
 Use these features only on systems you own or have permission to manage.
@@ -527,7 +572,7 @@ Possible future improvements:
 - [ ] Publish signed Windows executable releases.
 - [ ] Improve DOCX to PDF conversion fidelity.
 - [ ] Add progress bars for long-running operations.
-- [ ] Add cancellation support to more tools.
+- [x] Add cancellation support to more tools (Windows Event Viewer).
 - [ ] Improve error reporting in the UI.
 - [ ] Add multilingual UI support.
 - [ ] Add a plugin-style tool registry.
