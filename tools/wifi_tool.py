@@ -1,26 +1,66 @@
-# tools/wifi_tool.py
+from __future__ import annotations
+
 import subprocess
+import tempfile
+import xml.etree.ElementTree as ET
+from pathlib import Path
+
 from PyQt5.QtWidgets import QMainWindow, QTableWidget, QTableWidgetItem, QVBoxLayout, QWidget
 
 
+def _run_netsh(args: list[str]) -> str:
+    completed = subprocess.run(
+        ["netsh", *args],
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
+        errors="replace",
+        check=True,
+    )
+    return completed.stdout
+
+
+def _parse_profiles(output: str) -> list[str]:
+    profiles = []
+    for line in output.splitlines():
+        if ":" not in line:
+            continue
+        left, right = line.split(":", 1)
+        profile = right.strip()
+        label = left.lower()
+        if profile and ("profile" in label or "perfil" in label):
+            profiles.append(profile)
+    return profiles
+
+
+def _read_exported_password(profile: str, export_dir: Path) -> str:
+    _run_netsh(["wlan", "export", "profile", f"name={profile}", "key=clear", f"folder={export_dir}"])
+    exported_files = sorted(export_dir.glob("*.xml"), key=lambda item: item.stat().st_mtime, reverse=True)
+    if not exported_files:
+        return "No Password"
+
+    tree = ET.parse(exported_files[0])
+    root = tree.getroot()
+    namespace = {"w": root.tag.split("}")[0].strip("{")} if root.tag.startswith("{") else {}
+    key = root.find(".//w:keyMaterial", namespace) if namespace else root.find(".//keyMaterial")
+    return key.text if key is not None and key.text else "No Password"
+
+
 def get_wifi_profiles():
-    """Obtiene las redes WiFi guardadas en Windows junto con sus contraseñas."""
+    """Obtiene las redes WiFi guardadas en Windows junto con sus contrasenas."""
     try:
-        output = subprocess.check_output("netsh wlan show profile", shell=True, text=True)
-        profiles = [
-            line.split(":")[1].strip() for line in output.splitlines() if "All User Profile" in line
-        ]
+        output = _run_netsh(["wlan", "show", "profiles"])
+        profiles = _parse_profiles(output)
         wifi_data = []
-        for profile in profiles:
-            try:
-                details = subprocess.check_output(
-                    f'netsh wlan show profile "{profile}" key=clear', shell=True, text=True
-                )
-                key_line = [line for line in details.splitlines() if "Key Content" in line]
-                password = key_line[0].split(":")[1].strip() if key_line else "No Password"
-                wifi_data.append((profile, password))
-            except subprocess.CalledProcessError:
-                wifi_data.append((profile, "Error retrieving"))
+
+        with tempfile.TemporaryDirectory() as temp_dir:
+            export_dir = Path(temp_dir)
+            for profile in profiles:
+                try:
+                    wifi_data.append((profile, _read_exported_password(profile, export_dir)))
+                except (subprocess.CalledProcessError, ET.ParseError, OSError):
+                    wifi_data.append((profile, "Error retrieving"))
+
         return wifi_data
     except Exception as e:
         return [("Error", str(e))]
@@ -34,7 +74,6 @@ class Tool(QMainWindow):
         self.setWindowTitle(self.name)
         self.setGeometry(100, 100, 800, 600)
 
-        # Estilo oscuro
         self.setStyleSheet("""
             QMainWindow {
                 background-color: #1e1e1e;
@@ -55,14 +94,12 @@ class Tool(QMainWindow):
             }
         """)
 
-        # Tabla
         self.table = QTableWidget()
         self.table.setColumnCount(2)
         self.table.setHorizontalHeaderLabels(["WiFi Name", "Password"])
         self.table.horizontalHeader().setStretchLastSection(True)
         self.table.setEditTriggers(QTableWidget.NoEditTriggers)
 
-        # Layout
         layout = QVBoxLayout()
         layout.addWidget(self.table)
 
@@ -70,11 +107,9 @@ class Tool(QMainWindow):
         container.setLayout(layout)
         self.setCentralWidget(container)
 
-        # Cargar datos
         self.show_wifi_data()
 
     def show_wifi_data(self):
-        """Muestra los perfiles WiFi en la tabla."""
         data = get_wifi_profiles()
         self.table.setRowCount(len(data))
         for row, (name, password) in enumerate(data):
