@@ -1,7 +1,7 @@
 import os
 import importlib
 import logging
-from PyQt5.QtWidgets import QApplication, QMainWindow, QVBoxLayout, QPushButton, QWidget, QLabel
+from PyQt5.QtWidgets import QApplication, QMainWindow, QVBoxLayout, QPushButton, QWidget, QLabel, QMessageBox
 from PyQt5.QtCore import Qt, QThread, pyqtSignal
 
 from tools.logging_config import setup_logging
@@ -11,13 +11,14 @@ logger = logging.getLogger(__name__)
 
 
 class LoaderThread(QThread):
-    tools_loaded = pyqtSignal(list, object)  # (normal_tools, config_tool)
+    tools_loaded = pyqtSignal(list, object, list)  # (normal_tools, config_tool, load_errors)
 
     def run(self):
         tools_dir = os.path.join(os.path.dirname(__file__), "tools")
 
         normal_tools = []
         config_tool = None
+        load_errors = []
 
         for file in os.listdir(tools_dir):
             if file.endswith("_tool.py") and file != "base_tool.py":
@@ -25,8 +26,9 @@ class LoaderThread(QThread):
                 try:
                     module = importlib.import_module(module_name)
                     tool_class = getattr(module, "Tool")
-                except Exception:
+                except Exception as error:
                     logger.exception("Error loading tool module %s", module_name)
+                    load_errors.append(f"{module_name}: {error}")
                     continue
 
                 if "config" in file.lower():
@@ -37,7 +39,7 @@ class LoaderThread(QThread):
         normal_tools.sort(key=lambda cls: cls.name.lower())
 
         # Emitir señal con los resultados
-        self.tools_loaded.emit(normal_tools, config_tool)
+        self.tools_loaded.emit(normal_tools, config_tool, load_errors)
 
 
 class MenuWindow(QMainWindow):
@@ -84,7 +86,7 @@ class MenuWindow(QMainWindow):
         self.loader_thread.tools_loaded.connect(self.on_tools_loaded)
         self.loader_thread.start()
 
-    def on_tools_loaded(self, normal_tools, config_tool):
+    def on_tools_loaded(self, normal_tools, config_tool, load_errors):
         """Recibimos la lista desde el hilo y generamos los botones"""
         # Eliminar mensaje de cargando
         self.layout.removeWidget(self.label_loading)
@@ -99,6 +101,13 @@ class MenuWindow(QMainWindow):
             btn = QPushButton(config_tool.name)
             btn.clicked.connect(lambda checked, cls=config_tool: self.open_tool(cls))
             self.layout.addWidget(btn)
+
+        if load_errors:
+            QMessageBox.warning(
+                self,
+                "Herramientas no cargadas",
+                "Algunas herramientas no se han podido cargar:\n\n" + "\n".join(load_errors),
+            )
 
     def open_tool(self, tool_class):
         self.window = tool_class()

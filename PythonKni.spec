@@ -3,9 +3,25 @@ from PyInstaller.utils.hooks import collect_all
 
 datas = [('tools', 'tools')]
 binaries = []
-hiddenimports = ['PyPDF2', 'pytesseract', 'pdf2image', 'PIL']
-tmp_ret = collect_all('PyQt5')
-datas += tmp_ret[0]; binaries += tmp_ret[1]; hiddenimports += tmp_ret[2]
+hiddenimports = []
+
+for package in [
+    'PyQt5',
+    'PyPDF2',
+    'pytesseract',
+    'pdf2image',
+    'PIL',
+    'fitz',
+    'docx',
+    'py7zr',
+    'psutil',
+    'requests',
+    'reportlab',
+]:
+    tmp_ret = collect_all(package)
+    datas += tmp_ret[0]
+    binaries += tmp_ret[1]
+    hiddenimports += tmp_ret[2]
 
 
 a = Analysis(
