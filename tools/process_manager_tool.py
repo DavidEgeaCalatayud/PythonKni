@@ -1,32 +1,113 @@
+import hashlib
 import logging
 import os
+from dataclasses import dataclass
+
 import psutil
-import hashlib
 import requests
+from PyQt5.QtCore import QThread, Qt, pyqtSignal
+from PyQt5.QtGui import QMovie
 from PyQt5.QtWidgets import (
+    QHBoxLayout,
+    QLabel,
     QMainWindow,
-    QVBoxLayout,
-    QWidget,
+    QMessageBox,
     QPushButton,
+    QSizePolicy,
+    QSpinBox,
     QTableWidget,
     QTableWidgetItem,
-    QMessageBox,
-    QHBoxLayout,
-    QSpinBox,
-    QLabel,
-    QSizePolicy,
+    QVBoxLayout,
+    QWidget,
 )
-from PyQt5.QtCore import Qt, QThread, pyqtSignal
-from PyQt5.QtGui import QMovie
+
 from tools.app_paths import ASSETS_DIR
 from tools.theme_manager import ThemeManager
 
 
 logger = logging.getLogger(__name__)
 
+SYSTEM_PROCESS_NAMES = {
+    "csrss.exe",
+    "fontdrvhost.exe",
+    "lsass.exe",
+    "registry",
+    "services.exe",
+    "smss.exe",
+    "system",
+    "system idle process",
+    "svchost.exe",
+    "wininit.exe",
+    "winlogon.exe",
+}
+SYSTEM_USERNAMES = {
+    "local service",
+    "network service",
+    "nt authority\\local service",
+    "nt authority\\network service",
+    "nt authority\\system",
+    "system",
+}
+
+
+@dataclass(frozen=True)
+class ProcessDetails:
+    pid: int
+    name: str
+    exe_path: str
+    username: str
+    create_time: float
+
 
 def get_vt_api_key():
     return os.getenv("VIRUSTOTAL_API_KEY")
+
+
+def is_own_process(pid, app_pid=None):
+    """Indica si el PID pertenece a la instancia actual de PythonKni."""
+    return pid == (os.getpid() if app_pid is None else app_pid)
+
+
+def is_system_process(details):
+    """Clasifica conservadoramente procesos que requieren una advertencia extra."""
+    name = details.name.casefold()
+    username = details.username.casefold()
+    exe_path = details.exe_path.casefold().replace("/", "\\")
+
+    if details.pid in {0, 4}:
+        return True
+    if name in SYSTEM_PROCESS_NAMES:
+        return True
+    if username in SYSTEM_USERNAMES:
+        return True
+    return "\\windows\\system32\\" in exe_path or "\\windows\\syswow64\\" in exe_path
+
+
+def format_process_identity(details):
+    return (
+        f"PID: {details.pid}\n"
+        f"Nombre: {details.name}\n"
+        f"Ruta: {details.exe_path}"
+    )
+
+
+def _safe_process_value(getter, fallback="No disponible"):
+    try:
+        value = getter()
+    except (psutil.NoSuchProcess, psutil.AccessDenied, psutil.ZombieProcess):
+        return fallback
+    return str(value) if value else fallback
+
+
+def get_process_details(proc):
+    """Obtiene una instantánea del proceso sin fallar por campos restringidos."""
+    return ProcessDetails(
+        pid=proc.pid,
+        name=_safe_process_value(proc.name, "Desconocido"),
+        exe_path=_safe_process_value(proc.exe),
+        username=_safe_process_value(proc.username),
+        create_time=proc.create_time(),
+    )
 
 
 class LoaderThread(QThread):
@@ -82,12 +163,12 @@ class Tool(QMainWindow):
 
         # Gif animado
         self.loading_label = QLabel()
-        self.loading_label.setFixedSize(48, 48)  # 🔹 tamaño fijo para el gif
+        self.loading_label.setFixedSize(48, 48)
         self.loading_label.setAlignment(Qt.AlignCenter)
 
         gif_path = str(ASSETS_DIR / "spinner.gif")
         self.loading_movie = QMovie(gif_path)
-        self.loading_movie.setScaledSize(self.loading_label.size())  # escalar al tamaño del QLabel
+        self.loading_movie.setScaledSize(self.loading_label.size())
         self.loading_label.setMovie(self.loading_movie)
         loading_layout.addWidget(self.loading_label)
 
@@ -183,23 +264,82 @@ class Tool(QMainWindow):
         self.table.setSortingEnabled(True)
 
     def kill_process(self):
-        """Mata el proceso seleccionado"""
+        """Termina el proceso seleccionado aplicando protecciones previas."""
         selected = self.table.currentRow()
         if selected < 0:
             QMessageBox.warning(self, "Error", "Selecciona un proceso primero.")
             return
 
-        pid_item = self.table.item(selected, 0)
-        pid = int(pid_item.text())
+        pid = int(self.table.item(selected, 0).text())
+
+        if is_own_process(pid):
+            QMessageBox.warning(
+                self,
+                "Proceso protegido",
+                "PythonKni no puede terminar su propio proceso desde el Gestor de Procesos.",
+            )
+            return
 
         try:
-            p = psutil.Process(pid)
-            p.terminate()
-            QMessageBox.information(self, "Éxito", f"Proceso {pid} terminado.")
+            proc = psutil.Process(pid)
+            details = get_process_details(proc)
+        except (psutil.NoSuchProcess, psutil.AccessDenied, psutil.ZombieProcess) as error:
+            logger.warning("Could not inspect process %s before termination: %s", pid, error)
+            QMessageBox.warning(
+                self,
+                "Proceso no disponible",
+                "El proceso ya no existe o no se puede consultar con los permisos actuales.",
+            )
+            return
+
+        confirmation = QMessageBox.question(
+            self,
+            "Confirmar finalización",
+            "¿Seguro que quieres terminar este proceso?\n\n"
+            + format_process_identity(details),
+            QMessageBox.Yes | QMessageBox.No,
+            QMessageBox.No,
+        )
+        if confirmation != QMessageBox.Yes:
+            return
+
+        if is_system_process(details):
+            system_confirmation = QMessageBox.question(
+                self,
+                "Advertencia: proceso del sistema",
+                "Este proceso parece pertenecer a Windows o ejecutarse con una cuenta del sistema.\n"
+                "Terminarlo puede provocar inestabilidad, cierre de sesión o reinicio.\n\n"
+                + format_process_identity(details)
+                + f"\nUsuario: {details.username}\n\n¿Quieres continuar de todos modos?",
+                QMessageBox.Yes | QMessageBox.No,
+                QMessageBox.No,
+            )
+            if system_confirmation != QMessageBox.Yes:
+                return
+
+        try:
+            if not proc.is_running() or proc.create_time() != details.create_time:
+                QMessageBox.warning(
+                    self,
+                    "Proceso cambiado",
+                    "El proceso seleccionado ya no es el mismo. Se ha cancelado la operación por seguridad.",
+                )
+                return
+
+            proc.terminate()
+            QMessageBox.information(
+                self,
+                "Éxito",
+                f"Proceso {details.name} (PID {pid}) terminado.",
+            )
             self.load_processes()
-        except Exception as e:
+        except (psutil.NoSuchProcess, psutil.AccessDenied, psutil.ZombieProcess) as error:
             logger.exception("Could not terminate process %s", pid)
-            QMessageBox.critical(self, "Error", f"No se pudo terminar el proceso:\n{e}")
+            QMessageBox.critical(
+                self,
+                "Error",
+                f"No se pudo terminar el proceso:\n{error}",
+            )
 
     def analyze_process(self, pid):
         """Analiza el ejecutable del proceso en VirusTotal"""
@@ -218,8 +358,8 @@ class Tool(QMainWindow):
 
             # Calcular hash SHA256
             sha256_hash = hashlib.sha256()
-            with open(exe_path, "rb") as f:
-                for chunk in iter(lambda: f.read(4096), b""):
+            with open(exe_path, "rb") as file:
+                for chunk in iter(lambda: file.read(4096), b""):
                     sha256_hash.update(chunk)
             file_hash = sha256_hash.hexdigest()
 
@@ -234,7 +374,6 @@ class Tool(QMainWindow):
                 total = sum(stats.values())
                 positives = stats.get("malicious", 0)
 
-                # 🔹 Obtener lista de motores que lo marcaron como malicioso
                 detections = []
                 scans = data["data"]["attributes"]["last_analysis_results"]
                 for engine, result in scans.items():
@@ -242,9 +381,7 @@ class Tool(QMainWindow):
                         detections.append(f"{engine}: {result['result']}")
 
                 if detections:
-                    detections_text = "\n".join(
-                        detections[:15]
-                    )  # muestra los primeros 15 para no saturar
+                    detections_text = "\n".join(detections[:15])
                     extra = "\n\n---\nMotores detectando:\n" + detections_text
                     if len(detections) > 15:
                         extra += f"\n...y {len(detections) - 15} más."
@@ -259,13 +396,21 @@ class Tool(QMainWindow):
 
             elif response.status_code == 404:
                 QMessageBox.warning(
-                    self, "VirusTotal", f"Archivo no encontrado en VirusTotal.\nHash: {file_hash}"
+                    self,
+                    "VirusTotal",
+                    f"Archivo no encontrado en VirusTotal.\nHash: {file_hash}",
                 )
             else:
                 QMessageBox.warning(
-                    self, "Error", f"Error al consultar VirusTotal: {response.text}"
+                    self,
+                    "Error",
+                    f"Error al consultar VirusTotal: {response.text}",
                 )
 
-        except Exception as e:
+        except Exception as error:
             logger.exception("Could not analyze process %s with VirusTotal", pid)
-            QMessageBox.critical(self, "Error", f"No se pudo analizar el proceso:\n{e}")
+            QMessageBox.critical(
+                self,
+                "Error",
+                f"No se pudo analizar el proceso:\n{error}",
+            )
