@@ -48,7 +48,7 @@ jobs:
             throw "PyInstaller did not produce $exe"
           }
 
-          & $exe --smoke-test
-          if ($LASTEXITCODE -ne 0) {
-            throw "Packaged application smoke test failed with exit code $LASTEXITCODE"
+          $process = Start-Process -FilePath $exe -ArgumentList "--smoke-test" -Wait -PassThru
+          if ($process.ExitCode -ne 0) {
+            throw "Packaged application smoke test failed with exit code $($process.ExitCode)"
           }
