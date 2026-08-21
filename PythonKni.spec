@@ -1,9 +1,20 @@
 # -*- mode: python ; coding: utf-8 -*-
-from PyInstaller.utils.hooks import collect_all
+from PyInstaller.utils.hooks import collect_all, collect_submodules
 
-datas = [('tools', 'tools')]
+# The loader enumerates tools/*.py at runtime, so keep that directory available
+# as data as well as collecting every dynamic module below. Assets are resolved
+# relative to the frozen application root by tools.app_paths.
+datas = [
+    ('tools', 'tools'),
+    ('assets', 'assets'),
+]
 binaries = []
 hiddenimports = []
+
+# Dynamic imports are invisible to PyInstaller's static analysis. Explicitly
+# collect both the compatibility plugin package and the new domain package.
+hiddenimports += collect_submodules('tools')
+hiddenimports += collect_submodules('pythonkni')
 
 for package in [
     'PyQt5',
@@ -22,6 +33,8 @@ for package in [
     datas += tmp_ret[0]
     binaries += tmp_ret[1]
     hiddenimports += tmp_ret[2]
+
+hiddenimports = sorted(set(hiddenimports))
 
 
 a = Analysis(
