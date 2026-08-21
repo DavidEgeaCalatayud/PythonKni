@@ -52,7 +52,7 @@ def split_startup() -> None:
     service_body = source[exception_start:ui_marker].strip()
     window_body = source[tool_start:].strip()
 
-    old_open_folder = '''def open_folder(path: str | Path) -> None:
+    old_open_folder = """def open_folder(path: str | Path) -> None:
     folder = Path(path)
     if folder.is_file():
         folder = folder.parent
@@ -63,7 +63,7 @@ def split_startup() -> None:
         os.startfile(str(folder))  # type: ignore[attr-defined]
     else:
         QDesktopServices.openUrl(QUrl.fromLocalFile(str(folder)))
-'''
+"""
     new_open_folder = '''def open_folder(path: str | Path) -> None:
     """Open a folder with the platform shell without depending on Qt."""
     folder = Path(path)
@@ -84,17 +84,17 @@ def split_startup() -> None:
         service_body, old_open_folder, new_open_folder, "startup.open_folder"
     )
 
-    models = f'''from __future__ import annotations
+    models = f"""from __future__ import annotations
 
 import uuid
 from dataclasses import dataclass, field
 
 
 {model_block}
-'''
+"""
     write("pythonkni/startup/models.py", models)
 
-    service = f'''from __future__ import annotations
+    service = f"""from __future__ import annotations
 
 import errno
 import json
@@ -121,10 +121,10 @@ from .models import StartupItem
 
 
 {service_body}
-'''
+"""
     write("pythonkni/startup/service.py", service)
 
-    window = f'''from __future__ import annotations
+    window = f"""from __future__ import annotations
 
 import csv
 from pathlib import Path
@@ -162,7 +162,7 @@ from .service import (
 
 
 {window_body}
-'''
+"""
     write("pythonkni/startup/window.py", window)
 
     wrapper = '''"""Compatibility adapter for the startup-manager plugin.
@@ -189,12 +189,10 @@ def split_event_viewer() -> None:
     worker_start = source.index("class EventWorker(QThread):", worker_marker)
 
     model_block = source[model_start:service_marker].strip()
-    service_body = source[
-        source.index("def is_windows()", service_marker):worker_marker
-    ].strip()
+    service_body = source[source.index("def is_windows()", service_marker) : worker_marker].strip()
     window_body = source[worker_start:].strip()
 
-    old_setup = '''    def setup_ui(self):
+    old_setup = """    def setup_ui(self):
         self.setWindowTitle(self.name)
         self.resize(1350, 780)
         self.events: list[EventItem] = []
@@ -204,8 +202,8 @@ def split_event_viewer() -> None:
         ThemeManager.apply_theme(QApplication.instance())
 
     def setup_ui(self) -> None:
-'''
-    new_setup = '''    def setup_ui(self) -> None:
+"""
+    new_setup = """    def setup_ui(self) -> None:
         self.setWindowTitle(self.name)
         self.resize(1350, 780)
         self.events: list[EventItem] = []
@@ -213,10 +211,8 @@ def split_event_viewer() -> None:
         self.worker: EventWorker | None = None
         ThemeManager.apply_theme(QApplication.instance())
 
-'''
-    window_body = replace_required(
-        window_body, old_setup, new_setup, "event_viewer.Tool.setup_ui"
-    )
+"""
+    window_body = replace_required(window_body, old_setup, new_setup, "event_viewer.Tool.setup_ui")
     window_body = replace_required(
         window_body,
         "    finished = pyqtSignal(object)\n",
@@ -236,16 +232,16 @@ def split_event_viewer() -> None:
         "EventWorker connection",
     )
 
-    models = f'''from __future__ import annotations
+    models = f"""from __future__ import annotations
 
 from dataclasses import dataclass
 
 
 {model_block}
-'''
+"""
     write("pythonkni/event_viewer/models.py", models)
 
-    service = f'''from __future__ import annotations
+    service = f"""from __future__ import annotations
 
 import html
 import json
@@ -298,10 +294,10 @@ SUPPORTED_LOGS = ["Application", "System", "Security"]
 
 
 {service_body}
-'''
+"""
     write("pythonkni/event_viewer/service.py", service)
 
-    window = f'''from __future__ import annotations
+    window = f"""from __future__ import annotations
 
 import csv
 import subprocess
@@ -357,7 +353,7 @@ RISK_COLORS = {{
 
 
 {window_body}
-'''
+"""
     write("pythonkni/event_viewer/window.py", window)
 
     wrapper = '''"""Compatibility adapter for the Windows Event Viewer plugin.
@@ -401,16 +397,16 @@ def split_system_report() -> None:
         "ReportWorker connection",
     )
 
-    models = f'''from __future__ import annotations
+    models = f"""from __future__ import annotations
 
 from dataclasses import dataclass, field
 
 
 {model_block}
-'''
+"""
     write("pythonkni/system_report/models.py", models)
 
-    service = f'''from __future__ import annotations
+    service = f"""from __future__ import annotations
 
 import getpass
 import html
@@ -438,10 +434,10 @@ from .models import ReportData
 
 
 {service_body}
-'''
+"""
     write("pythonkni/system_report/service.py", service)
 
-    window = f'''from __future__ import annotations
+    window = f"""from __future__ import annotations
 
 from datetime import datetime
 from pathlib import Path
@@ -470,7 +466,7 @@ from .service import collect_report, report_to_html, report_to_pdf, report_to_te
 
 
 {window_body}
-'''
+"""
     write("pythonkni/system_report/window.py", window)
 
     wrapper = '''"""Compatibility adapter for the system-report plugin.
@@ -562,7 +558,7 @@ def update_tests() -> None:
 def add_architecture_tests() -> None:
     write(
         "tests/test_architecture_boundaries.py",
-        '''import ast
+        """import ast
 from pathlib import Path
 
 import pytest
@@ -614,14 +610,14 @@ def test_windows_keep_base_tool_contract():
     for tool in (EventTool, PdfTool, StartupTool, ReportTool):
         assert issubclass(tool, BaseTool)
         assert tool.setup_ui is not BaseTool.setup_ui
-''',
+""",
     )
 
 
 def update_architecture_doc() -> None:
     write(
         "docs/architecture.md",
-        '''# Architecture
+        """# Architecture
 
 PythonKni is a PyQt5 desktop application with a dynamic tool loader. The core
 architecture now separates domain logic from Qt windows for the largest tools.
@@ -676,7 +672,7 @@ adapter. Remaining tools can be migrated incrementally with the same pattern.
 A `models.py` module is used when a domain has stable data structures. Domains
 without a useful model should not create placeholder classes merely to satisfy a
 folder convention.
-''',
+""",
     )
 
 

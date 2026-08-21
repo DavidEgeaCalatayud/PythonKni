@@ -1,4 +1,5 @@
-from tools import event_viewer_tool as events
+from pythonkni.event_viewer import service as events
+from pythonkni.event_viewer.models import EventItem
 
 
 def make_event_xml(provider, event_id, level, message, timestamp="2026-08-21T10:00:00.1234567Z"):
@@ -68,7 +69,7 @@ def test_collect_events_sorts_by_risk_and_honours_limit(monkeypatch):
 
 
 def test_events_html_escapes_untrusted_event_content():
-    item = events.EventItem(
+    item = EventItem(
         date="21/08/2026",
         level="Error",
         level_number=2,
