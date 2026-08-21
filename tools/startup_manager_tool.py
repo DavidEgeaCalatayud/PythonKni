@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import csv
+import errno
 import json
 import os
 import platform
@@ -74,6 +75,10 @@ class StartupItem:
     metadata_path: str = ""
     disabled_id: str = ""
     id: str = field(default_factory=lambda: uuid.uuid4().hex)
+
+
+class StartupTransactionError(RuntimeError):
+    """Indica que una operación falló y su rollback tampoco pudo completarse."""
 
 
 # ---------------------------------------------------------------------------
@@ -457,31 +462,74 @@ def collect_startup_items() -> list[StartupItem]:
 # ---------------------------------------------------------------------------
 
 
+def delete_disabled_registry_backup(disabled_id: str, *, missing_ok: bool = False) -> None:
+    if not is_windows():
+        return
+    try:
+        winreg.DeleteKey(winreg.HKEY_CURRENT_USER, f"{DISABLED_REGISTRY_KEY}\\{disabled_id}")
+    except FileNotFoundError:
+        if not missing_ok:
+            raise
+
+
+
 def create_disabled_registry_backup(item: StartupItem) -> str:
     if not is_windows():
         raise RuntimeError("Esta función solo está disponible en Windows.")
 
     disabled_id = f"{datetime.now().strftime('%Y%m%d_%H%M%S')}_{uuid.uuid4().hex[:8]}"
-    with winreg.CreateKeyEx(winreg.HKEY_CURRENT_USER, DISABLED_REGISTRY_KEY, 0, winreg.KEY_WRITE) as root_key:
-        with winreg.CreateKeyEx(root_key, disabled_id, 0, winreg.KEY_WRITE) as item_key:
-            winreg.SetValueEx(item_key, "Name", 0, winreg.REG_SZ, item.value_name or item.name)
-            winreg.SetValueEx(item_key, "Command", 0, winreg.REG_SZ, item.command)
-            winreg.SetValueEx(item_key, "Source", 0, winreg.REG_SZ, item.source)
-            winreg.SetValueEx(item_key, "OriginalRoot", 0, winreg.REG_SZ, item.root_name)
-            winreg.SetValueEx(item_key, "OriginalKey", 0, winreg.REG_SZ, item.key_path)
-            winreg.SetValueEx(item_key, "OriginalValueType", 0, winreg.REG_DWORD, int(item.value_type or winreg.REG_SZ))
-            winreg.SetValueEx(item_key, "DisabledAt", 0, winreg.REG_SZ, now_stamp())
+    try:
+        with winreg.CreateKeyEx(winreg.HKEY_CURRENT_USER, DISABLED_REGISTRY_KEY, 0, winreg.KEY_WRITE) as root_key:
+            with winreg.CreateKeyEx(root_key, disabled_id, 0, winreg.KEY_WRITE) as item_key:
+                winreg.SetValueEx(item_key, "Name", 0, winreg.REG_SZ, item.value_name or item.name)
+                winreg.SetValueEx(item_key, "Command", 0, winreg.REG_SZ, item.command)
+                winreg.SetValueEx(item_key, "Source", 0, winreg.REG_SZ, item.source)
+                winreg.SetValueEx(item_key, "OriginalRoot", 0, winreg.REG_SZ, item.root_name)
+                winreg.SetValueEx(item_key, "OriginalKey", 0, winreg.REG_SZ, item.key_path)
+                winreg.SetValueEx(
+                    item_key,
+                    "OriginalValueType",
+                    0,
+                    winreg.REG_DWORD,
+                    int(item.value_type or winreg.REG_SZ),
+                )
+                winreg.SetValueEx(item_key, "DisabledAt", 0, winreg.REG_SZ, now_stamp())
+    except Exception as error:
+        try:
+            delete_disabled_registry_backup(disabled_id, missing_ok=True)
+        except Exception as rollback_error:
+            raise StartupTransactionError(
+                "No se pudo crear la copia de seguridad del registro y tampoco se pudo limpiar la copia parcial: "
+                f"{rollback_error}"
+            ) from error
+        raise
     return disabled_id
 
 
 
-def delete_disabled_registry_backup(disabled_id: str) -> None:
-    if not is_windows():
-        return
+def _delete_registry_value(item: StartupItem) -> None:
+    root = REGISTRY_ROOTS[item.root_name]
+    with winreg.OpenKey(root, item.key_path, 0, winreg.KEY_SET_VALUE) as key:
+        winreg.DeleteValue(key, item.value_name or item.name)
+
+
+
+def _registry_value_exists(item: StartupItem) -> bool:
+    root = REGISTRY_ROOTS[item.root_name]
     try:
-        winreg.DeleteKey(winreg.HKEY_CURRENT_USER, f"{DISABLED_REGISTRY_KEY}\\{disabled_id}")
-    except OSError:
-        pass
+        with winreg.OpenKey(root, item.key_path, 0, winreg.KEY_QUERY_VALUE) as key:
+            winreg.QueryValueEx(key, item.value_name or item.name)
+        return True
+    except FileNotFoundError:
+        return False
+
+
+
+def _write_registry_value(item: StartupItem) -> None:
+    root = REGISTRY_ROOTS[item.root_name]
+    with winreg.CreateKeyEx(root, item.key_path, 0, winreg.KEY_SET_VALUE) as key:
+        value_type = item.value_type or winreg.REG_SZ
+        winreg.SetValueEx(key, item.value_name or item.name, 0, value_type, item.command)
 
 
 
@@ -491,10 +539,18 @@ def disable_registry_item(item: StartupItem) -> None:
     if item.root_name not in REGISTRY_ROOTS:
         raise RuntimeError("Raíz de registro no reconocida.")
 
-    create_disabled_registry_backup(item)
-    root = REGISTRY_ROOTS[item.root_name]
-    with winreg.OpenKey(root, item.key_path, 0, winreg.KEY_SET_VALUE) as key:
-        winreg.DeleteValue(key, item.value_name)
+    backup_id = create_disabled_registry_backup(item)
+    try:
+        _delete_registry_value(item)
+    except Exception as error:
+        try:
+            delete_disabled_registry_backup(backup_id, missing_ok=True)
+        except Exception as rollback_error:
+            raise StartupTransactionError(
+                "No se pudo desactivar la entrada de registro y tampoco se pudo retirar la copia de seguridad creada: "
+                f"{rollback_error}"
+            ) from error
+        raise
 
 
 
@@ -503,13 +559,66 @@ def enable_registry_item(item: StartupItem) -> None:
         raise RuntimeError("Esta función solo está disponible en Windows.")
     if item.root_name not in REGISTRY_ROOTS:
         raise RuntimeError("Raíz de registro no reconocida.")
+    if not item.disabled_id:
+        raise RuntimeError("La entrada desactivada no tiene identificador de copia de seguridad.")
+    if _registry_value_exists(item):
+        raise FileExistsError(
+            f"Ya existe una entrada activa con el nombre {item.value_name or item.name!r}; no se sobrescribirá."
+        )
 
-    root = REGISTRY_ROOTS[item.root_name]
-    with winreg.CreateKeyEx(root, item.key_path, 0, winreg.KEY_SET_VALUE) as key:
-        value_type = item.value_type or winreg.REG_SZ
-        winreg.SetValueEx(key, item.value_name or item.name, 0, value_type, item.command)
+    _write_registry_value(item)
+    try:
+        delete_disabled_registry_backup(item.disabled_id)
+    except Exception as error:
+        try:
+            _delete_registry_value(item)
+        except Exception as rollback_error:
+            raise StartupTransactionError(
+                "Se restauró la entrada de registro, pero no se pudo eliminar su copia desactivada ni revertir la restauración: "
+                f"{rollback_error}"
+            ) from error
+        raise
 
-    delete_disabled_registry_backup(item.disabled_id)
+
+
+def _move_path(source: Path, destination: Path) -> None:
+    """Mueve sin sobrescribir; usa rename atómico cuando origen y destino comparten volumen."""
+    if not source.exists():
+        raise FileNotFoundError(str(source))
+    if destination.exists():
+        raise FileExistsError(str(destination))
+
+    try:
+        os.replace(str(source), str(destination))
+    except OSError as error:
+        if error.errno != errno.EXDEV:
+            raise
+        shutil.move(str(source), str(destination))
+
+
+
+def _write_pending_metadata(path: Path, metadata: dict[str, str]) -> None:
+    with path.open("x", encoding="utf-8") as handle:
+        json.dump(metadata, handle, indent=2, ensure_ascii=False)
+        handle.flush()
+        os.fsync(handle.fileno())
+
+
+
+def _cleanup_metadata_file(path: Path) -> None:
+    try:
+        path.unlink(missing_ok=True)
+    except FileNotFoundError:
+        pass
+
+
+
+def _preserve_disabled_folder_metadata(pending_path: Path, metadata_path: Path) -> None:
+    """Intenta dejar una copia recuperable visible si el rollback del archivo falla."""
+    if metadata_path.exists():
+        return
+    if pending_path.exists():
+        os.replace(str(pending_path), str(metadata_path))
 
 
 
@@ -525,8 +634,7 @@ def disable_folder_item(item: StartupItem) -> None:
     backup_name = f"{unique_id}_{original.name}"
     backup_path = backup_root / backup_name
     metadata_path = backup_root / f"{unique_id}.json"
-
-    shutil.move(str(original), str(backup_path))
+    pending_metadata_path = backup_root / f".{unique_id}.json.tmp"
 
     metadata = {
         "name": item.name,
@@ -535,7 +643,33 @@ def disable_folder_item(item: StartupItem) -> None:
         "backup_path": str(backup_path),
         "disabled_at": now_stamp(),
     }
-    metadata_path.write_text(json.dumps(metadata, indent=2, ensure_ascii=False), encoding="utf-8")
+
+    moved = False
+    _write_pending_metadata(pending_metadata_path, metadata)
+    try:
+        _move_path(original, backup_path)
+        moved = True
+        os.replace(str(pending_metadata_path), str(metadata_path))
+    except Exception as error:
+        if moved or (backup_path.exists() and not original.exists()):
+            try:
+                _move_path(backup_path, original)
+            except Exception as rollback_error:
+                try:
+                    _preserve_disabled_folder_metadata(pending_metadata_path, metadata_path)
+                except Exception as metadata_error:
+                    raise StartupTransactionError(
+                        "No se pudo desactivar la entrada, el archivo no pudo volver a su ruta original y tampoco se pudo "
+                        f"conservar metadata recuperable. Rollback: {rollback_error}; metadata: {metadata_error}"
+                    ) from error
+                raise StartupTransactionError(
+                    "No se pudo desactivar la entrada y tampoco se pudo devolver el archivo a su ruta original. "
+                    f"La copia permanece en {backup_path} con metadata recuperable. Error de rollback: {rollback_error}"
+                ) from error
+
+        _cleanup_metadata_file(pending_metadata_path)
+        _cleanup_metadata_file(metadata_path)
+        raise
 
 
 
@@ -548,15 +682,26 @@ def enable_folder_item(item: StartupItem) -> None:
         raise FileNotFoundError(str(metadata_path))
 
     metadata = json.loads(metadata_path.read_text(encoding="utf-8"))
-    original_path = Path(str(metadata.get("original_path") or ""))
-    if not original_path:
+    original_raw = str(metadata.get("original_path") or "").strip()
+    if not original_raw:
         raise RuntimeError("No se pudo obtener la ruta original.")
+    original_path = Path(original_raw)
     if original_path.exists():
         raise FileExistsError(f"Ya existe un archivo en la ruta original: {original_path}")
 
     original_path.parent.mkdir(parents=True, exist_ok=True)
-    shutil.move(str(backup), str(original_path))
-    metadata_path.unlink(missing_ok=True)
+    _move_path(backup, original_path)
+    try:
+        metadata_path.unlink()
+    except Exception as error:
+        try:
+            _move_path(original_path, backup)
+        except Exception as rollback_error:
+            raise StartupTransactionError(
+                "Se restauró el archivo, pero no se pudo eliminar su metadata ni devolverlo a la copia desactivada: "
+                f"{rollback_error}"
+            ) from error
+        raise
 
 
 # ---------------------------------------------------------------------------
