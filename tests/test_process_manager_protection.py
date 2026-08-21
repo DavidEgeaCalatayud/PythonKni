@@ -67,9 +67,7 @@ def test_kill_process_blocks_pythonkni_own_pid():
     window = SimpleNamespace(table=FakeTable(os.getpid()))
 
     with ExitStack() as stack:
-        warning = stack.enter_context(
-            patch("tools.process_manager_tool.QMessageBox.warning")
-        )
+        warning = stack.enter_context(patch("tools.process_manager_tool.QMessageBox.warning"))
         process = stack.enter_context(patch("tools.process_manager_tool.psutil.Process"))
         Tool.kill_process(window)
 
@@ -83,9 +81,7 @@ def test_kill_process_requires_confirmation_before_terminate():
     details = make_details()
 
     with ExitStack() as stack:
-        stack.enter_context(
-            patch("tools.process_manager_tool.psutil.Process", return_value=proc)
-        )
+        stack.enter_context(patch("tools.process_manager_tool.psutil.Process", return_value=proc))
         stack.enter_context(
             patch("tools.process_manager_tool.get_process_details", return_value=details)
         )
@@ -114,9 +110,7 @@ def test_kill_process_requires_second_confirmation_for_system_process():
     )
 
     with ExitStack() as stack:
-        stack.enter_context(
-            patch("tools.process_manager_tool.psutil.Process", return_value=proc)
-        )
+        stack.enter_context(patch("tools.process_manager_tool.psutil.Process", return_value=proc))
         stack.enter_context(
             patch("tools.process_manager_tool.get_process_details", return_value=details)
         )
@@ -140,9 +134,7 @@ def test_kill_process_terminates_after_confirmations_and_identity_check():
     details = make_details()
 
     with ExitStack() as stack:
-        stack.enter_context(
-            patch("tools.process_manager_tool.psutil.Process", return_value=proc)
-        )
+        stack.enter_context(patch("tools.process_manager_tool.psutil.Process", return_value=proc))
         stack.enter_context(
             patch("tools.process_manager_tool.get_process_details", return_value=details)
         )
@@ -167,9 +159,7 @@ def test_kill_process_aborts_if_pid_identity_changes():
     details = make_details(create_time=100.0)
 
     with ExitStack() as stack:
-        stack.enter_context(
-            patch("tools.process_manager_tool.psutil.Process", return_value=proc)
-        )
+        stack.enter_context(patch("tools.process_manager_tool.psutil.Process", return_value=proc))
         stack.enter_context(
             patch("tools.process_manager_tool.get_process_details", return_value=details)
         )
@@ -179,9 +169,7 @@ def test_kill_process_aborts_if_pid_identity_changes():
                 return_value=QMessageBox.Yes,
             )
         )
-        warning = stack.enter_context(
-            patch("tools.process_manager_tool.QMessageBox.warning")
-        )
+        warning = stack.enter_context(patch("tools.process_manager_tool.QMessageBox.warning"))
         Tool.kill_process(window)
 
     warning.assert_called_once()

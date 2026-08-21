@@ -84,11 +84,7 @@ def is_system_process(details):
 
 
 def format_process_identity(details):
-    return (
-        f"PID: {details.pid}\n"
-        f"Nombre: {details.name}\n"
-        f"Ruta: {details.exe_path}"
-    )
+    return f"PID: {details.pid}\nNombre: {details.name}\nRuta: {details.exe_path}"
 
 
 def _safe_process_value(getter, fallback="No disponible"):
@@ -295,8 +291,7 @@ class Tool(QMainWindow):
         confirmation = QMessageBox.question(
             self,
             "Confirmar finalización",
-            "¿Seguro que quieres terminar este proceso?\n\n"
-            + format_process_identity(details),
+            "¿Seguro que quieres terminar este proceso?\n\n" + format_process_identity(details),
             QMessageBox.Yes | QMessageBox.No,
             QMessageBox.No,
         )
