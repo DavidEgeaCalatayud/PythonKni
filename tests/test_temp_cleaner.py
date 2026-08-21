@@ -1,4 +1,7 @@
+import os
 from pathlib import Path
+
+import pytest
 
 import tools.temp_cleaner_tool as cleaner
 from tools.temp_cleaner_tool import delete_folder_contents
@@ -134,3 +137,139 @@ def test_firefox_cache_targets_only_cache2_on_linux(tmp_path, monkeypatch):
 
     assert cleaner.CleanTarget("Firefox Cache", cache2.resolve()) in targets
     assert all(target.path != firefox_profile.resolve() for target in targets)
+
+
+def test_directory_symlink_is_removed_without_touching_external_target(tmp_path, monkeypatch):
+    folder = tmp_path / "temp"
+    outside = tmp_path / "outside"
+    folder.mkdir()
+    outside.mkdir()
+    marker = outside / "keep.txt"
+    marker.write_text("keep", encoding="utf-8")
+    link = folder / "outside-link"
+
+    try:
+        link.symlink_to(outside, target_is_directory=True)
+    except OSError:
+        pytest.skip("El sistema no permite crear symlinks en este entorno")
+
+    monkeypatch.setattr(cleaner.platform, "system", lambda: "Windows")
+    monkeypatch.setenv("TEMP", str(folder))
+    monkeypatch.delenv("TMP", raising=False)
+
+    result = delete_folder_contents(folder)
+
+    assert result.failed == 0
+    assert marker.exists()
+    assert not os.path.lexists(link)
+
+
+def test_directory_symlink_is_safe_in_path_walk_fallback(tmp_path, monkeypatch):
+    folder = tmp_path / "temp"
+    outside = tmp_path / "outside"
+    folder.mkdir()
+    outside.mkdir()
+    marker = outside / "keep.txt"
+    marker.write_text("keep", encoding="utf-8")
+    link = folder / "outside-link"
+
+    try:
+        link.symlink_to(outside, target_is_directory=True)
+    except OSError:
+        pytest.skip("El sistema no permite crear symlinks en este entorno")
+
+    monkeypatch.setattr(cleaner.platform, "system", lambda: "Windows")
+    monkeypatch.setattr(cleaner, "_supports_fd_walk", lambda: False)
+    monkeypatch.setenv("TEMP", str(folder))
+    monkeypatch.delenv("TMP", raising=False)
+
+    result = delete_folder_contents(folder)
+
+    assert result.failed == 0
+    assert marker.exists()
+    assert not os.path.lexists(link)
+
+
+def test_file_symlink_is_removed_without_touching_external_file(tmp_path, monkeypatch):
+    folder = tmp_path / "temp"
+    folder.mkdir()
+    outside_file = tmp_path / "keep.txt"
+    outside_file.write_text("keep", encoding="utf-8")
+    link = folder / "outside-file-link"
+
+    try:
+        link.symlink_to(outside_file)
+    except OSError:
+        pytest.skip("El sistema no permite crear symlinks en este entorno")
+
+    monkeypatch.setattr(cleaner.platform, "system", lambda: "Windows")
+    monkeypatch.setenv("TEMP", str(folder))
+    monkeypatch.delenv("TMP", raising=False)
+
+    result = delete_folder_contents(folder)
+
+    assert result.failed == 0
+    assert outside_file.read_text(encoding="utf-8") == "keep"
+    assert not os.path.lexists(link)
+
+
+def test_preview_uses_lstat_for_file_symlinks(tmp_path, monkeypatch):
+    folder = tmp_path / "temp"
+    folder.mkdir()
+    outside_file = tmp_path / "large.bin"
+    outside_file.write_bytes(b"x" * 10000)
+    link = folder / "outside-file-link"
+
+    try:
+        link.symlink_to(outside_file)
+    except OSError:
+        pytest.skip("El sistema no permite crear symlinks en este entorno")
+
+    monkeypatch.setattr(cleaner.platform, "system", lambda: "Windows")
+    monkeypatch.setenv("TEMP", str(folder))
+    monkeypatch.delenv("TMP", raising=False)
+
+    preview = cleaner.build_preview(cleaner.get_temp_targets())
+
+    assert preview.items == 1
+    assert preview.bytes == link.lstat().st_size
+    assert preview.bytes != outside_file.stat().st_size
+
+
+def test_fd_walk_rejects_root_replaced_by_symlink_before_open(tmp_path, monkeypatch):
+    if not cleaner._supports_fd_walk():
+        pytest.skip("Este entorno no dispone de fwalk + dir_fd seguros")
+
+    folder = tmp_path / "temp"
+    original = tmp_path / "original-temp"
+    outside = tmp_path / "outside"
+    folder.mkdir()
+    outside.mkdir()
+    original_marker = folder / "original.txt"
+    original_marker.write_text("original", encoding="utf-8")
+    outside_marker = outside / "outside.txt"
+    outside_marker.write_text("outside", encoding="utf-8")
+
+    monkeypatch.setattr(cleaner.platform, "system", lambda: "Windows")
+    monkeypatch.setenv("TEMP", str(folder))
+    monkeypatch.delenv("TMP", raising=False)
+
+    real_open = cleaner.os.open
+    raced = False
+
+    def racing_open(path, flags, *args, **kwargs):
+        nonlocal raced
+        if not raced and Path(path) == folder:
+            raced = True
+            folder.rename(original)
+            folder.symlink_to(outside, target_is_directory=True)
+        return real_open(path, flags, *args, **kwargs)
+
+    monkeypatch.setattr(cleaner.os, "open", racing_open)
+
+    result = delete_folder_contents(folder)
+
+    assert result.deleted == 0
+    assert result.failed >= 1
+    assert (original / "original.txt").exists()
+    assert outside_marker.exists()
