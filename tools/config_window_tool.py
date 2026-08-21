@@ -12,9 +12,9 @@ from PyQt5.QtWidgets import (
 )
 
 from tools.app_paths import CONFIG_FILE
-from tools.config_service import load_config, save_config
+from tools.config_service import load_config
 from tools.language_manager import LanguageManager
-from tools.runtime_config import apply_runtime_config
+from tools.runtime_config import apply_runtime_config, save_runtime_config
 from tools.theme_manager import ThemeManager
 
 
@@ -64,14 +64,16 @@ class Tool(QMainWindow):
         self.close_button.setText(LanguageManager.translate("Cerrar"))
 
     def save_changes(self):
-        selected_theme = self.theme_combobox.currentText()
-        selected_language = self.language_combobox.currentText()
+        config = save_runtime_config(
+            CONFIG_FILE,
+            {
+                "theme": self.theme_combobox.currentText(),
+                "language": self.language_combobox.currentText(),
+            },
+        )
 
-        config = {
-            "theme": selected_theme,
-            "language": selected_language,
-        }
-        apply_runtime_config(config)
+        self.theme_combobox.setCurrentText(config["theme"])
+        self.language_combobox.setCurrentText(config["language"])
 
         app = QApplication.instance()
         if app is not None:
@@ -80,7 +82,6 @@ class Tool(QMainWindow):
                 widget.update()
 
         self.refresh_language_texts()
-        save_config(CONFIG_FILE, config)
 
         QMessageBox.information(
             self,
