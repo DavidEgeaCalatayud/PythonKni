@@ -3,7 +3,7 @@ from pathlib import Path
 
 import pytest
 
-import tools.startup_manager_tool as startup
+import pythonkni.startup.service as startup
 
 
 def make_registry_item(**overrides):

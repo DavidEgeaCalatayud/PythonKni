@@ -1,6 +1,6 @@
 import pytest
 
-from tools.pdf_merge_tool import parse_page_list, parse_page_spec
+from pythonkni.pdf.service import parse_page_list, parse_page_spec
 
 
 def test_parse_page_list_accepts_single_pages_and_ranges():

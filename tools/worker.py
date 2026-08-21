@@ -5,9 +5,7 @@ from typing import Any, Callable
 
 from PyQt5.QtCore import QThread, pyqtSignal
 
-
-class WorkerCancelled(Exception):
-    """Internal control-flow exception used to stop a worker cooperatively."""
+from pythonkni.core.tasks import WorkerCancelled
 
 
 class Worker(QThread):
