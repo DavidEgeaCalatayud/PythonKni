@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from tools.base_tool import BaseTool
+
 import csv
 import os
 from dataclasses import dataclass
@@ -103,11 +105,12 @@ class DiskAnalyzerWorker(QThread):
             self.failed.emit(str(error))
 
 
-class Tool(QMainWindow):
+class Tool(BaseTool):
     name = "Analizador de Disco"
+    description = "Analiza el uso de espacio en disco y carpetas."
+    category = "Sistema"
 
-    def __init__(self):
-        super().__init__()
+    def setup_ui(self):
         self.setWindowTitle(self.name)
         self.setGeometry(250, 250, 1050, 650)
         ThemeManager.apply_theme(self)

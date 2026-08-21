@@ -1,14 +1,17 @@
+from tools.base_tool import BaseTool
+
 from PyQt5.QtWidgets import QMainWindow, QVBoxLayout, QWidget, QPushButton
 
 from tools.theme_manager import ThemeManager
 from tools.zip_7zip_utils import create_7z, create_zip, extract_7z, extract_zip
 
 
-class Tool(QMainWindow):
+class Tool(BaseTool):
     name = "Gestor de Archivos (ZIP/7Z)"
+    description = "Comprime y extrae archivos ZIP y 7Z."
+    category = "Archivos"
 
-    def __init__(self):
-        super().__init__()
+    def setup_ui(self):
         self.setWindowTitle(self.name)
         self.setGeometry(150, 150, 400, 200)
 

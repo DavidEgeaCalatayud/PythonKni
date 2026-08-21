@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from tools.base_tool import BaseTool
+
 import os
 
 from PyQt5.QtCore import QTimer
@@ -34,11 +36,12 @@ from tools.pdf_tasks import (
 from tools.worker import Worker
 
 
-class Tool(QMainWindow):
+class Tool(BaseTool):
     name = "PDF Toolkit"
+    description = "Divide, combina, reordena y extrae contenido de PDF."
+    category = "PDF"
 
-    def __init__(self):
-        super().__init__()
+    def setup_ui(self):
         self.setWindowTitle(self.name)
         self.setGeometry(150, 150, 900, 600)
         self._worker = None

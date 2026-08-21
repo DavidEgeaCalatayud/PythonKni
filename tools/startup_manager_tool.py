@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from tools.base_tool import BaseTool
+
 import csv
 import errno
 import json
@@ -688,11 +690,12 @@ def enable_folder_item(item: StartupItem) -> None:
 # ---------------------------------------------------------------------------
 
 
-class Tool(QMainWindow):
+class Tool(BaseTool):
     name = "Gestor de Inicio de Windows"
+    description = "Administra aplicaciones configuradas para iniciar con Windows."
+    category = "Sistema"
 
-    def __init__(self):
-        super().__init__()
+    def setup_ui(self):
         self.setWindowTitle(self.name)
         self.setGeometry(220, 220, 1250, 650)
         ThemeManager.apply_theme(self)
