@@ -397,9 +397,7 @@ class Tool(QMainWindow):
                 "Este PDF probablemente es escaneado (imagen).\n"
                 "Active OCR y asegúrese de tener Tesseract/Poppler para mejores resultados."
             )
-            self.log(
-                f"[Texto][Aviso] Probablemente escaneado: {empty_ratio:.0f}% páginas vacías."
-            )
+            self.log(f"[Texto][Aviso] Probablemente escaneado: {empty_ratio:.0f}% páginas vacías.")
             QMessageBox.warning(self, "Aviso", message)
         else:
             self.log(
@@ -468,9 +466,7 @@ class Tool(QMainWindow):
         )
 
     def _extract_done(self, result):
-        self.log(
-            f"[Extraer] Guardado: {result['save_path']} (páginas: {result['page_count']})"
-        )
+        self.log(f"[Extraer] Guardado: {result['save_path']} (páginas: {result['page_count']})")
         QMessageBox.information(self, "OK", "PDF extraído correctamente.")
 
     # ---------- TAB: REORDENAR ----------
@@ -515,9 +511,7 @@ class Tool(QMainWindow):
     def _reorder_loaded(self, result):
         for index in range(result["page_count"]):
             self.page_list.addItem(f"Página {index + 1}")
-        self.log(
-            f"[Reordenar] Cargado {result['src']} con {result['page_count']} páginas."
-        )
+        self.log(f"[Reordenar] Cargado {result['src']} con {result['page_count']} páginas.")
 
     def _reorder_save(self):
         if not self.require_pypdf():

@@ -119,9 +119,7 @@ def test_virustotal_task_hashes_and_queries_in_worker(tmp_path):
         "data": {
             "attributes": {
                 "last_analysis_stats": {"malicious": 1, "undetected": 3},
-                "last_analysis_results": {
-                    "Engine": {"category": "malicious", "result": "Example"}
-                },
+                "last_analysis_results": {"Engine": {"category": "malicious", "result": "Example"}},
             }
         }
     }

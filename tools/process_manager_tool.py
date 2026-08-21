@@ -491,8 +491,7 @@ class Tool(QMainWindow):
         QMessageBox.information(
             self,
             "Resultado VirusTotal",
-            f"Archivo: {result.exe_path}\n\n"
-            f"Detecciones: {result.positives}/{result.total}{extra}",
+            f"Archivo: {result.exe_path}\n\nDetecciones: {result.positives}/{result.total}{extra}",
         )
 
     def _analysis_error(self, error):
