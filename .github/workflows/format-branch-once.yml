@@ -1,0 +1,39 @@
+name: Format branch once
+
+on:
+  push:
+    branches:
+      - fix/startup-manager-atomic
+
+permissions:
+  contents: write
+
+jobs:
+  format:
+    runs-on: windows-latest
+    steps:
+      - name: Checkout branch
+        uses: actions/checkout@v4
+        with:
+          ref: fix/startup-manager-atomic
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.10"
+
+      - name: Install Ruff
+        run: python -m pip install ruff==0.16.4
+
+      - name: Format Python files
+        run: python -m ruff format .
+
+      - name: Commit formatting
+        shell: pwsh
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -- main.py tools/disk_analyzer_tool.py tools/event_viewer_tool.py tools/network_tool.py tools/startup_manager_tool.py tools/system_report_tool.py tools/temp_cleaner_tool.py tools/wifi_tool.py
+          if (git diff --cached --quiet) { exit 0 }
+          git commit -m "Apply Ruff formatting"
+          git push origin HEAD:fix/startup-manager-atomic
