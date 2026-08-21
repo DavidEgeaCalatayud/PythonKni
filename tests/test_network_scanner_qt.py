@@ -124,7 +124,9 @@ def test_network_worker_marks_cancelled_results_as_partial(monkeypatch, qtbot):
 def test_port_worker_marks_cancelled_results_as_partial(monkeypatch, qtbot):
     open_port = network.OpenPort(22, "ssh")
 
-    def fake_scan(target, start_port, end_port, stop_event=None, on_open=None, on_checked=None, **kwargs):
+    def fake_scan(
+        target, start_port, end_port, stop_event=None, on_open=None, on_checked=None, **kwargs
+    ):
         on_checked(22)
         on_open(open_port)
         stop_event.set()
