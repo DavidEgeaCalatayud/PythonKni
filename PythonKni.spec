@@ -1,5 +1,7 @@
 # -*- mode: python ; coding: utf-8 -*-
-from PyInstaller.utils.hooks import collect_all, collect_submodules
+from pathlib import Path
+
+from PyInstaller.utils.hooks import collect_all
 
 # The loader enumerates tools/*.py at runtime, so keep that directory available
 # as data as well as collecting every dynamic module below. Assets are resolved
@@ -11,10 +13,24 @@ datas = [
 binaries = []
 hiddenimports = []
 
-# Dynamic imports are invisible to PyInstaller's static analysis. Explicitly
-# collect both the compatibility plugin package and the new domain package.
-hiddenimports += collect_submodules('tools')
-hiddenimports += collect_submodules('pythonkni')
+
+def local_python_modules(root_name):
+    """Return import names for every local Python module below root_name."""
+    modules = []
+    for path in Path(root_name).rglob('*.py'):
+        parts = list(path.with_suffix('').parts)
+        if parts[-1] == '__init__':
+            parts.pop()
+        if parts:
+            modules.append('.'.join(parts))
+    return modules
+
+
+# Dynamic imports are invisible to PyInstaller's static analysis. Build this
+# list from the repository tree instead of relying on collect_submodules(),
+# which requires the local package to be importable while the spec is evaluated.
+hiddenimports += local_python_modules('tools')
+hiddenimports += local_python_modules('pythonkni')
 
 for package in [
     'PyQt5',
