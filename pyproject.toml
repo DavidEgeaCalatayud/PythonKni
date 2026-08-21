@@ -30,7 +30,8 @@ qt_api = "pyqt5"
 dev = [
   "pytest>=8.0",
   "pytest-qt>=4.4",
-  "ruff>=0.15"
+  "ruff>=0.15",
+  "pyinstaller>=6.0"
 ]
 
 [tool.ruff]
