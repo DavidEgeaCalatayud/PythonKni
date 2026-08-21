@@ -13,6 +13,11 @@ SERVICE_MODULES = [
     ROOT / "pythonkni" / "system_report" / "service.py",
     ROOT / "pythonkni" / "pdf" / "service.py",
 ]
+MODEL_MODULES = [
+    ROOT / "pythonkni" / "event_viewer" / "models.py",
+    ROOT / "pythonkni" / "startup" / "models.py",
+    ROOT / "pythonkni" / "system_report" / "models.py",
+]
 TOOL_WRAPPERS = [
     ROOT / "tools" / "event_viewer_tool.py",
     ROOT / "tools" / "startup_manager_tool.py",
@@ -21,17 +26,30 @@ TOOL_WRAPPERS = [
 ]
 
 
-@pytest.mark.parametrize("path", SERVICE_MODULES)
-def test_business_services_do_not_import_pyqt(path):
+def imported_modules(path):
     tree = ast.parse(path.read_text(encoding="utf-8"))
+    modules = []
     for node in ast.walk(tree):
         if isinstance(node, ast.Import):
-            names = [alias.name for alias in node.names]
+            modules.extend(alias.name for alias in node.names)
         elif isinstance(node, ast.ImportFrom):
-            names = [node.module or ""]
-        else:
-            continue
-        assert not any(name == "PyQt5" or name.startswith("PyQt5.") for name in names)
+            modules.append(node.module or "")
+    return modules
+
+
+@pytest.mark.parametrize("path", SERVICE_MODULES)
+def test_business_services_do_not_depend_on_qt_or_window_modules(path):
+    modules = imported_modules(path)
+    assert not any(name == "PyQt5" or name.startswith("PyQt5.") for name in modules)
+    assert "tools.worker" not in modules
+    assert not any(name.endswith(".window") for name in modules)
+
+
+@pytest.mark.parametrize("path", MODEL_MODULES)
+def test_models_are_framework_independent(path):
+    modules = imported_modules(path)
+    assert not any(name == "PyQt5" or name.startswith("PyQt5.") for name in modules)
+    assert not any(name == "tools" or name.startswith("tools.") for name in modules)
 
 
 @pytest.mark.parametrize("path", TOOL_WRAPPERS)
