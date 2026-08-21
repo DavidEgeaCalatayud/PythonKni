@@ -1,18 +1,23 @@
-import os
 import importlib
 import logging
+import os
+
+from PyQt5.QtCore import QThread, Qt, pyqtSignal
 from PyQt5.QtWidgets import (
     QApplication,
-    QMainWindow,
-    QVBoxLayout,
-    QPushButton,
-    QWidget,
     QLabel,
+    QMainWindow,
     QMessageBox,
+    QPushButton,
+    QVBoxLayout,
+    QWidget,
 )
-from PyQt5.QtCore import Qt, QThread, pyqtSignal
 
+from tools.app_paths import CONFIG_FILE
+from tools.config_service import DEFAULT_CONFIG
 from tools.logging_config import setup_logging
+from tools.runtime_config import apply_runtime_config, load_runtime_config
+from tools.theme_manager import ThemeManager
 
 
 logger = logging.getLogger(__name__)
@@ -46,7 +51,6 @@ class LoaderThread(QThread):
 
         normal_tools.sort(key=lambda cls: cls.name.lower())
 
-        # Emitir señal con los resultados
         self.tools_loaded.emit(normal_tools, config_tool, load_errors)
 
 
@@ -55,30 +59,6 @@ class MenuWindow(QMainWindow):
         super().__init__()
         self.setWindowTitle("Navaja Multiusos")
         self.setGeometry(100, 100, 600, 400)
-
-        self.setStyleSheet(
-            """
-            QMainWindow {
-                background-color: #1e1e1e;
-            }
-            QPushButton {
-                background-color: #2b2b2b;
-                color: white;
-                font-size: 18px;
-                font-weight: bold;
-                border-radius: 10px;
-                padding: 10px;
-            }
-            QPushButton:hover {
-                background-color: #3d3d3d;
-            }
-            QLabel {
-                color: white;
-                font-size: 20px;
-                font-weight: bold;
-            }
-            """
-        )
 
         self.layout = QVBoxLayout()
         self.label_loading = QLabel("Cargando herramientas...")
@@ -89,14 +69,12 @@ class MenuWindow(QMainWindow):
         container.setLayout(self.layout)
         self.setCentralWidget(container)
 
-        # Lanzar hilo que carga los tools
         self.loader_thread = LoaderThread()
         self.loader_thread.tools_loaded.connect(self.on_tools_loaded)
         self.loader_thread.start()
 
     def on_tools_loaded(self, normal_tools, config_tool, load_errors):
-        """Recibimos la lista desde el hilo y generamos los botones"""
-        # Eliminar mensaje de cargando
+        """Recibimos la lista desde el hilo y generamos los botones."""
         self.layout.removeWidget(self.label_loading)
         self.label_loading.deleteLater()
 
@@ -122,12 +100,22 @@ class MenuWindow(QMainWindow):
         self.window.show()
 
 
+def configure_managers():
+    """Carga la configuración persistida antes de crear la interfaz Qt."""
+    try:
+        return load_runtime_config(CONFIG_FILE)
+    except (OSError, ValueError):
+        logger.exception("No se pudo cargar la configuración: %s", CONFIG_FILE)
+        config = DEFAULT_CONFIG.copy()
+        apply_runtime_config(config)
+        return config
+
+
 if __name__ == "__main__":
     setup_logging()
+    configure_managers()
+
     app = QApplication([])
-
-    from tools.theme_manager import ThemeManager
-
     ThemeManager.apply_theme(app)
 
     window = MenuWindow()

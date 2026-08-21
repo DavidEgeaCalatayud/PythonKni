@@ -11,7 +11,7 @@ def test_load_config_returns_defaults_when_file_does_not_exist(tmp_path):
 
 def test_save_and_load_config_roundtrip(tmp_path):
     config_file = tmp_path / "settings" / "config.json"
-    config = {"theme": "Oscuro", "language": "Ingles"}
+    config = {"theme": "Oscuro", "language": "Inglés"}
 
     save_config(config_file, config)
 
@@ -26,6 +26,37 @@ def test_load_config_fills_missing_values_with_defaults(tmp_path):
 
     assert loaded["theme"] == "Oscuro"
     assert loaded["language"] == DEFAULT_CONFIG["language"]
+
+
+def test_load_config_normalizes_legacy_english_value(tmp_path):
+    config_file = tmp_path / "config.json"
+    config_file.write_text(
+        json.dumps({"theme": "Oscuro", "language": "Ingles"}),
+        encoding="utf-8",
+    )
+
+    loaded = load_config(config_file)
+
+    assert loaded == {"theme": "Oscuro", "language": "Inglés"}
+
+
+def test_save_config_writes_canonical_language_value(tmp_path):
+    config_file = tmp_path / "config.json"
+
+    save_config(config_file, {"theme": "Claro", "language": "Ingles"})
+
+    stored = json.loads(config_file.read_text(encoding="utf-8"))
+    assert stored["language"] == "Inglés"
+
+
+def test_load_config_rejects_unknown_theme_and_language(tmp_path):
+    config_file = tmp_path / "config.json"
+    config_file.write_text(
+        json.dumps({"theme": "Neon", "language": "Klingon"}),
+        encoding="utf-8",
+    )
+
+    assert load_config(config_file) == DEFAULT_CONFIG
 
 
 def test_load_config_raises_for_invalid_json(tmp_path):

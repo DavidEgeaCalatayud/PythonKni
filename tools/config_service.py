@@ -10,6 +10,29 @@ DEFAULT_CONFIG: dict[str, str] = {
     "language": "Español",
 }
 
+VALID_THEMES = {"Claro", "Oscuro"}
+VALID_LANGUAGES = {"Español", "Inglés"}
+LEGACY_LANGUAGES = {
+    "Ingles": "Inglés",
+}
+
+
+def normalize_config(config: dict[str, Any]) -> dict[str, str]:
+    theme = config.get("theme")
+    if theme not in VALID_THEMES:
+        theme = DEFAULT_CONFIG["theme"]
+
+    language = config.get("language")
+    if isinstance(language, str):
+        language = LEGACY_LANGUAGES.get(language, language)
+    if language not in VALID_LANGUAGES:
+        language = DEFAULT_CONFIG["language"]
+
+    return {
+        "theme": theme,
+        "language": language,
+    }
+
 
 def load_config(config_file: Path) -> dict[str, str]:
     if not config_file.exists():
@@ -18,15 +41,11 @@ def load_config(config_file: Path) -> dict[str, str]:
     with config_file.open("r", encoding="utf-8") as file:
         raw_config: dict[str, Any] = json.load(file)
 
-    config = DEFAULT_CONFIG.copy()
-    for key in DEFAULT_CONFIG:
-        value = raw_config.get(key)
-        if isinstance(value, str) and value:
-            config[key] = value
-    return config
+    return normalize_config(raw_config)
 
 
 def save_config(config_file: Path, config: dict[str, str]) -> None:
     config_file.parent.mkdir(parents=True, exist_ok=True)
+    normalized_config = normalize_config(config)
     with config_file.open("w", encoding="utf-8") as file:
-        json.dump(config, file, indent=2, ensure_ascii=False)
+        json.dump(normalized_config, file, indent=2, ensure_ascii=False)
