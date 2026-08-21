@@ -83,9 +83,7 @@ def test_run_wevtutil_cancel_kills_drains_and_reaps_child(monkeypatch):
     cancel_event = threading.Event()
     cancel_event.set()
 
-    output, warning = events.run_wevtutil(
-        "System", 24, 1000, False, cancel_event=cancel_event
-    )
+    output, warning = events.run_wevtutil("System", 24, 1000, False, cancel_event=cancel_event)
 
     assert output == ""
     assert warning == "Cancelado por el usuario."
