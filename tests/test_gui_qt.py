@@ -80,12 +80,11 @@ def test_converter_defers_close_until_active_worker_is_cancelled(qtbot, monkeypa
     worker = window._worker
     qtbot.waitUntil(worker.isRunning, timeout=1000)
 
-    window.close()
-    assert window.isVisible()
-    assert window._close_when_worker_finishes is True
-
     with qtbot.waitSignal(worker.finished, timeout=3000):
-        pass
+        window.close()
+        assert window.isVisible()
+        assert window._close_when_worker_finishes is True
+
     qtbot.waitUntil(lambda: not window.isVisible(), timeout=3000)
 
 
