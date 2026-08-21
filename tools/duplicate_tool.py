@@ -222,7 +222,9 @@ def move_duplicates(duplicates, base_folder):
                 continue
 
             if not files_equal(original, source):
-                logger.warning("Se omite %s porque falla la comparación final con %s", source, original)
+                logger.warning(
+                    "Se omite %s porque falla la comparación final con %s", source, original
+                )
                 continue
 
             destination = _unique_destination(target_folder, source.name)
