@@ -110,7 +110,9 @@ def validate_archive_members(
 
         file_count += 1
         if file_count > limits.max_files:
-            raise ArchiveSecurityError(f"El archivo supera el máximo de {limits.max_files} ficheros.")
+            raise ArchiveSecurityError(
+                f"El archivo supera el máximo de {limits.max_files} ficheros."
+            )
         if member.uncompressed_size < 0:
             raise ArchiveSecurityError(f"Tamaño inválido declarado para {member.name}.")
         if member.uncompressed_size > limits.max_single_file:
@@ -188,7 +190,9 @@ def _staging_directory(destination: Path) -> Path:
 
 def _publish_staging(staging: Path, destination: Path) -> None:
     if destination.exists():
-        raise ArchiveSecurityError(f"La carpeta de destino apareció durante la extracción: {destination}")
+        raise ArchiveSecurityError(
+            f"La carpeta de destino apareció durante la extracción: {destination}"
+        )
     os.replace(staging, destination)
 
 
@@ -214,7 +218,9 @@ def _verify_extracted_tree(staging: Path, limits: ArchiveLimits) -> None:
         if stat.S_ISDIR(metadata.st_mode):
             continue
         if not stat.S_ISREG(metadata.st_mode):
-            raise ArchiveSecurityError(f"Se detectó un archivo especial durante la extracción: {path.name}")
+            raise ArchiveSecurityError(
+                f"Se detectó un archivo especial durante la extracción: {path.name}"
+            )
 
         file_count += 1
         total_size += metadata.st_size
