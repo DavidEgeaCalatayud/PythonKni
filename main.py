@@ -2,6 +2,7 @@ import importlib
 import inspect
 import logging
 import os
+import sys
 
 from PyQt5.QtCore import QThread, Qt, pyqtSignal
 from PyQt5.QtWidgets import (
@@ -14,7 +15,7 @@ from PyQt5.QtWidgets import (
     QWidget,
 )
 
-from tools.app_paths import CONFIG_FILE
+from tools.app_paths import ASSETS_DIR, CONFIG_FILE
 from tools.base_tool import BaseTool
 from tools.config_service import DEFAULT_CONFIG
 from tools.logging_config import setup_logging
@@ -45,34 +46,72 @@ def validate_tool_class(tool_class, module_name="<tool>"):
     return tool_class
 
 
+def discover_tool_classes(tools_dir=None):
+    """Discover loader-compatible tools synchronously.
+
+    Keeping discovery in a normal function lets the GUI loader and the packaged
+    executable smoke test exercise exactly the same dynamic-import path.
+    """
+    if tools_dir is None:
+        tools_dir = os.path.join(os.path.dirname(__file__), "tools")
+
+    normal_tools = []
+    config_tool = None
+    load_errors = []
+
+    for file in os.listdir(tools_dir):
+        if not file.endswith("_tool.py") or file == "base_tool.py":
+            continue
+
+        module_name = f"tools.{file[:-3]}"
+        try:
+            module = importlib.import_module(module_name)
+            tool_class = validate_tool_class(getattr(module, "Tool"), module_name)
+        except Exception as error:
+            logger.exception("Error loading tool module %s", module_name)
+            load_errors.append(f"{module_name}: {error}")
+            continue
+
+        if "config" in file.lower():
+            config_tool = tool_class
+        else:
+            normal_tools.append(tool_class)
+
+    normal_tools.sort(key=lambda cls: cls.name.lower())
+    return normal_tools, config_tool, load_errors
+
+
+def run_packaging_smoke_test() -> int:
+    """Validate the frozen bundle without starting the Qt event loop."""
+    try:
+        normal_tools, config_tool, load_errors = discover_tool_classes()
+    except Exception:
+        logger.exception("Packaged tool discovery failed")
+        return 1
+
+    if load_errors or not normal_tools or config_tool is None:
+        logger.error(
+            "Packaging smoke test failed: normal_tools=%s config_tool=%s errors=%s",
+            len(normal_tools),
+            config_tool is not None,
+            load_errors,
+        )
+        return 1
+
+    required_assets = (ASSETS_DIR / "spinner.gif",)
+    missing_assets = [str(path) for path in required_assets if not path.is_file()]
+    if missing_assets:
+        logger.error("Packaging smoke test is missing assets: %s", missing_assets)
+        return 1
+
+    return 0
+
+
 class LoaderThread(QThread):
     tools_loaded = pyqtSignal(list, object, list)  # (normal_tools, config_tool, load_errors)
 
     def run(self):
-        tools_dir = os.path.join(os.path.dirname(__file__), "tools")
-
-        normal_tools = []
-        config_tool = None
-        load_errors = []
-
-        for file in os.listdir(tools_dir):
-            if file.endswith("_tool.py") and file != "base_tool.py":
-                module_name = f"tools.{file[:-3]}"
-                try:
-                    module = importlib.import_module(module_name)
-                    tool_class = validate_tool_class(getattr(module, "Tool"), module_name)
-                except Exception as error:
-                    logger.exception("Error loading tool module %s", module_name)
-                    load_errors.append(f"{module_name}: {error}")
-                    continue
-
-                if "config" in file.lower():
-                    config_tool = tool_class
-                else:
-                    normal_tools.append(tool_class)
-
-        normal_tools.sort(key=lambda cls: cls.name.lower())
-
+        normal_tools, config_tool, load_errors = discover_tool_classes()
         self.tools_loaded.emit(normal_tools, config_tool, load_errors)
 
 
@@ -134,6 +173,9 @@ def configure_managers():
 
 
 if __name__ == "__main__":
+    if "--smoke-test" in sys.argv:
+        raise SystemExit(run_packaging_smoke_test())
+
     setup_logging()
     configure_managers()
 
