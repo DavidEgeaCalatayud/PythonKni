@@ -3,7 +3,7 @@ from __future__ import annotations
 import os
 from typing import Iterable
 
-from tools.worker import WorkerCancelled
+from pythonkni.core.tasks import WorkerCancelled
 
 try:
     from PyPDF2 import PdfMerger, PdfReader, PdfWriter
