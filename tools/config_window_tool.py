@@ -12,8 +12,9 @@ from PyQt5.QtWidgets import (
 )
 
 from tools.app_paths import CONFIG_FILE
-from tools.config_service import load_config, save_config
+from tools.config_service import load_config
 from tools.language_manager import LanguageManager
+from tools.runtime_config import apply_runtime_config, save_runtime_config
 from tools.theme_manager import ThemeManager
 
 
@@ -32,32 +33,47 @@ class Tool(QMainWindow):
         self.setCentralWidget(central_widget)
         layout = QVBoxLayout(central_widget)
 
-        layout.addWidget(QLabel(LanguageManager.translate("Seleccionar Tema:")))
+        self.theme_label = QLabel()
+        layout.addWidget(self.theme_label)
+
         self.theme_combobox = QComboBox()
         self.theme_combobox.addItems(["Claro", "Oscuro"])
-        self.theme_combobox.setCurrentText(ThemeManager.get_theme())
         layout.addWidget(self.theme_combobox)
 
-        layout.addWidget(QLabel(LanguageManager.translate("Seleccionar Idioma:")))
+        self.language_label = QLabel()
+        layout.addWidget(self.language_label)
+
         self.language_combobox = QComboBox()
-        self.language_combobox.addItems(["Español", "Ingles"])
+        self.language_combobox.addItems(["Español", "Inglés"])
         layout.addWidget(self.language_combobox)
 
-        save_button = QPushButton(LanguageManager.translate("Guardar cambios"))
-        save_button.clicked.connect(self.save_changes)
-        layout.addWidget(save_button)
+        self.save_button = QPushButton()
+        self.save_button.clicked.connect(self.save_changes)
+        layout.addWidget(self.save_button)
 
-        close_button = QPushButton(LanguageManager.translate("Cerrar"))
-        close_button.clicked.connect(self.close)
-        layout.addWidget(close_button)
+        self.close_button = QPushButton()
+        self.close_button.clicked.connect(self.close)
+        layout.addWidget(self.close_button)
 
         self.load_config()
 
-    def save_changes(self):
-        selected_theme = self.theme_combobox.currentText()
-        selected_language = self.language_combobox.currentText()
+    def refresh_language_texts(self):
+        self.theme_label.setText(LanguageManager.translate("Seleccionar Tema:"))
+        self.language_label.setText(LanguageManager.translate("Seleccionar Idioma:"))
+        self.save_button.setText(LanguageManager.translate("Guardar cambios"))
+        self.close_button.setText(LanguageManager.translate("Cerrar"))
 
-        ThemeManager.set_theme(selected_theme)
+    def save_changes(self):
+        config = save_runtime_config(
+            CONFIG_FILE,
+            {
+                "theme": self.theme_combobox.currentText(),
+                "language": self.language_combobox.currentText(),
+            },
+        )
+
+        self.theme_combobox.setCurrentText(config["theme"])
+        self.language_combobox.setCurrentText(config["language"])
 
         app = QApplication.instance()
         if app is not None:
@@ -65,27 +81,30 @@ class Tool(QMainWindow):
             for widget in app.topLevelWidgets():
                 widget.update()
 
-        save_config(
-            CONFIG_FILE,
-            {
-                "theme": selected_theme,
-                "language": selected_language,
-            },
-        )
+        self.refresh_language_texts()
 
-        QMessageBox.information(self, "Exito", "Cambios guardados correctamente.")
+        QMessageBox.information(
+            self,
+            "Exito",
+            LanguageManager.translate("Cambios guardados"),
+        )
 
     def load_config(self):
         try:
             config = load_config(CONFIG_FILE)
-        except ValueError:
+        except (OSError, ValueError):
             logger.exception("Invalid config file: %s", CONFIG_FILE)
-            QMessageBox.warning(self, "Configuracion", "El archivo de configuracion no es valido.")
-            return
+            QMessageBox.warning(
+                self,
+                "Configuracion",
+                "El archivo de configuracion no es valido.",
+            )
+            config = {
+                "theme": ThemeManager.get_theme(),
+                "language": LanguageManager.get_language(),
+            }
 
-        theme = config.get("theme", "Claro")
-        language = config.get("language", "Español")
-
-        self.theme_combobox.setCurrentText(theme)
-        self.language_combobox.setCurrentText(language)
-        ThemeManager.set_theme(theme)
+        apply_runtime_config(config)
+        self.theme_combobox.setCurrentText(config["theme"])
+        self.language_combobox.setCurrentText(config["language"])
+        self.refresh_language_texts()
