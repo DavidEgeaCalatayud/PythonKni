@@ -38,6 +38,16 @@ class CleanPreview:
     bytes: int = 0
 
 
+def _env_path(name: str) -> Path | None:
+    """Devuelve una ruta absoluta de entorno o None si falta, esta vacia o es relativa."""
+    raw_value = os.environ.get(name)
+    if raw_value is None or not raw_value.strip():
+        return None
+
+    path = Path(raw_value).expanduser()
+    return path if path.is_absolute() else None
+
+
 def _resolve_existing(path: Path) -> Path | None:
     try:
         resolved = path.expanduser().resolve()
@@ -46,107 +56,185 @@ def _resolve_existing(path: Path) -> Path | None:
     return resolved if resolved.exists() and resolved.is_dir() else None
 
 
-def _is_safe_clean_root(path: Path) -> bool:
-    """Permite solo cachés y temporales acotados; nunca raíces generales del sistema."""
+def _resolve_descendant(path: Path, boundary: Path) -> Path | None:
+    """Resuelve una carpeta existente y exige que permanezca dentro de su limite esperado."""
     resolved = _resolve_existing(path)
     if resolved is None:
-        return False
+        return None
 
-    system = platform.system()
-    home = Path.home().resolve()
-    safe_roots: list[Path] = []
+    try:
+        resolved_boundary = boundary.expanduser().resolve()
+    except OSError:
+        return None
 
-    if system == "Windows":
-        for env_name in ("TEMP", "TMP", "LOCALAPPDATA"):
-            env_path = os.environ.get(env_name)
-            if env_path:
-                root = _resolve_existing(Path(env_path))
-                if root:
-                    safe_roots.append(root)
+    if resolved == resolved_boundary or resolved_boundary not in resolved.parents:
+        return None
+    return resolved
 
-        windows_temp = _resolve_existing(Path(os.environ.get("SystemRoot", "C:/Windows")) / "Temp")
-        if windows_temp:
-            safe_roots.append(windows_temp)
+
+def _broad_roots() -> set[Path]:
+    """Raices que nunca deben convertirse directamente en un destino destructivo."""
+    candidates = [Path.home()]
+
+    for env_name in ("USERPROFILE", "LOCALAPPDATA", "APPDATA", "SystemRoot"):
+        env_path = _env_path(env_name)
+        if env_path is not None:
+            candidates.append(env_path)
+
+    if platform.system() == "Windows":
+        home = Path.home()
+        candidates.extend((home / "AppData" / "Local", home / "AppData" / "Roaming"))
+
+    roots: set[Path] = set()
+    for candidate in candidates:
+        resolved = _resolve_existing(candidate)
+        if resolved is not None:
+            roots.add(resolved)
+    return roots
+
+
+def _make_exact_target(
+    label: str,
+    path: Path,
+    *,
+    within: Path | None = None,
+    reject_broad_root: bool = False,
+) -> CleanTarget | None:
+    if within is None:
+        resolved = _resolve_existing(path)
     else:
-        for candidate in (
-            home / ".cache",
-            home / "Library" / "Caches",
-            Path(os.environ.get("XDG_CACHE_HOME", "")),
-        ):
-            root = _resolve_existing(candidate)
-            if root:
-                safe_roots.append(root)
+        resolved = _resolve_descendant(path, within)
 
-    return any(resolved == root or root in resolved.parents for root in safe_roots)
+    if resolved is None:
+        return None
+
+    if resolved == resolved.parent:
+        return None
+
+    if reject_broad_root and resolved in _broad_roots():
+        return None
+
+    return CleanTarget(label, resolved)
 
 
-def _unique_safe_targets(targets: list[CleanTarget]) -> list[CleanTarget]:
+def _unique_targets(targets: list[CleanTarget | None]) -> list[CleanTarget]:
     seen: set[Path] = set()
-    safe_targets: list[CleanTarget] = []
+    unique: list[CleanTarget] = []
 
     for target in targets:
-        resolved = _resolve_existing(target.path)
-        if resolved and resolved not in seen and _is_safe_clean_root(resolved):
-            safe_targets.append(CleanTarget(target.label, resolved))
-            seen.add(resolved)
+        if target is None or target.path in seen:
+            continue
+        unique.append(target)
+        seen.add(target.path)
 
-    return safe_targets
+    return unique
 
 
 def get_temp_targets() -> list[CleanTarget]:
     if platform.system() != "Windows":
         return []
 
-    targets = []
+    targets: list[CleanTarget | None] = []
     for env_name in ("TEMP", "TMP"):
-        env_path = os.environ.get(env_name)
-        if env_path:
-            targets.append(CleanTarget(f"Temporal de usuario ({env_name})", Path(env_path)))
-    return _unique_safe_targets(targets)
+        env_path = _env_path(env_name)
+        if env_path is None:
+            continue
+        targets.append(
+            _make_exact_target(
+                f"Temporal de usuario ({env_name})",
+                env_path,
+                reject_broad_root=True,
+            )
+        )
+    return _unique_targets(targets)
 
 
-def get_browser_cache_targets() -> list[CleanTarget]:
+def _cache_home_for_current_platform() -> Path:
     system = platform.system()
     home = Path.home()
 
     if system == "Windows":
-        local = Path(os.environ.get("LOCALAPPDATA", home / "AppData" / "Local"))
-        targets = [
-            CleanTarget("Chrome Cache", local / "Google" / "Chrome" / "User Data" / "Default" / "Cache"),
-            CleanTarget("Edge Cache", local / "Microsoft" / "Edge" / "User Data" / "Default" / "Cache"),
+        return _env_path("LOCALAPPDATA") or (home / "AppData" / "Local")
+    if system == "Darwin":
+        return home / "Library" / "Caches"
+
+    # XDG_CACHE_HOME vacio o relativo no debe convertirse nunca en Path("") / cwd.
+    return _env_path("XDG_CACHE_HOME") or (home / ".cache")
+
+
+def get_browser_cache_targets() -> list[CleanTarget]:
+    system = platform.system()
+    cache_home = _cache_home_for_current_platform()
+
+    if system == "Windows":
+        candidates = [
+            ("Chrome Cache", cache_home / "Google" / "Chrome" / "User Data" / "Default" / "Cache"),
+            ("Edge Cache", cache_home / "Microsoft" / "Edge" / "User Data" / "Default" / "Cache"),
         ]
-        firefox_profiles = local / "Mozilla" / "Firefox" / "Profiles"
+        firefox_profiles = cache_home / "Mozilla" / "Firefox" / "Profiles"
     elif system == "Darwin":
-        cache_home = home / "Library" / "Caches"
-        targets = [
-            CleanTarget("Chrome Cache", cache_home / "Google" / "Chrome" / "Default" / "Cache"),
-            CleanTarget("Edge Cache", cache_home / "Microsoft Edge" / "Default" / "Cache"),
+        candidates = [
+            ("Chrome Cache", cache_home / "Google" / "Chrome" / "Default" / "Cache"),
+            ("Edge Cache", cache_home / "Microsoft Edge" / "Default" / "Cache"),
         ]
         firefox_profiles = cache_home / "Firefox" / "Profiles"
     else:
-        cache_home = Path(os.environ.get("XDG_CACHE_HOME", home / ".cache"))
-        targets = [
-            CleanTarget("Chrome Cache", cache_home / "google-chrome" / "Default" / "Cache"),
-            CleanTarget("Edge Cache", cache_home / "microsoft-edge" / "Default" / "Cache"),
+        candidates = [
+            ("Chrome Cache", cache_home / "google-chrome" / "Default" / "Cache"),
+            ("Edge Cache", cache_home / "microsoft-edge" / "Default" / "Cache"),
         ]
         firefox_profiles = cache_home / "mozilla" / "firefox"
 
-    if firefox_profiles.exists():
-        targets.extend(
-            CleanTarget("Firefox Cache", profile / "cache2")
-            for profile in firefox_profiles.iterdir()
-            if (profile / "cache2").is_dir()
-        )
+    targets: list[CleanTarget | None] = [
+        _make_exact_target(label, path, within=cache_home) for label, path in candidates
+    ]
 
-    return _unique_safe_targets(targets)
+    resolved_firefox_profiles = _resolve_descendant(firefox_profiles, cache_home)
+    if resolved_firefox_profiles is not None:
+        try:
+            profiles = list(resolved_firefox_profiles.iterdir())
+        except OSError:
+            profiles = []
+
+        for profile in profiles:
+            targets.append(
+                _make_exact_target(
+                    "Firefox Cache",
+                    profile / "cache2",
+                    within=resolved_firefox_profiles,
+                )
+            )
+
+    return _unique_targets(targets)
 
 
 def get_log_targets() -> list[CleanTarget]:
     if platform.system() != "Windows":
         return []
-    return _unique_safe_targets(
-        [CleanTarget("Windows Temp", Path(os.environ.get("SystemRoot", "C:/Windows")) / "Temp")]
+
+    system_root = _env_path("SystemRoot") or Path("C:/Windows")
+    return _unique_targets(
+        [_make_exact_target("Windows Temp", system_root / "Temp", within=system_root)]
     )
+
+
+def _declared_clean_targets() -> list[CleanTarget]:
+    return _unique_targets(get_temp_targets() + get_browser_cache_targets() + get_log_targets())
+
+
+def _resolve_allowed_target(path: Path) -> Path | None:
+    """Solo autoriza coincidencias exactas con destinos declarados por el limpiador."""
+    resolved = _resolve_existing(path)
+    if resolved is None:
+        return None
+
+    allowed_paths = {target.path for target in _declared_clean_targets()}
+    return resolved if resolved in allowed_paths else None
+
+
+def _is_safe_clean_root(path: Path) -> bool:
+    """Compatibilidad interna: seguro significa un destino declarado exacto, no una subruta cualquiera."""
+    return _resolve_allowed_target(path) is not None
 
 
 def build_preview(targets: list[CleanTarget]) -> CleanPreview:
@@ -163,10 +251,10 @@ def build_preview(targets: list[CleanTarget]) -> CleanPreview:
 
 
 def delete_folder_contents(folder, dry_run: bool = False) -> CleanResult:
-    """Borra todos los archivos y carpetas dentro de una ruta segura."""
+    """Borra el contenido solo si la ruta coincide con un CleanTarget declarado exacto."""
     result = CleanResult()
-    folder = Path(folder)
-    if not _is_safe_clean_root(folder):
+    folder = _resolve_allowed_target(Path(folder))
+    if folder is None:
         return result
 
     for root, dirs, files in os.walk(folder, topdown=False):
