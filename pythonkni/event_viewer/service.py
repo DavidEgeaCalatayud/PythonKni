@@ -48,6 +48,9 @@ RISK_ORDER = {
 }
 
 SUPPORTED_LOGS = ["Application", "System", "Security"]
+WEVTUTIL_TIMEOUT_SECONDS = 25.0
+WEVTUTIL_COMMUNICATE_SLICE_SECONDS = 0.2
+WEVTUTIL_REAP_TIMEOUT_SECONDS = 5.0
 
 
 def is_windows() -> bool:
@@ -144,6 +147,26 @@ def build_event_query(hours: int, include_info: bool = False) -> str:
     return f"*[System[({levels}){time_filter}]]"
 
 
+def _kill_and_drain_process(proc: subprocess.Popen) -> tuple[bytes, bytes]:
+    """Kill a child process if needed, drain both pipes, and always reap it."""
+    try:
+        if proc.poll() is None:
+            proc.kill()
+    except OSError:
+        pass
+
+    try:
+        stdout_bytes, stderr_bytes = proc.communicate(timeout=WEVTUTIL_REAP_TIMEOUT_SECONDS)
+    except subprocess.TimeoutExpired:
+        try:
+            proc.kill()
+        except OSError:
+            pass
+        stdout_bytes, stderr_bytes = proc.communicate()
+
+    return stdout_bytes or b"", stderr_bytes or b""
+
+
 def run_wevtutil(
     log_name: str,
     hours: int,
@@ -172,23 +195,39 @@ def run_wevtutil(
     except Exception as error:
         return "", f"No se pudo ejecutar wevtutil para {log_name}: {error}"
 
-    deadline = time.monotonic() + 25.0
-    while proc.poll() is None:
+    deadline = time.monotonic() + WEVTUTIL_TIMEOUT_SECONDS
+    stdout_bytes = b""
+    stderr_bytes = b""
+
+    while True:
         if cancel_event is not None and cancel_event.is_set():
-            proc.kill()
+            _kill_and_drain_process(proc)
             return "", "Cancelado por el usuario."
-        if time.monotonic() > deadline:
-            proc.kill()
+
+        remaining = deadline - time.monotonic()
+        if remaining <= 0:
+            _kill_and_drain_process(proc)
             return "", (
                 f"Tiempo agotado leyendo {log_name}. "
                 "Prueba con menos eventos o un filtro temporal menor."
             )
-        time.sleep(0.2)
 
-    stdout_bytes = proc.stdout.read() if proc.stdout else b""
-    stderr_bytes = proc.stderr.read() if proc.stderr else b""
-    stdout = decode_process_output(stdout_bytes)
-    stderr = decode_process_output(stderr_bytes)
+        try:
+            stdout_bytes, stderr_bytes = proc.communicate(
+                timeout=min(WEVTUTIL_COMMUNICATE_SLICE_SECONDS, remaining)
+            )
+            break
+        except subprocess.TimeoutExpired:
+            # communicate() keeps draining stdout/stderr while the child is alive.
+            # Retrying after TimeoutExpired is explicitly supported and does not
+            # lose output already read from either pipe.
+            continue
+        except Exception as error:
+            _kill_and_drain_process(proc)
+            return "", f"No se pudo leer la salida de wevtutil para {log_name}: {error}"
+
+    stdout = decode_process_output(stdout_bytes or b"")
+    stderr = decode_process_output(stderr_bytes or b"")
 
     if proc.returncode != 0:
         combined = f"{stdout}\n{stderr}".strip()
