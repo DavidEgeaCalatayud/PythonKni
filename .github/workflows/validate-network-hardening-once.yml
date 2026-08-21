@@ -38,57 +38,57 @@ jobs:
 
           path = Path("tools/network_tool.py")
           text = path.read_text(encoding="utf-8")
-          old = '''    fill_pending()
-              while pending:
-                  done, _ = wait(tuple(pending), return_when=FIRST_COMPLETED)
-                  for future in done:
-                      item = pending.pop(future)
-                      yield item, future
+          old = """    fill_pending()
+          while pending:
+              done, _ = wait(tuple(pending), return_when=FIRST_COMPLETED)
+              for future in done:
+                  item = pending.pop(future)
+                  yield item, future
+              if stop_event.is_set():
+                  for future in pending:
+                      future.cancel()
+                  break
+              fill_pending()
+          """
+          new = """    fill_pending()
+          while pending:
+              done, _ = wait(tuple(pending), return_when=FIRST_COMPLETED)
+              if stop_event.is_set():
+                  for future in pending:
+                      future.cancel()
+                  return
+              for future in done:
+                  item = pending.pop(future)
+                  yield item, future
                   if stop_event.is_set():
-                      for future in pending:
-                          future.cancel()
-                      break
-                  fill_pending()
-          '''
-          new = '''    fill_pending()
-              while pending:
-                  done, _ = wait(tuple(pending), return_when=FIRST_COMPLETED)
-                  if stop_event.is_set():
-                      for future in pending:
-                          future.cancel()
+                      for pending_future in pending:
+                          pending_future.cancel()
                       return
-                  for future in done:
-                      item = pending.pop(future)
-                      yield item, future
-                      if stop_event.is_set():
-                          for pending_future in pending:
-                              pending_future.cancel()
-                          return
-                  fill_pending()
-          '''
+              fill_pending()
+          """
           if old not in text:
               raise SystemExit("bounded future block not found")
           text = text.replace(old, new, 1)
           text = text.replace(
-              '''        for ip, future in results:
-                      if stop_event.is_set():
-                          break
-                      try:
-              ''',
-              '''        for ip, future in results:
-                      try:
-              ''',
+              """        for ip, future in results:
+              if stop_event.is_set():
+                  break
+              try:
+          """,
+              """        for ip, future in results:
+              try:
+          """,
               1,
           )
           text = text.replace(
-              '''        for port, future in results:
-                      if stop_event.is_set():
-                          break
-                      try:
-              ''',
-              '''        for port, future in results:
-                      try:
-              ''',
+              """        for port, future in results:
+              if stop_event.is_set():
+                  break
+              try:
+          """,
+              """        for port, future in results:
+              try:
+          """,
               1,
           )
           path.write_text(text, encoding="utf-8")
