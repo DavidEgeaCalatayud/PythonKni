@@ -1,10 +1,12 @@
 import json
 
-from tools import system_report_tool as report
+from pythonkni.system_report import service as report
+from pythonkni.system_report.models import ReportData
+from pythonkni.system_report import window as report_window
 
 
 def sample_report():
-    return report.ReportData(
+    return ReportData(
         generated_at="2026-08-21_19-00-00",
         system_rows=[("Equipo", "PC <test>"), ("RAM", "16 GB")],
         disk_rows=[("Disk0", "C:/", "500 GB", "200 GB libres")],
@@ -74,7 +76,7 @@ def test_load_event_snapshot_reads_saved_events(monkeypatch, tmp_path):
 
 
 def test_system_report_gui_populates_preview_tables_and_exports(qtbot, monkeypatch, tmp_path):
-    tool = report.Tool()
+    tool = report_window.Tool()
     qtbot.addWidget(tool)
     tool.show()
     data = sample_report()
@@ -91,11 +93,11 @@ def test_system_report_gui_populates_preview_tables_and_exports(qtbot, monkeypat
 
     html_path = tmp_path / "out.html"
     monkeypatch.setattr(
-        report.QFileDialog,
+        report_window.QFileDialog,
         "getSaveFileName",
         lambda *args, **kwargs: (str(html_path), ""),
     )
-    monkeypatch.setattr(report.QMessageBox, "information", lambda *args, **kwargs: None)
+    monkeypatch.setattr(report_window.QMessageBox, "information", lambda *args, **kwargs: None)
     tool.export_html()
 
     assert html_path.exists()
