@@ -3,7 +3,7 @@ from __future__ import annotations
 import logging
 import os
 import platform
-import shutil
+import stat
 from dataclasses import dataclass, field
 from pathlib import Path
 
@@ -237,50 +237,226 @@ def _is_safe_clean_root(path: Path) -> bool:
     return _resolve_allowed_target(path) is not None
 
 
+def _is_link_or_reparse_stat(info: os.stat_result) -> bool:
+    """Detecta symlinks y, en Windows, junctions/reparse points sin seguir el destino."""
+    if stat.S_ISLNK(info.st_mode):
+        return True
+
+    reparse_flag = getattr(stat, "FILE_ATTRIBUTE_REPARSE_POINT", 0)
+    file_attributes = getattr(info, "st_file_attributes", 0)
+    return bool(reparse_flag and file_attributes & reparse_flag)
+
+
+def _is_link_or_reparse(path: Path) -> bool:
+    try:
+        return _is_link_or_reparse_stat(path.lstat())
+    except OSError:
+        return False
+
+
+def _directory_identity(path: Path) -> tuple[int, int] | None:
+    """Identidad del directorio sin seguir enlaces; permite detectar sustituciones del target."""
+    try:
+        info = path.stat(follow_symlinks=False)
+    except OSError:
+        return None
+
+    if not stat.S_ISDIR(info.st_mode) or _is_link_or_reparse_stat(info):
+        return None
+    return info.st_dev, info.st_ino
+
+
+def _path_stays_within(path: Path, allowed_root: Path) -> bool:
+    """Revalida que una raiz recorrida no se haya convertido en enlace hacia fuera."""
+    if _is_link_or_reparse(path):
+        return False
+
+    try:
+        resolved = path.resolve(strict=True)
+    except OSError:
+        return False
+
+    return resolved == allowed_root or allowed_root in resolved.parents
+
+
+def _supports_fd_walk() -> bool:
+    """Usa descriptores cuando el SO permite borrar relativo a un directorio ya abierto."""
+    supports_dir_fd = getattr(os, "supports_dir_fd", set())
+    return (
+        hasattr(os, "fwalk")
+        and hasattr(os, "O_NOFOLLOW")
+        and os.unlink in supports_dir_fd
+        and os.rmdir in supports_dir_fd
+        and os.stat in supports_dir_fd
+    )
+
+
+def _remove_link_like(path: Path) -> None:
+    """Elimina el enlace/junction en si mismo, nunca su destino."""
+    try:
+        path.unlink()
+    except (IsADirectoryError, PermissionError):
+        # Los directory junctions de Windows se eliminan como directorios.
+        path.rmdir()
+
+
+def _record_failure(result: CleanResult, path: Path | str) -> None:
+    result.failed += 1
+    result.errors.append(str(path))
+    logger.warning("No se pudo borrar %s", path, exc_info=True)
+
+
+def _delete_with_fd_walk(
+    folder: Path,
+    expected_identity: tuple[int, int],
+    *,
+    dry_run: bool,
+) -> CleanResult:
+    """Borrado POSIX anclado a un dir_fd para evitar sustituciones de rutas."""
+    result = CleanResult()
+    flags = os.O_RDONLY | os.O_NOFOLLOW
+    if hasattr(os, "O_DIRECTORY"):
+        flags |= os.O_DIRECTORY
+
+    try:
+        root_fd = os.open(folder, flags)
+    except Exception:
+        _record_failure(result, folder)
+        return result
+
+    try:
+        root_info = os.fstat(root_fd)
+        if (root_info.st_dev, root_info.st_ino) != expected_identity:
+            result.failed += 1
+            result.errors.append(str(folder))
+            logger.warning("El destino de limpieza cambio antes de abrirse: %s", folder)
+            return result
+
+        iterator = os.fwalk(
+            ".",
+            topdown=False,
+            follow_symlinks=False,
+            dir_fd=root_fd,
+        )
+        for relative_root, dirs, files, dir_fd in iterator:
+            root = folder if relative_root == "." else folder / relative_root
+
+            for file_name in files:
+                path = root / file_name
+                try:
+                    if not dry_run:
+                        os.unlink(file_name, dir_fd=dir_fd)
+                    result.deleted += 1
+                except Exception:
+                    _record_failure(result, path)
+
+            for dir_name in dirs:
+                path = root / dir_name
+                try:
+                    info = os.stat(dir_name, dir_fd=dir_fd, follow_symlinks=False)
+                    if not dry_run:
+                        if _is_link_or_reparse_stat(info):
+                            os.unlink(dir_name, dir_fd=dir_fd)
+                        else:
+                            # rmdir es intencionadamente no recursivo: si aparece contenido nuevo,
+                            # falla de forma cerrada en lugar de borrarlo.
+                            os.rmdir(dir_name, dir_fd=dir_fd)
+                    result.deleted += 1
+                except Exception:
+                    _record_failure(result, path)
+    except Exception:
+        _record_failure(result, folder)
+    finally:
+        os.close(root_fd)
+
+    return result
+
+
+def _delete_with_path_walk(
+    folder: Path,
+    expected_identity: tuple[int, int],
+    *,
+    dry_run: bool,
+) -> CleanResult:
+    """Fallback portable sin rmtree: revalida raices y solo hace unlink/rmdir superficiales."""
+    result = CleanResult()
+
+    for root, dirs, files in os.walk(folder, topdown=False, followlinks=False):
+        root_path = Path(root)
+
+        if _directory_identity(folder) != expected_identity or not _path_stays_within(
+            root_path, folder
+        ):
+            result.failed += 1
+            result.errors.append(str(root_path))
+            logger.warning("Se omite una ruta que cambio durante la limpieza: %s", root_path)
+            continue
+
+        for file_name in files:
+            path = root_path / file_name
+            try:
+                if not dry_run:
+                    path.unlink()
+                result.deleted += 1
+            except Exception:
+                _record_failure(result, path)
+
+        for dir_name in dirs:
+            path = root_path / dir_name
+            try:
+                link_like = _is_link_or_reparse(path)
+                if not dry_run:
+                    if link_like:
+                        _remove_link_like(path)
+                    else:
+                        # Nunca rmtree: un directorio que haya recibido contenido nuevo no se
+                        # elimina recursivamente por sorpresa.
+                        path.rmdir()
+                result.deleted += 1
+            except Exception:
+                _record_failure(result, path)
+
+    return result
+
+
 def build_preview(targets: list[CleanTarget]) -> CleanPreview:
     preview = CleanPreview(targets=targets)
     for target in targets:
-        for root, dirs, files in os.walk(target.path):
+        allowed_root = _resolve_allowed_target(target.path)
+        if allowed_root is None:
+            continue
+
+        for root, dirs, files in os.walk(allowed_root, followlinks=False):
+            root_path = Path(root)
+            if not _path_stays_within(root_path, allowed_root):
+                dirs[:] = []
+                continue
+
             preview.items += len(dirs) + len(files)
             for file_name in files:
                 try:
-                    preview.bytes += (Path(root) / file_name).stat().st_size
+                    # lstat evita seguir un symlink de archivo fuera del target durante la preview.
+                    preview.bytes += (root_path / file_name).lstat().st_size
                 except OSError:
                     pass
     return preview
 
 
 def delete_folder_contents(folder, dry_run: bool = False) -> CleanResult:
-    """Borra el contenido solo si la ruta coincide con un CleanTarget declarado exacto."""
+    """Borra solo el contenido de un CleanTarget exacto sin seguir enlaces fuera del target."""
     result = CleanResult()
     folder = _resolve_allowed_target(Path(folder))
     if folder is None:
         return result
 
-    for root, dirs, files in os.walk(folder, topdown=False):
-        for file_name in files:
-            path = Path(root) / file_name
-            try:
-                if not dry_run:
-                    path.unlink()
-                result.deleted += 1
-            except Exception:
-                result.failed += 1
-                result.errors.append(str(path))
-                logger.warning("No se pudo borrar %s", path, exc_info=True)
+    expected_identity = _directory_identity(folder)
+    if expected_identity is None:
+        return result
 
-        for dir_name in dirs:
-            path = Path(root) / dir_name
-            try:
-                if not dry_run:
-                    shutil.rmtree(path)
-                result.deleted += 1
-            except Exception:
-                result.failed += 1
-                result.errors.append(str(path))
-                logger.warning("No se pudo borrar %s", path, exc_info=True)
+    if _supports_fd_walk():
+        return _delete_with_fd_walk(folder, expected_identity, dry_run=dry_run)
 
-    return result
+    return _delete_with_path_walk(folder, expected_identity, dry_run=dry_run)
 
 
 def clean_targets(targets: list[CleanTarget], dry_run: bool = False) -> CleanResult:
