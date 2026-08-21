@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from tools.base_tool import BaseTool
+
 import csv
 import html
 import json
@@ -728,11 +730,12 @@ class EventDetailDialog(QDialog):
         self.setLayout(layout)
 
 
-class Tool(QMainWindow):
+class Tool(BaseTool):
     name = "Visor de eventos de Windows"
+    description = "Consulta y analiza eventos de Windows."
+    category = "Sistema"
 
-    def __init__(self):
-        super().__init__()
+    def setup_ui(self):
         self.setWindowTitle(self.name)
         self.resize(1350, 780)
         self.events: list[EventItem] = []

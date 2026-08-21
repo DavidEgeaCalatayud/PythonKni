@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from tools.base_tool import BaseTool
+
 import csv
 import getpass
 import html
@@ -587,11 +589,12 @@ class ReportWorker(QThread):
             self.failed.emit(str(error))
 
 
-class Tool(QMainWindow):
+class Tool(BaseTool):
     name = "Informe Técnico del Equipo"
+    description = "Genera informes técnicos de hardware y software."
+    category = "Sistema"
 
-    def __init__(self):
-        super().__init__()
+    def setup_ui(self):
         self.setWindowTitle(self.name)
         self.setGeometry(200, 200, 1100, 700)
         ThemeManager.apply_theme(self)

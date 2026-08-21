@@ -1,4 +1,5 @@
 import importlib
+import inspect
 import logging
 import os
 
@@ -14,6 +15,7 @@ from PyQt5.QtWidgets import (
 )
 
 from tools.app_paths import CONFIG_FILE
+from tools.base_tool import BaseTool
 from tools.config_service import DEFAULT_CONFIG
 from tools.logging_config import setup_logging
 from tools.runtime_config import apply_runtime_config, load_runtime_config
@@ -21,6 +23,26 @@ from tools.theme_manager import ThemeManager
 
 
 logger = logging.getLogger(__name__)
+
+
+class ToolContractError(TypeError):
+    """Raised when a dynamically discovered tool violates the BaseTool contract."""
+
+
+def validate_tool_class(tool_class, module_name="<tool>"):
+    if not inspect.isclass(tool_class):
+        raise ToolContractError(f"{module_name}.Tool must be a class")
+    if not issubclass(tool_class, BaseTool):
+        raise ToolContractError(f"{module_name}.Tool must inherit from BaseTool")
+    if tool_class.setup_ui is BaseTool.setup_ui:
+        raise ToolContractError(f"{module_name}.Tool must implement setup_ui()")
+
+    for attribute in ("name", "description", "category"):
+        value = getattr(tool_class, attribute, None)
+        if not isinstance(value, str) or not value.strip():
+            raise ToolContractError(f"{module_name}.Tool.{attribute} must be a non-empty string")
+
+    return tool_class
 
 
 class LoaderThread(QThread):
@@ -38,7 +60,7 @@ class LoaderThread(QThread):
                 module_name = f"tools.{file[:-3]}"
                 try:
                     module = importlib.import_module(module_name)
-                    tool_class = getattr(module, "Tool")
+                    tool_class = validate_tool_class(getattr(module, "Tool"), module_name)
                 except Exception as error:
                     logger.exception("Error loading tool module %s", module_name)
                     load_errors.append(f"{module_name}: {error}")

@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from tools.base_tool import BaseTool
+
 import logging
 import os
 import platform
@@ -218,11 +220,12 @@ def clean_logs(dry_run: bool = False) -> CleanResult:
     return clean_targets(get_log_targets(), dry_run=dry_run)
 
 
-class Tool(QMainWindow):
+class Tool(BaseTool):
     name = "Limpieza de Temporales"
+    description = "Analiza y limpia ubicaciones temporales autorizadas."
+    category = "Sistema"
 
-    def __init__(self):
-        super().__init__()
+    def setup_ui(self):
         self.setWindowTitle(self.name)
         self.setGeometry(200, 200, 400, 300)
 
