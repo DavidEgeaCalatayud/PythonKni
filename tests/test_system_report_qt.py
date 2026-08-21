@@ -7,7 +7,7 @@ def sample_report():
     return report.ReportData(
         generated_at="2026-08-21_19-00-00",
         system_rows=[("Equipo", "PC <test>"), ("RAM", "16 GB")],
-        disk_rows=[("C:", "C:/", "500 GB", "200 GB libres")],
+        disk_rows=[("Disk0", "C:/", "500 GB", "200 GB libres")],
         network_rows=[("IP local", "192.168.1.10")],
         top_cpu=[(123, "python.exe", 12.5, 3.2)],
         top_memory=[(456, "browser.exe", 2.0, 15.5)],
