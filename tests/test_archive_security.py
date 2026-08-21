@@ -163,7 +163,9 @@ def test_safe_7z_extracts_normal_archive(tmp_path):
     result = archives.safe_extract_7z(archive_path, destination)
 
     assert result == destination
-    assert (destination / "nested" / "payload.txt").read_text(encoding="utf-8") == "contenido seguro"
+    assert (destination / "nested" / "payload.txt").read_text(
+        encoding="utf-8"
+    ) == "contenido seguro"
     assert not list(tmp_path.glob(".out.pythonkni-*.tmp"))
 
 
