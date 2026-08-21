@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from tools.config_service import load_config
+from tools.config_service import load_config, normalize_config, save_config
 from tools.language_manager import LanguageManager
 from tools.theme_manager import ThemeManager
 
@@ -18,3 +18,11 @@ def load_runtime_config(config_file: Path) -> dict[str, str]:
     config = load_config(config_file)
     apply_runtime_config(config)
     return config
+
+
+def save_runtime_config(config_file: Path, config: dict[str, str]) -> dict[str, str]:
+    """Guarda valores canónicos y actualiza ambos managers en la misma ruta."""
+    normalized_config = normalize_config(config)
+    save_config(config_file, normalized_config)
+    apply_runtime_config(normalized_config)
+    return normalized_config
