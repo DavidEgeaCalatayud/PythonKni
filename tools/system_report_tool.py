@@ -214,6 +214,7 @@ def load_event_snapshot(max_events: int = 10) -> list[tuple[str, str, str, str, 
     except Exception:
         return []
 
+
 def collect_report() -> ReportData:
     boot_time = datetime.fromtimestamp(psutil.boot_time()).strftime("%d/%m/%Y %H:%M:%S")
     virtual_memory = psutil.virtual_memory()
@@ -334,6 +335,13 @@ def table_html(headers: list[str], rows: list[list[str] | tuple]) -> str:
 
 
 def report_to_html(data: ReportData) -> str:
+    event_html = ""
+    if data.event_summary:
+        event_html = "<h2>Eventos recientes de Windows</h2>" + table_html(
+            ["Fecha", "Nivel", "Origen", "ID Evento", "Riesgo", "Interpretación"],
+            data.event_summary,
+        )
+
     return f"""
 <!doctype html>
 <html lang="es">
@@ -365,7 +373,7 @@ th {{ background: #eee; }}
 {table_html(["PID", "Nombre", "CPU %", "RAM %"], data.top_memory)}
 <h2>Temporales y cachés</h2>
 {table_html(["Ruta", "Tamaño estimado"], data.temp_summary)}
-{f"<h2>Eventos recientes de Windows</h2>{table_html(["Fecha", "Nivel", "Origen", "ID Evento", "Riesgo", "Interpretación"], data.event_summary)}" if data.event_summary else ""}
+{event_html}
 </body>
 </html>
 """.strip()
@@ -387,9 +395,7 @@ def _add_pdf_table(
     story.append(Paragraph(html.escape(title), styles["heading2"]))
     story.append(Spacer(1, 0.12 * cm))
 
-    table_data = [
-        [_pdf_paragraph(header, styles["table_header"]) for header in headers]
-    ]
+    table_data = [[_pdf_paragraph(header, styles["table_header"]) for header in headers]]
     for row in rows:
         table_data.append([_pdf_paragraph(cell, styles["table_cell"]) for cell in row])
 
