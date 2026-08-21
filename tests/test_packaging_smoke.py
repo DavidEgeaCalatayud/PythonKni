@@ -10,7 +10,7 @@ def test_discover_tool_classes_loads_all_plugins():
     assert "Gestor de Procesos" in names
     assert "Informe Técnico del Equipo" in names
     assert "Visor de eventos de Windows" in names
-    assert "Utilidades PDF" in names
+    assert "PDF Toolkit" in names
 
 
 def test_packaging_smoke_requires_declared_assets(monkeypatch, tmp_path):
