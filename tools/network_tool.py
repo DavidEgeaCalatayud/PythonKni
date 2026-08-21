@@ -7,10 +7,12 @@ import ipaddress
 import json
 import logging
 import platform
+import re
 import socket
 import subprocess
 import threading
-from concurrent.futures import ThreadPoolExecutor, as_completed
+import time
+from concurrent.futures import FIRST_COMPLETED, ThreadPoolExecutor, wait
 from dataclasses import dataclass
 
 import psutil
@@ -36,6 +38,11 @@ MAX_NETWORK_HOSTS = 4096
 NETWORK_SCAN_WORKERS = 32
 PORT_SCAN_WORKERS = 64
 PORT_TIMEOUT_SECONDS = 0.35
+REVERSE_DNS_TIMEOUT_SECONDS = 0.4
+THREAD_SHUTDOWN_WAIT_MS = 3000
+PENDING_TASK_FACTOR = 2
+DEFAULT_ROUTE_PROBE = ("8.8.8.8", 80)
+MAC_PATTERN = re.compile(r"\b(?:[0-9a-fA-F]{2}[:-]){5}[0-9a-fA-F]{2}\b")
 
 COMMON_TCP_SERVICES = {
     20: "ftp-data",
@@ -101,6 +108,12 @@ def validate_port_range(port_range: str) -> tuple[int, int]:
     return start_port, end_port
 
 
+def _usable_host_count(network: ipaddress.IPv4Network) -> int:
+    if network.prefixlen >= 31:
+        return network.num_addresses
+    return max(0, network.num_addresses - 2)
+
+
 def parse_network_cidr(value: str, max_hosts: int = MAX_NETWORK_HOSTS) -> ipaddress.IPv4Network:
     try:
         network = ipaddress.ip_network(value.strip(), strict=False)
@@ -112,9 +125,7 @@ def parse_network_cidr(value: str, max_hosts: int = MAX_NETWORK_HOSTS) -> ipaddr
     if not isinstance(network, ipaddress.IPv4Network):
         raise ValueError("El escáner de red admite actualmente redes IPv4.")
 
-    host_count = network.num_addresses
-    if network.prefixlen < 31:
-        host_count = max(0, host_count - 2)
+    host_count = _usable_host_count(network)
     if host_count > max_hosts:
         raise ValueError(
             f"La red {network.with_prefixlen} contiene {host_count} hosts utilizables. "
@@ -152,14 +163,34 @@ def get_ipv4_interfaces() -> list[NetworkInterface]:
     return interfaces
 
 
-def detect_default_network() -> NetworkInterface:
-    interfaces = get_ipv4_interfaces()
+def get_default_route_address() -> str | None:
+    """Return the IPv4 address selected by the OS routing table without sending data."""
+    sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+    try:
+        sock.connect(DEFAULT_ROUTE_PROBE)
+        return sock.getsockname()[0]
+    except OSError:
+        return None
+    finally:
+        sock.close()
+
+
+def detect_default_network(
+    interfaces: list[NetworkInterface] | None = None,
+) -> NetworkInterface:
+    interfaces = interfaces if interfaces is not None else get_ipv4_interfaces()
     if not interfaces:
         raise RuntimeError("No se encontró ninguna interfaz IPv4 activa con máscara de red.")
 
+    route_address = get_default_route_address()
+    if route_address:
+        for interface in interfaces:
+            if interface.address == route_address:
+                return interface
+
     def priority(interface):
         ip = ipaddress.ip_address(interface.address)
-        return (not ip.is_private, ip.is_link_local, interface.name.casefold())
+        return (ip.is_link_local, not ip.is_private, interface.name.casefold())
 
     return sorted(interfaces, key=priority)[0]
 
@@ -172,20 +203,45 @@ def _ping_command(ip: str) -> list[str]:
 
 def _ping_succeeded(output: str) -> bool:
     lowered = output.lower()
-    return "ttl=" in lowered or "tiempo" in lowered or "time=" in lowered
+    return "ttl=" in lowered or "time=" in lowered or "tiempo=" in lowered
+
+
+def _parse_arp_mac(output: str, ip: str) -> str:
+    for line in output.splitlines():
+        tokens = [token.strip("()") for token in line.split()]
+        if ip not in tokens:
+            continue
+        match = MAC_PATTERN.search(line)
+        if match:
+            return match.group(0)
+    return "No disponible"
 
 
 def get_mac_address(ip: str) -> str:
     try:
         output = subprocess.run(["arp", "-a", ip], capture_output=True, text=True, timeout=2)
-        for line in output.stdout.splitlines():
-            if ip in line:
-                parts = line.split()
-                if len(parts) > 1:
-                    return parts[1]
-    except Exception:
+        return _parse_arp_mac(output.stdout, ip)
+    except (OSError, subprocess.TimeoutExpired):
         logger.exception("Could not read MAC address for %s", ip)
     return "No disponible"
+
+
+def reverse_dns_name(ip: str, timeout: float = REVERSE_DNS_TIMEOUT_SECONDS) -> str:
+    """Resolve reverse DNS without allowing the system resolver to stall a scan worker."""
+    result = []
+
+    def lookup():
+        try:
+            result.append(socket.gethostbyaddr(ip)[0])
+        except (OSError, socket.herror, socket.gaierror):
+            return
+
+    resolver = threading.Thread(target=lookup, daemon=True)
+    resolver.start()
+    resolver.join(max(0.0, timeout))
+    if resolver.is_alive() or not result:
+        return "No resuelto"
+    return result[0]
 
 
 def _probe_host(ip: str, stop_event: threading.Event) -> DiscoveredHost | None:
@@ -193,15 +249,51 @@ def _probe_host(ip: str, stop_event: threading.Event) -> DiscoveredHost | None:
         return None
     try:
         result = subprocess.run(_ping_command(ip), capture_output=True, text=True, timeout=2)
-        if result.returncode != 0:
+        if result.returncode != 0 or not _ping_succeeded(result.stdout):
             return None
-        try:
-            host_name = socket.gethostbyaddr(ip)[0]
-        except (socket.herror, socket.gaierror):
-            host_name = "No resuelto"
+        if stop_event.is_set():
+            return None
+        host_name = reverse_dns_name(ip)
+        if stop_event.is_set():
+            return None
         return DiscoveredHost(ip=ip, hostname=host_name, mac=get_mac_address(ip))
     except (subprocess.TimeoutExpired, OSError):
         return None
+
+
+def _bounded_future_results(
+    items,
+    executor,
+    submit_item,
+    stop_event: threading.Event,
+    max_pending: int,
+):
+    iterator = iter(items)
+    pending = {}
+    exhausted = False
+    pending_limit = max(1, max_pending)
+
+    def fill_pending():
+        nonlocal exhausted
+        while not exhausted and not stop_event.is_set() and len(pending) < pending_limit:
+            try:
+                item = next(iterator)
+            except StopIteration:
+                exhausted = True
+                break
+            pending[executor.submit(submit_item, item)] = item
+
+    fill_pending()
+    while pending:
+        done, _ = wait(tuple(pending), return_when=FIRST_COMPLETED)
+        for future in done:
+            item = pending.pop(future)
+            yield item, future
+        if stop_event.is_set():
+            for future in pending:
+                future.cancel()
+            break
+        fill_pending()
 
 
 def scan_network_hosts(
@@ -210,25 +302,35 @@ def scan_network_hosts(
     max_workers: int = NETWORK_SCAN_WORKERS,
     probe_func=None,
     on_found=None,
+    on_checked=None,
+    max_pending: int | None = None,
 ) -> list[DiscoveredHost]:
     network = parse_network_cidr(cidr)
     stop_event = stop_event or threading.Event()
     probe_func = probe_func or _probe_host
-    hosts = [str(host) for host in network.hosts()]
+    host_count = _usable_host_count(network)
+    workers = max(1, min(max_workers, host_count or 1))
+    pending_limit = max_pending or workers * PENDING_TASK_FACTOR
     found = []
 
-    with ThreadPoolExecutor(max_workers=max(1, min(max_workers, len(hosts) or 1))) as executor:
-        futures = {executor.submit(probe_func, ip, stop_event): ip for ip in hosts}
-        for future in as_completed(futures):
+    with ThreadPoolExecutor(max_workers=workers) as executor:
+        results = _bounded_future_results(
+            (str(host) for host in network.hosts()),
+            executor,
+            lambda ip: probe_func(ip, stop_event),
+            stop_event,
+            pending_limit,
+        )
+        for ip, future in results:
             if stop_event.is_set():
-                for pending in futures:
-                    pending.cancel()
                 break
             try:
                 host = future.result()
             except Exception:
-                logger.exception("Network probe failed for %s", futures[future])
-                continue
+                logger.exception("Network probe failed for %s", ip)
+                host = None
+            if on_checked is not None:
+                on_checked(ip)
             if host is not None:
                 found.append(host)
                 if on_found is not None:
@@ -259,25 +361,37 @@ def scan_open_ports(
     timeout: float = PORT_TIMEOUT_SECONDS,
     probe_func=None,
     on_open=None,
+    on_checked=None,
+    max_pending: int | None = None,
 ) -> list[OpenPort]:
     ip = socket.gethostbyname(target)
     stop_event = stop_event or threading.Event()
     probe_func = probe_func or _probe_port
-    ports = list(range(start_port, end_port + 1))
+    total_ports = end_port - start_port + 1
+    workers = max(1, min(max_workers, total_ports or 1))
+    pending_limit = max_pending or workers * PENDING_TASK_FACTOR
     open_ports = []
 
-    with ThreadPoolExecutor(max_workers=max(1, min(max_workers, len(ports) or 1))) as executor:
-        futures = {executor.submit(probe_func, ip, port, timeout): port for port in ports}
-        for future in as_completed(futures):
+    with ThreadPoolExecutor(max_workers=workers) as executor:
+        results = _bounded_future_results(
+            range(start_port, end_port + 1),
+            executor,
+            lambda port: probe_func(ip, port, timeout),
+            stop_event,
+            pending_limit,
+        )
+        for port, future in results:
             if stop_event.is_set():
-                for pending in futures:
-                    pending.cancel()
                 break
-            port = futures[future]
             try:
                 is_open = future.result()
             except OSError:
                 is_open = False
+            except Exception:
+                logger.exception("Port probe failed for %s:%s", ip, port)
+                is_open = False
+            if on_checked is not None:
+                on_checked(port)
             if is_open:
                 result = OpenPort(port=port, service=known_service_name(port))
                 open_ports.append(result)
@@ -290,6 +404,7 @@ def scan_open_ports(
 class NetworkScanWorker(QThread):
     message = pyqtSignal(str)
     finished_summary = pyqtSignal(str)
+    cancelled = pyqtSignal(str)
 
     def __init__(self, cidr: str):
         super().__init__()
@@ -300,6 +415,7 @@ class NetworkScanWorker(QThread):
         self._stop_event.set()
 
     def run(self):
+        checked = 0
         try:
             network = parse_network_cidr(self.cidr)
             self.message.emit(
@@ -311,23 +427,37 @@ class NetworkScanWorker(QThread):
                     f"Dispositivo: {host.ip} - Hostname: {host.hostname} - MAC: {host.mac}"
                 )
 
+            def report_checked(_ip):
+                nonlocal checked
+                checked += 1
+
             found_devices = scan_network_hosts(
                 network.with_prefixlen,
                 stop_event=self._stop_event,
                 on_found=report_found,
+                on_checked=report_checked,
             )
         except Exception as error:
             self.message.emit(f"Error: {error}\n")
             self.finished_summary.emit(f"Escaneo de red fallido: {error}")
             return
 
+        rows = [
+            f"{host.ip} - Hostname: {host.hostname} - MAC: {host.mac}" for host in found_devices
+        ]
         if self._stop_event.is_set():
-            self.message.emit("Escaneo detenido por el usuario.\n")
+            summary = (
+                f"[CANCELADO] Escaneo de {network.with_prefixlen}: {checked} hosts comprobados; "
+                f"{len(found_devices)} encontrados. Resultados parciales."
+            )
+            if rows:
+                summary += "\n" + "\n".join(rows)
+            self.message.emit("Escaneo cancelado. Los resultados mostrados son parciales.\n")
+            self.cancelled.emit(summary)
+            self.finished_summary.emit(summary)
+            return
 
-        if found_devices:
-            rows = [
-                f"{host.ip} - Hostname: {host.hostname} - MAC: {host.mac}" for host in found_devices
-            ]
+        if rows:
             summary = f"Escaneo de {network.with_prefixlen}:\n" + "\n".join(rows)
         else:
             summary = f"Escaneo de {network.with_prefixlen}: no se encontraron dispositivos."
@@ -339,6 +469,7 @@ class NetworkScanWorker(QThread):
 class PortScanWorker(QThread):
     message = pyqtSignal(str)
     finished_summary = pyqtSignal(str)
+    cancelled = pyqtSignal(str)
 
     def __init__(self, target: str, start_port: int, end_port: int):
         super().__init__()
@@ -351,13 +482,18 @@ class PortScanWorker(QThread):
         self._stop_event.set()
 
     def run(self):
-        checked = self.end_port - self.start_port + 1
+        total = self.end_port - self.start_port + 1
+        checked = 0
         self.message.emit(
-            f"Escaneando {checked} puertos con hasta {PORT_SCAN_WORKERS} conexiones concurrentes..."
+            f"Escaneando {total} puertos con hasta {PORT_SCAN_WORKERS} conexiones concurrentes..."
         )
 
         def report_open(result):
             self.message.emit(f"ABIERTO  {result.port}/tcp  {result.service}")
+
+        def report_checked(_port):
+            nonlocal checked
+            checked += 1
 
         try:
             results = scan_open_ports(
@@ -366,17 +502,28 @@ class PortScanWorker(QThread):
                 self.end_port,
                 stop_event=self._stop_event,
                 on_open=report_open,
+                on_checked=report_checked,
             )
-        except (OSError, socket.gaierror) as error:
+        except OSError as error:
             self.message.emit(f"Error resolviendo o escaneando {self.target}: {error}")
             self.finished_summary.emit(f"Escaneo de puertos fallido para {self.target}: {error}")
             return
 
+        rows = [f"{result.port}/tcp abierto ({result.service})" for result in results]
         if self._stop_event.is_set():
-            self.message.emit("Escaneo detenido por el usuario.")
+            summary = (
+                f"[CANCELADO] Escaneo de puertos en {self.target} ({self.start_port}-{self.end_port}): "
+                f"{checked} de {total} puertos comprobados; {len(results)} abiertos. "
+                "Resultados parciales."
+            )
+            if rows:
+                summary += "\n" + "\n".join(rows)
+            self.message.emit("Escaneo cancelado. Los resultados mostrados son parciales.")
+            self.cancelled.emit(summary)
+            self.finished_summary.emit(summary)
+            return
 
-        if results:
-            rows = [f"{result.port}/tcp abierto ({result.service})" for result in results]
+        if rows:
             summary = (
                 f"Puertos abiertos en {self.target} ({self.start_port}-{self.end_port}):\n"
                 + "\n".join(rows)
@@ -415,6 +562,16 @@ class NetworkScanner(QWidget):
             )
         if not self.interfaces:
             self.interface_combo.addItem("No se detectaron interfaces IPv4 activas", "")
+        else:
+            try:
+                default_interface = detect_default_network(self.interfaces)
+            except RuntimeError:
+                default_interface = None
+            if default_interface is not None:
+                for index, interface in enumerate(self.interfaces):
+                    if interface == default_interface:
+                        self.interface_combo.setCurrentIndex(index)
+                        break
         self.interface_combo.currentIndexChanged.connect(self._apply_selected_interface)
         interface_layout.addWidget(self.interface_combo)
         layout.addLayout(interface_layout)
@@ -437,6 +594,7 @@ class NetworkScanner(QWidget):
 
         self.stop_button = QPushButton("Detener escaneo")
         self.stop_button.clicked.connect(self.stop_scan)
+        self.stop_button.setEnabled(False)
         layout.addWidget(self.stop_button)
 
         self.setLayout(layout)
@@ -445,6 +603,15 @@ class NetworkScanner(QWidget):
         cidr = self.interface_combo.currentData()
         if cidr:
             self.cidr_input.setText(cidr)
+
+    def _set_running(self, running: bool):
+        self.scan_button.setEnabled(not running)
+        self.stop_button.setEnabled(running)
+        self.interface_combo.setEnabled(not running)
+        self.cidr_input.setEnabled(not running)
+
+    def _worker_finished(self):
+        self._set_running(False)
 
     def scan_network(self):
         if self.worker and self.worker.isRunning():
@@ -462,13 +629,20 @@ class NetworkScanner(QWidget):
         self.worker = NetworkScanWorker(network.with_prefixlen)
         self.worker.message.connect(self.result_area.append)
         self.worker.finished_summary.connect(self.history_tab.append_to_history)
-        self.worker.finished.connect(lambda: self.scan_button.setEnabled(True))
-        self.scan_button.setEnabled(False)
+        self.worker.finished.connect(self._worker_finished)
+        self._set_running(True)
         self.worker.start()
 
     def stop_scan(self):
         if self.worker and self.worker.isRunning():
+            self.stop_button.setEnabled(False)
+            self.result_area.append("Cancelando escaneo...")
             self.worker.stop()
+
+    def running_worker(self):
+        if self.worker and self.worker.isRunning():
+            return self.worker
+        return None
 
 
 class PortScanner(QWidget):
@@ -506,9 +680,19 @@ class PortScanner(QWidget):
 
         self.stop_button = QPushButton("Detener escaneo")
         self.stop_button.clicked.connect(self.stop_scan)
+        self.stop_button.setEnabled(False)
         layout.addWidget(self.stop_button)
 
         self.setLayout(layout)
+
+    def _set_running(self, running: bool):
+        self.scan_button.setEnabled(not running)
+        self.stop_button.setEnabled(running)
+        self.ip_input.setEnabled(not running)
+        self.port_range_input.setEnabled(not running)
+
+    def _worker_finished(self):
+        self._set_running(False)
 
     def scan_ports(self):
         if self.worker and self.worker.isRunning():
@@ -535,13 +719,20 @@ class PortScanner(QWidget):
         self.worker = PortScanWorker(target, start_port, end_port)
         self.worker.message.connect(self.result_area.append)
         self.worker.finished_summary.connect(self.history_tab.append_to_history)
-        self.worker.finished.connect(lambda: self.scan_button.setEnabled(True))
-        self.scan_button.setEnabled(False)
+        self.worker.finished.connect(self._worker_finished)
+        self._set_running(True)
         self.worker.start()
 
     def stop_scan(self):
         if self.worker and self.worker.isRunning():
+            self.stop_button.setEnabled(False)
+            self.result_area.append("Cancelando escaneo...")
             self.worker.stop()
+
+    def running_worker(self):
+        if self.worker and self.worker.isRunning():
+            return self.worker
+        return None
 
 
 class HistoryTab(QWidget):
@@ -649,14 +840,54 @@ class Tool(BaseTool):
     def setup_ui(self):
         self.setWindowTitle(self.name)
         self.setGeometry(200, 200, 800, 600)
+        self._close_when_workers_finish = False
 
-        history_tab = HistoryTab()
-        network_scanner = NetworkScanner(history_tab)
-        port_scanner = PortScanner(history_tab)
+        self.history_tab = HistoryTab()
+        self.network_scanner = NetworkScanner(self.history_tab)
+        self.port_scanner = PortScanner(self.history_tab)
 
         tabs = QTabWidget()
-        tabs.addTab(network_scanner, "Escáner de Red")
-        tabs.addTab(port_scanner, "Escáner de Puertos")
-        tabs.addTab(history_tab, "Histórico")
+        tabs.addTab(self.network_scanner, "Escáner de Red")
+        tabs.addTab(self.port_scanner, "Escáner de Puertos")
+        tabs.addTab(self.history_tab, "Histórico")
 
         self.setCentralWidget(tabs)
+
+    def _running_workers(self):
+        workers = []
+        for scanner in (self.network_scanner, self.port_scanner):
+            worker = scanner.running_worker()
+            if worker is not None:
+                workers.append(worker)
+        return workers
+
+    def _retry_deferred_close(self):
+        if self._close_when_workers_finish and not self._running_workers():
+            self._close_when_workers_finish = False
+            self.close()
+
+    def closeEvent(self, event):
+        workers = self._running_workers()
+        if not workers:
+            event.accept()
+            return
+
+        for worker in workers:
+            worker.stop()
+
+        deadline = time.monotonic() + THREAD_SHUTDOWN_WAIT_MS / 1000.0
+        unfinished = []
+        for worker in workers:
+            remaining_ms = max(0, int((deadline - time.monotonic()) * 1000))
+            if not worker.wait(remaining_ms):
+                unfinished.append(worker)
+
+        if not unfinished:
+            event.accept()
+            return
+
+        if not self._close_when_workers_finish:
+            self._close_when_workers_finish = True
+            for worker in unfinished:
+                worker.finished.connect(self._retry_deferred_close)
+        event.ignore()
