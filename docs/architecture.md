@@ -9,7 +9,7 @@ The preferred dependency direction is:
 
 `models.py` → standard-library/domain data only
 
-`service.py` → models + infrastructure libraries, **never PyQt5**
+`service.py` → models + framework-independent infrastructure, **never PyQt5 or Qt workers**
 
 `window.py` → PyQt5 + models + services
 
@@ -17,11 +17,15 @@ The preferred dependency direction is:
 
 This lets business rules run in unit tests without constructing a QApplication
 and prevents UI code from becoming the owner of persistence, parsing, operating
-system calls, or document transformations.
+system calls, or document transformations. Cooperative task cancellation uses
+`pythonkni/core/tasks.py`, so long-running services do not need to import the Qt
+`Worker` implementation.
 
 ## Current layout
 
 - `main.py`: application entry point and dynamic tool menu.
+- `pythonkni/core/`
+  - `tasks.py`: framework-independent cooperative-cancellation primitive.
 - `pythonkni/event_viewer/`
   - `models.py`: `EventItem` and `EventResult`.
   - `service.py`: Windows event collection, parsing, risk classification and exports.
@@ -39,7 +43,8 @@ system calls, or document transformations.
   - `window.py`: PDF Toolkit Qt window.
 - `tools/*_tool.py`: loader-compatible adapters. The four migrated tools contain
   no business implementation there.
-- `tools/worker.py`: reusable asynchronous Qt worker infrastructure.
+- `tools/worker.py`: reusable Qt worker that adapts the framework-independent
+  cancellation primitive to Qt signals and `QThread`.
 - `tools/app_paths.py`: application-specific filesystem paths.
 - `assets/`: static UI assets.
 
