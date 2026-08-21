@@ -257,7 +257,7 @@ def _is_link_or_reparse(path: Path) -> bool:
 def _directory_identity(path: Path) -> tuple[int, int] | None:
     """Identidad del directorio sin seguir enlaces; permite detectar sustituciones del target."""
     try:
-        info = path.stat(follow_symlinks=False)
+        info = path.lstat()
     except OSError:
         return None
 
