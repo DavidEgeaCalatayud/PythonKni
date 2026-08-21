@@ -1,7 +1,15 @@
 import os
 import importlib
 import logging
-from PyQt5.QtWidgets import QApplication, QMainWindow, QVBoxLayout, QPushButton, QWidget, QLabel, QMessageBox
+from PyQt5.QtWidgets import (
+    QApplication,
+    QMainWindow,
+    QVBoxLayout,
+    QPushButton,
+    QWidget,
+    QLabel,
+    QMessageBox,
+)
 from PyQt5.QtCore import Qt, QThread, pyqtSignal
 
 from tools.logging_config import setup_logging
