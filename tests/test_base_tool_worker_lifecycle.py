@@ -126,5 +126,6 @@ def test_managed_worker_handles_legacy_finished_signal_shadow(qtbot):
     worker = ShadowFinishedWorker()
     tool.start_managed_worker(worker)
     qtbot.waitUntil(lambda: not worker.isRunning(), timeout=1000)
+    qtbot.waitUntil(lambda: worker not in tool._managed_workers, timeout=1000)
 
     assert worker not in tool._managed_workers
