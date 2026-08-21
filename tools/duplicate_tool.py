@@ -36,7 +36,7 @@ def hash_file(file_path: str | Path) -> str | None:
         with open(file_path, "rb") as file:
             for chunk in iter(lambda: file.read(HASH_CHUNK_SIZE), b""):
                 hasher.update(chunk)
-    except (OSError, PermissionError):
+    except OSError:
         return None
     return hasher.hexdigest()
 
@@ -49,12 +49,11 @@ def quick_hash_file(file_path: str | Path, sample_size: int = QUICK_SAMPLE_SIZE)
         hasher = hashlib.blake2b(digest_size=16)
         hasher.update(size.to_bytes(8, "little", signed=False))
         with path.open("rb") as file:
-            first = file.read(sample_size)
-            hasher.update(first)
+            hasher.update(file.read(sample_size))
             if size > sample_size:
                 file.seek(max(0, size - sample_size))
                 hasher.update(file.read(sample_size))
-    except (OSError, PermissionError):
+    except OSError:
         return None
     return hasher.hexdigest()
 
@@ -74,7 +73,7 @@ def files_equal(first_path: str | Path, second_path: str | Path) -> bool:
                     return False
                 if not first_chunk:
                     return True
-    except (OSError, PermissionError):
+    except OSError:
         return False
 
 
@@ -95,7 +94,7 @@ def _group_readable_files_by_size(folder_path: str | Path) -> dict[int, list[Pat
     for path in _iter_scan_files(folder_path):
         try:
             groups[path.stat().st_size].append(path)
-        except (OSError, PermissionError):
+        except OSError:
             logger.debug("No se pudo leer el tamaño de %s", path, exc_info=True)
     return groups
 
@@ -186,7 +185,7 @@ def _is_inside(path: Path, parent: Path) -> bool:
 
 
 def move_duplicates(duplicates, base_folder):
-    """Move verified copies and create an atomic restoration manifest."""
+    """Move revalidated copies and create an atomic restoration manifest."""
     base = Path(base_folder)
     target_folder = base / DUPLICATES_DIR_NAME
     target_folder.mkdir(parents=True, exist_ok=True)
@@ -197,6 +196,7 @@ def move_duplicates(duplicates, base_folder):
         "base_folder": str(base.resolve(strict=False)),
         "duplicates_folder": str(target_folder.resolve(strict=False)),
         "status": "in_progress",
+        "restore_instructions": "Move each existing destination back to its source path.",
         "moves": [],
     }
     _write_manifest_atomic(manifest_path, manifest)
@@ -214,12 +214,15 @@ def move_duplicates(duplicates, base_folder):
             source = Path(file_path)
             if not source.exists() or source.is_symlink() or _is_inside(source, target_folder):
                 continue
-            if not files_equal(original, source):
+
+            source_hash = hash_file(source)
+            original_hash = hash_file(original)
+            if source_hash is None or original_hash is None or source_hash != original_hash:
                 logger.warning("Se omite %s porque ya no coincide con %s", source, original)
                 continue
 
-            secure_hash = hash_file(source)
-            if secure_hash is None:
+            if not files_equal(original, source):
+                logger.warning("Se omite %s porque falla la comparación final con %s", source, original)
                 continue
 
             destination = _unique_destination(target_folder, source.name)
@@ -232,7 +235,7 @@ def move_duplicates(duplicates, base_folder):
                 "source": str(source.resolve(strict=False)),
                 "destination": str(destination.resolve(strict=False)),
                 "retained_original": str(original.resolve(strict=False)),
-                "sha256": secure_hash,
+                "sha256": source_hash,
                 "size": size,
                 "status": "planned",
             }
