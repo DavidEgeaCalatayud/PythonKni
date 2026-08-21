@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 import hashlib
 import logging
 import os
@@ -5,7 +7,7 @@ from dataclasses import dataclass
 
 import psutil
 import requests
-from PyQt5.QtCore import QThread, Qt, pyqtSignal
+from PyQt5.QtCore import QTimer, Qt
 from PyQt5.QtGui import QMovie
 from PyQt5.QtWidgets import (
     QHBoxLayout,
@@ -23,6 +25,7 @@ from PyQt5.QtWidgets import (
 
 from tools.app_paths import ASSETS_DIR
 from tools.theme_manager import ThemeManager
+from tools.worker import Worker
 
 
 logger = logging.getLogger(__name__)
@@ -57,6 +60,17 @@ class ProcessDetails:
     exe_path: str
     username: str
     create_time: float
+
+
+@dataclass(frozen=True)
+class VirusTotalResult:
+    status: str
+    exe_path: str
+    file_hash: str
+    positives: int = 0
+    total: int = 0
+    detections: tuple[str, ...] = ()
+    response_text: str = ""
 
 
 def get_vt_api_key():
@@ -106,29 +120,82 @@ def get_process_details(proc):
     )
 
 
-class LoaderThread(QThread):
-    processes_loaded = pyqtSignal(list)
-
-    def __init__(self, cpu_min, mem_min):
-        super().__init__()
-        self.cpu_min = cpu_min
-        self.mem_min = mem_min
-
-    def run(self):
-        processes = []
-        for proc in psutil.process_iter(["pid", "name"]):
-            try:
-                cpu = proc.cpu_percent(interval=0.1)
-                mem = proc.memory_percent()
-
-                if cpu < self.cpu_min and mem < self.mem_min:
-                    continue
-
-                processes.append((proc.pid, proc.info["name"] or "Desconocido", cpu, mem))
-            except (psutil.NoSuchProcess, psutil.AccessDenied):
+def load_processes_task(worker, cpu_min, mem_min):
+    """Collect process metrics outside the Qt GUI thread."""
+    processes = []
+    for proc in psutil.process_iter(["pid", "name"]):
+        worker.check_cancelled()
+        try:
+            cpu = proc.cpu_percent(interval=0.1)
+            mem = proc.memory_percent()
+            if cpu < cpu_min and mem < mem_min:
                 continue
+            processes.append((proc.pid, proc.info["name"] or "Desconocido", cpu, mem))
+        except (psutil.NoSuchProcess, psutil.AccessDenied, psutil.ZombieProcess):
+            continue
+    return processes
 
-        self.processes_loaded.emit(processes)
+
+def analyze_process_task(worker, pid, api_key):
+    """Hash an executable and query VirusTotal without blocking the GUI."""
+    worker.report_progress({"message": f"Leyendo proceso {pid}..."})
+    proc = psutil.Process(pid)
+    exe_path = proc.exe()
+
+    file_size = max(os.path.getsize(exe_path), 1)
+    hashed_bytes = 0
+    sha256_hash = hashlib.sha256()
+    worker.report_progress({"message": "Calculando SHA-256...", "percent": 0})
+
+    with open(exe_path, "rb") as file:
+        while True:
+            worker.check_cancelled()
+            chunk = file.read(1024 * 1024)
+            if not chunk:
+                break
+            sha256_hash.update(chunk)
+            hashed_bytes += len(chunk)
+            percent = min(100, int((hashed_bytes / file_size) * 100))
+            worker.report_progress(
+                {"message": f"Calculando SHA-256... {percent}%", "percent": percent}
+            )
+
+    file_hash = sha256_hash.hexdigest()
+    worker.report_progress({"message": "Consultando VirusTotal..."})
+    response = requests.get(
+        f"https://www.virustotal.com/api/v3/files/{file_hash}",
+        headers={"x-apikey": api_key},
+        timeout=20,
+    )
+    worker.check_cancelled()
+
+    if response.status_code == 404:
+        return VirusTotalResult("not_found", exe_path, file_hash)
+    if response.status_code != 200:
+        return VirusTotalResult(
+            "http_error",
+            exe_path,
+            file_hash,
+            response_text=response.text,
+        )
+
+    data = response.json()
+    attributes = data["data"]["attributes"]
+    stats = attributes["last_analysis_stats"]
+    scans = attributes["last_analysis_results"]
+    detections = tuple(
+        f"{engine}: {result['result']}"
+        for engine, result in scans.items()
+        if result["category"] == "malicious"
+    )
+    return VirusTotalResult(
+        "found",
+        exe_path,
+        file_hash,
+        positives=stats.get("malicious", 0),
+        total=sum(stats.values()),
+        detections=detections,
+    )
 
 
 class Tool(QMainWindow):
@@ -138,44 +205,38 @@ class Tool(QMainWindow):
         super().__init__()
         self.setWindowTitle(self.name)
         self.setGeometry(250, 250, 1000, 600)
+        self._process_worker = None
+        self._analysis_worker = None
+        self._close_when_workers_finish = False
 
         ThemeManager.apply_theme(self)
 
         layout = QVBoxLayout()
 
-        # Widget de carga (texto + gif)
         self.loading_widget = QWidget()
         loading_layout = QHBoxLayout()
         loading_layout.setAlignment(Qt.AlignCenter)
 
-        # Texto
         self.loading_text = QLabel("Cargando procesos...")
         self.loading_text.setProperty("class", "loading-text")
         self.loading_text.setSizePolicy(QSizePolicy.Preferred, QSizePolicy.Preferred)
         loading_layout.addWidget(self.loading_text)
-
-        # Espaciado fijo
         loading_layout.addSpacing(15)
 
-        # Gif animado
         self.loading_label = QLabel()
         self.loading_label.setFixedSize(48, 48)
         self.loading_label.setAlignment(Qt.AlignCenter)
-
         gif_path = str(ASSETS_DIR / "spinner.gif")
         self.loading_movie = QMovie(gif_path)
         self.loading_movie.setScaledSize(self.loading_label.size())
         self.loading_label.setMovie(self.loading_movie)
         loading_layout.addWidget(self.loading_label)
-
-        # Estiramiento al final (para que no colapse el texto)
         loading_layout.addStretch()
 
         self.loading_widget.setLayout(loading_layout)
         layout.addWidget(self.loading_widget)
         self.loading_widget.hide()
 
-        # Tabla de procesos
         self.table = QTableWidget()
         self.table.setColumnCount(5)
         self.table.setHorizontalHeaderLabels(
@@ -187,7 +248,6 @@ class Tool(QMainWindow):
         self.table.setSortingEnabled(True)
         layout.addWidget(self.table)
 
-        # Controles de filtrado
         filter_layout = QHBoxLayout()
         filter_layout.addWidget(QLabel("Filtrar CPU >"))
         self.cpu_filter = QSpinBox()
@@ -204,12 +264,9 @@ class Tool(QMainWindow):
         btn_apply_filter = QPushButton("Aplicar Filtro")
         btn_apply_filter.clicked.connect(self.load_processes)
         filter_layout.addWidget(btn_apply_filter)
-
         layout.addLayout(filter_layout)
 
-        # Botones principales
         btn_layout = QHBoxLayout()
-
         btn_refresh = QPushButton("🔄 Actualizar lista")
         btn_refresh.clicked.connect(self.load_processes)
         btn_layout.addWidget(btn_refresh)
@@ -217,34 +274,62 @@ class Tool(QMainWindow):
         btn_kill = QPushButton("❌ Terminar proceso seleccionado")
         btn_kill.clicked.connect(self.kill_process)
         btn_layout.addWidget(btn_kill)
-
         layout.addLayout(btn_layout)
+
+        analysis_layout = QHBoxLayout()
+        self.analysis_status = QLabel("")
+        analysis_layout.addWidget(self.analysis_status)
+        analysis_layout.addStretch()
+        self.btn_cancel_analysis = QPushButton("Cancelar análisis")
+        self.btn_cancel_analysis.setEnabled(False)
+        self.btn_cancel_analysis.clicked.connect(self.cancel_analysis)
+        analysis_layout.addWidget(self.btn_cancel_analysis)
+        layout.addLayout(analysis_layout)
 
         container = QWidget()
         container.setLayout(layout)
         self.setCentralWidget(container)
-
-        # Cargar lista al inicio
         self.load_processes()
 
     def load_processes(self):
-        """Carga lista de procesos en la tabla usando un hilo"""
+        """Carga la lista mediante el Worker reutilizable."""
+        if self._process_worker is not None and self._process_worker.isRunning():
+            self._process_worker.cancel()
+
         self.table.setRowCount(0)
         self.loading_widget.show()
         self.loading_movie.start()
 
-        cpu_min = self.cpu_filter.value()
-        mem_min = self.mem_filter.value()
+        worker = Worker(
+            load_processes_task,
+            self.cpu_filter.value(),
+            self.mem_filter.value(),
+            parent=self,
+        )
+        self._process_worker = worker
+        worker.result.connect(self.populate_table)
+        worker.error.connect(self._process_load_error)
+        worker.cancelled.connect(self._process_load_cancelled)
+        worker.finished.connect(lambda: self._process_load_finished(worker))
+        worker.start()
 
-        self.loader_thread = LoaderThread(cpu_min, mem_min)
-        self.loader_thread.processes_loaded.connect(self.populate_table)
-        self.loader_thread.start()
+    def _process_load_error(self, error):
+        logger.error("Could not load process list: %s", error)
+        QMessageBox.critical(self, "Error", f"No se pudo cargar la lista de procesos:\n{error}")
+
+    def _process_load_cancelled(self):
+        self.loading_text.setText("Actualización cancelada")
+
+    def _process_load_finished(self, worker):
+        if self._process_worker is worker:
+            self._process_worker = None
+            self.loading_movie.stop()
+            self.loading_widget.hide()
+        worker.deleteLater()
+        self._maybe_close_after_workers()
 
     def populate_table(self, processes):
-        """Rellena la tabla con los procesos obtenidos"""
-        self.loading_movie.stop()
-        self.loading_widget.hide()
-
+        """Rellena la tabla con los procesos obtenidos."""
         self.table.setSortingEnabled(False)
         for pid, name, cpu, mem in processes:
             row = self.table.rowCount()
@@ -267,7 +352,6 @@ class Tool(QMainWindow):
             return
 
         pid = int(self.table.item(selected, 0).text())
-
         if is_own_process(pid):
             QMessageBox.warning(
                 self,
@@ -302,7 +386,8 @@ class Tool(QMainWindow):
             system_confirmation = QMessageBox.question(
                 self,
                 "Advertencia: proceso del sistema",
-                "Este proceso parece pertenecer a Windows o ejecutarse con una cuenta del sistema.\n"
+                "Este proceso parece pertenecer a Windows o ejecutarse con una cuenta "
+                "del sistema.\n"
                 "Terminarlo puede provocar inestabilidad, cierre de sesión o reinicio.\n\n"
                 + format_process_identity(details)
                 + f"\nUsuario: {details.username}\n\n¿Quieres continuar de todos modos?",
@@ -317,7 +402,8 @@ class Tool(QMainWindow):
                 QMessageBox.warning(
                     self,
                     "Proceso cambiado",
-                    "El proceso seleccionado ya no es el mismo. Se ha cancelado la operación por seguridad.",
+                    "El proceso seleccionado ya no es el mismo. "
+                    "Se ha cancelado la operación por seguridad.",
                 )
                 return
 
@@ -337,7 +423,7 @@ class Tool(QMainWindow):
             )
 
     def analyze_process(self, pid):
-        """Analiza el ejecutable del proceso en VirusTotal"""
+        """Programa el análisis de VirusTotal fuera del hilo de la interfaz."""
         api_key = get_vt_api_key()
         if not api_key:
             QMessageBox.warning(
@@ -346,66 +432,101 @@ class Tool(QMainWindow):
                 "Falta la variable de entorno VIRUSTOTAL_API_KEY.",
             )
             return
+        if self._analysis_worker is not None and self._analysis_worker.isRunning():
+            QMessageBox.information(
+                self,
+                "VirusTotal",
+                "Ya hay un análisis en curso. Cancélelo o espere a que finalice.",
+            )
+            return
 
-        try:
-            proc = psutil.Process(pid)
-            exe_path = proc.exe()
+        worker = Worker(analyze_process_task, pid, api_key, parent=self)
+        self._analysis_worker = worker
+        self.analysis_status.setText(f"Analizando PID {pid}...")
+        self.btn_cancel_analysis.setEnabled(True)
+        worker.progress.connect(self._analysis_progress)
+        worker.result.connect(self._analysis_result)
+        worker.error.connect(self._analysis_error)
+        worker.cancelled.connect(self._analysis_cancelled)
+        worker.finished.connect(lambda: self._analysis_finished(worker))
+        worker.start()
 
-            # Calcular hash SHA256
-            sha256_hash = hashlib.sha256()
-            with open(exe_path, "rb") as file:
-                for chunk in iter(lambda: file.read(4096), b""):
-                    sha256_hash.update(chunk)
-            file_hash = sha256_hash.hexdigest()
+    def cancel_analysis(self):
+        worker = self._analysis_worker
+        if worker is not None and worker.isRunning():
+            worker.cancel()
+            self.analysis_status.setText("Cancelando análisis...")
+            self.btn_cancel_analysis.setEnabled(False)
 
-            # Consultar en VirusTotal
-            url = f"https://www.virustotal.com/api/v3/files/{file_hash}"
-            headers = {"x-apikey": api_key}
-            response = requests.get(url, headers=headers, timeout=20)
+    def _analysis_progress(self, progress):
+        if isinstance(progress, dict):
+            self.analysis_status.setText(str(progress.get("message", "Analizando...")))
+        else:
+            self.analysis_status.setText(str(progress))
 
-            if response.status_code == 200:
-                data = response.json()
-                stats = data["data"]["attributes"]["last_analysis_stats"]
-                total = sum(stats.values())
-                positives = stats.get("malicious", 0)
-
-                detections = []
-                scans = data["data"]["attributes"]["last_analysis_results"]
-                for engine, result in scans.items():
-                    if result["category"] == "malicious":
-                        detections.append(f"{engine}: {result['result']}")
-
-                if detections:
-                    detections_text = "\n".join(detections[:15])
-                    extra = "\n\n---\nMotores detectando:\n" + detections_text
-                    if len(detections) > 15:
-                        extra += f"\n...y {len(detections) - 15} más."
-                else:
-                    extra = "\n\nSin detecciones específicas."
-
-                QMessageBox.information(
-                    self,
-                    "Resultado VirusTotal",
-                    f"Archivo: {exe_path}\n\nDetecciones: {positives}/{total}{extra}",
-                )
-
-            elif response.status_code == 404:
-                QMessageBox.warning(
-                    self,
-                    "VirusTotal",
-                    f"Archivo no encontrado en VirusTotal.\nHash: {file_hash}",
-                )
-            else:
-                QMessageBox.warning(
-                    self,
-                    "Error",
-                    f"Error al consultar VirusTotal: {response.text}",
-                )
-
-        except Exception as error:
-            logger.exception("Could not analyze process %s with VirusTotal", pid)
-            QMessageBox.critical(
+    def _analysis_result(self, result):
+        if result.status == "not_found":
+            QMessageBox.warning(
+                self,
+                "VirusTotal",
+                f"Archivo no encontrado en VirusTotal.\nHash: {result.file_hash}",
+            )
+            return
+        if result.status == "http_error":
+            QMessageBox.warning(
                 self,
                 "Error",
-                f"No se pudo analizar el proceso:\n{error}",
+                f"Error al consultar VirusTotal: {result.response_text}",
             )
+            return
+
+        if result.detections:
+            detections_text = "\n".join(result.detections[:15])
+            extra = "\n\n---\nMotores detectando:\n" + detections_text
+            if len(result.detections) > 15:
+                extra += f"\n...y {len(result.detections) - 15} más."
+        else:
+            extra = "\n\nSin detecciones específicas."
+
+        QMessageBox.information(
+            self,
+            "Resultado VirusTotal",
+            f"Archivo: {result.exe_path}\n\nDetecciones: {result.positives}/{result.total}{extra}",
+        )
+
+    def _analysis_error(self, error):
+        logger.error("Could not analyze process with VirusTotal: %s", error)
+        QMessageBox.critical(self, "Error", f"No se pudo analizar el proceso:\n{error}")
+
+    def _analysis_cancelled(self):
+        self.analysis_status.setText("Análisis cancelado")
+
+    def _analysis_finished(self, worker):
+        if self._analysis_worker is worker:
+            self._analysis_worker = None
+            self.btn_cancel_analysis.setEnabled(False)
+            if self.analysis_status.text() != "Análisis cancelado":
+                self.analysis_status.setText("")
+        worker.deleteLater()
+        self._maybe_close_after_workers()
+
+    def _maybe_close_after_workers(self):
+        if not self._close_when_workers_finish:
+            return
+        process_running = self._process_worker is not None and self._process_worker.isRunning()
+        analysis_running = self._analysis_worker is not None and self._analysis_worker.isRunning()
+        if not process_running and not analysis_running:
+            self._close_when_workers_finish = False
+            QTimer.singleShot(0, self.close)
+
+    def closeEvent(self, event):
+        running = False
+        for worker in (self._process_worker, self._analysis_worker):
+            if worker is not None and worker.isRunning():
+                worker.cancel()
+                running = True
+        if running:
+            self._close_when_workers_finish = True
+            event.ignore()
+            return
+        super().closeEvent(event)
