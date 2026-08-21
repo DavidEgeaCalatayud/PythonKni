@@ -90,16 +90,13 @@ def is_windows() -> bool:
     return platform.system().lower() == "windows" and winreg is not None
 
 
-
 def now_stamp() -> str:
     return datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-
 
 
 def disabled_folder_root() -> Path:
     base = os.getenv("LOCALAPPDATA") or tempfile.gettempdir()
     return Path(base) / "PythonKni" / "DisabledStartup" / "Folders"
-
 
 
 def startup_user_folder() -> Path | None:
@@ -109,11 +106,9 @@ def startup_user_folder() -> Path | None:
     return Path(appdata) / "Microsoft" / "Windows" / "Start Menu" / "Programs" / "Startup"
 
 
-
 def startup_common_folder() -> Path:
     program_data = os.getenv("PROGRAMDATA") or r"C:\ProgramData"
     return Path(program_data) / "Microsoft" / "Windows" / "Start Menu" / "Programs" / "Startup"
-
 
 
 def open_folder(path: str | Path) -> None:
@@ -129,7 +124,6 @@ def open_folder(path: str | Path) -> None:
         QDesktopServices.openUrl(QUrl.fromLocalFile(str(folder)))
 
 
-
 def run_regedit_at_key(root_name: str, key_path: str) -> None:
     """Abre regedit. Windows no permite navegar siempre a una clave exacta con fiabilidad.
 
@@ -143,10 +137,8 @@ def run_regedit_at_key(root_name: str, key_path: str) -> None:
         pass
 
 
-
 def expand_command(command: str) -> str:
     return os.path.expandvars((command or "").strip())
-
 
 
 def extract_executable_path(command: str) -> str:
@@ -167,7 +159,9 @@ def extract_executable_path(command: str) -> str:
         else:
             candidate = expanded.strip('"')
     else:
-        match = re.match(r"(.+?\.(?:exe|bat|cmd|ps1|vbs|js|lnk|url))(?:\s|$)", expanded, re.IGNORECASE)
+        match = re.match(
+            r"(.+?\.(?:exe|bat|cmd|ps1|vbs|js|lnk|url))(?:\s|$)", expanded, re.IGNORECASE
+        )
         if match:
             candidate = match.group(1)
         else:
@@ -184,13 +178,11 @@ def extract_executable_path(command: str) -> str:
     return candidate
 
 
-
 def path_exists_from_command(command: str) -> str:
     candidate = extract_executable_path(command)
     if not candidate:
         return "No detectable"
     return "Sí" if Path(candidate).exists() else "No"
-
 
 
 def calculate_risk(command: str, exists: str, active: bool = True) -> str:
@@ -232,7 +224,6 @@ def calculate_risk(command: str, exists: str, active: bool = True) -> str:
     if any(token in expanded for token in medium_locations):
         return "Medio"
     return "Normal"
-
 
 
 def item_from_basic(
@@ -325,7 +316,6 @@ def read_registry_run_items() -> list[StartupItem]:
     return items
 
 
-
 def read_startup_folder_items() -> list[StartupItem]:
     items: list[StartupItem] = []
     locations: list[tuple[str, Path | None]] = [
@@ -360,14 +350,15 @@ def read_startup_folder_items() -> list[StartupItem]:
     return items
 
 
-
 def read_disabled_registry_items() -> list[StartupItem]:
     items: list[StartupItem] = []
     if not is_windows():
         return items
 
     try:
-        with winreg.OpenKey(winreg.HKEY_CURRENT_USER, DISABLED_REGISTRY_KEY, 0, winreg.KEY_READ) as root_key:
+        with winreg.OpenKey(
+            winreg.HKEY_CURRENT_USER, DISABLED_REGISTRY_KEY, 0, winreg.KEY_READ
+        ) as root_key:
             index = 0
             while True:
                 try:
@@ -410,7 +401,6 @@ def read_disabled_registry_items() -> list[StartupItem]:
     return items
 
 
-
 def read_disabled_folder_items() -> list[StartupItem]:
     items: list[StartupItem] = []
     root = disabled_folder_root()
@@ -443,7 +433,6 @@ def read_disabled_folder_items() -> list[StartupItem]:
     return items
 
 
-
 def collect_startup_items() -> list[StartupItem]:
     items: list[StartupItem] = []
     items.extend(read_registry_run_items())
@@ -472,14 +461,15 @@ def delete_disabled_registry_backup(disabled_id: str, *, missing_ok: bool = Fals
             raise
 
 
-
 def create_disabled_registry_backup(item: StartupItem) -> str:
     if not is_windows():
         raise RuntimeError("Esta función solo está disponible en Windows.")
 
     disabled_id = f"{datetime.now().strftime('%Y%m%d_%H%M%S')}_{uuid.uuid4().hex[:8]}"
     try:
-        with winreg.CreateKeyEx(winreg.HKEY_CURRENT_USER, DISABLED_REGISTRY_KEY, 0, winreg.KEY_WRITE) as root_key:
+        with winreg.CreateKeyEx(
+            winreg.HKEY_CURRENT_USER, DISABLED_REGISTRY_KEY, 0, winreg.KEY_WRITE
+        ) as root_key:
             with winreg.CreateKeyEx(root_key, disabled_id, 0, winreg.KEY_WRITE) as item_key:
                 winreg.SetValueEx(item_key, "Name", 0, winreg.REG_SZ, item.value_name or item.name)
                 winreg.SetValueEx(item_key, "Command", 0, winreg.REG_SZ, item.command)
@@ -506,12 +496,10 @@ def create_disabled_registry_backup(item: StartupItem) -> str:
     return disabled_id
 
 
-
 def _delete_registry_value(item: StartupItem) -> None:
     root = REGISTRY_ROOTS[item.root_name]
     with winreg.OpenKey(root, item.key_path, 0, winreg.KEY_SET_VALUE) as key:
         winreg.DeleteValue(key, item.value_name or item.name)
-
 
 
 def _registry_value_exists(item: StartupItem) -> bool:
@@ -524,13 +512,11 @@ def _registry_value_exists(item: StartupItem) -> bool:
         return False
 
 
-
 def _write_registry_value(item: StartupItem) -> None:
     root = REGISTRY_ROOTS[item.root_name]
     with winreg.CreateKeyEx(root, item.key_path, 0, winreg.KEY_SET_VALUE) as key:
         value_type = item.value_type or winreg.REG_SZ
         winreg.SetValueEx(key, item.value_name or item.name, 0, value_type, item.command)
-
 
 
 def disable_registry_item(item: StartupItem) -> None:
@@ -551,7 +537,6 @@ def disable_registry_item(item: StartupItem) -> None:
                 f"{rollback_error}"
             ) from error
         raise
-
 
 
 def enable_registry_item(item: StartupItem) -> None:
@@ -580,7 +565,6 @@ def enable_registry_item(item: StartupItem) -> None:
         raise
 
 
-
 def _move_path(source: Path, destination: Path) -> None:
     """Mueve sin sobrescribir; usa rename atómico cuando origen y destino comparten volumen."""
     if not source.exists():
@@ -596,13 +580,11 @@ def _move_path(source: Path, destination: Path) -> None:
         shutil.move(str(source), str(destination))
 
 
-
 def _write_pending_metadata(path: Path, metadata: dict[str, str]) -> None:
     with path.open("x", encoding="utf-8") as handle:
         json.dump(metadata, handle, indent=2, ensure_ascii=False)
         handle.flush()
         os.fsync(handle.fileno())
-
 
 
 def _cleanup_metadata_file(path: Path) -> None:
@@ -612,14 +594,12 @@ def _cleanup_metadata_file(path: Path) -> None:
         pass
 
 
-
 def _preserve_disabled_folder_metadata(pending_path: Path, metadata_path: Path) -> None:
     """Intenta dejar una copia recuperable visible si el rollback del archivo falla."""
     if metadata_path.exists():
         return
     if pending_path.exists():
         os.replace(str(pending_path), str(metadata_path))
-
 
 
 def disable_folder_item(item: StartupItem) -> None:
@@ -670,7 +650,6 @@ def disable_folder_item(item: StartupItem) -> None:
         _cleanup_metadata_file(pending_metadata_path)
         _cleanup_metadata_file(metadata_path)
         raise
-
 
 
 def enable_folder_item(item: StartupItem) -> None:
@@ -949,7 +928,9 @@ class Tool(QMainWindow):
 
         with open(file_path, "w", newline="", encoding="utf-8-sig") as csv_file:
             writer = csv.writer(csv_file, delimiter=";")
-            writer.writerow(["Activo", "Nombre", "Origen", "Comando / Ruta", "Tipo", "Existe archivo", "Riesgo"])
+            writer.writerow(
+                ["Activo", "Nombre", "Origen", "Comando / Ruta", "Tipo", "Existe archivo", "Riesgo"]
+            )
             for item in self.items:
                 writer.writerow(
                     [

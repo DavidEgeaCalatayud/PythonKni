@@ -116,7 +116,9 @@ class Tool(QMainWindow):
         self.items: list[DiskItem] = []
 
         layout = QVBoxLayout()
-        layout.addWidget(QLabel("Analiza una carpeta y muestra los archivos/carpetas que más espacio ocupan."))
+        layout.addWidget(
+            QLabel("Analiza una carpeta y muestra los archivos/carpetas que más espacio ocupan.")
+        )
 
         top_layout = QHBoxLayout()
         self.folder_label = QLabel("Carpeta: no seleccionada")
@@ -186,7 +188,9 @@ class Tool(QMainWindow):
         self.btn_analyze.setEnabled(True)
         self.btn_export.setEnabled(bool(items))
         total = sum(item.size for item in items)
-        self.summary_label.setText(f"Elementos mostrados: {len(items)} | Tamaño acumulado mostrado: {format_bytes(total)}")
+        self.summary_label.setText(
+            f"Elementos mostrados: {len(items)} | Tamaño acumulado mostrado: {format_bytes(total)}"
+        )
         self.fill_table(items)
 
     def on_analysis_failed(self, message: str) -> None:
@@ -215,7 +219,9 @@ class Tool(QMainWindow):
             QMessageBox.warning(self, "Exportar", "No hay resultados para exportar.")
             return
 
-        file_path, _ = QFileDialog.getSaveFileName(self, "Guardar CSV", "analisis_disco.csv", "CSV (*.csv)")
+        file_path, _ = QFileDialog.getSaveFileName(
+            self, "Guardar CSV", "analisis_disco.csv", "CSV (*.csv)"
+        )
         if not file_path:
             return
 
@@ -223,6 +229,8 @@ class Tool(QMainWindow):
             writer = csv.writer(csv_file, delimiter=";")
             writer.writerow(["Nombre", "Tipo", "Tamaño", "Bytes", "Ruta"])
             for item in self.items:
-                writer.writerow([item.name, item.item_type, format_bytes(item.size), item.size, item.path])
+                writer.writerow(
+                    [item.name, item.item_type, format_bytes(item.size), item.size, item.path]
+                )
 
         QMessageBox.information(self, "Exportado", "CSV generado correctamente.")

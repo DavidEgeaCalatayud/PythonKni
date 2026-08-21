@@ -143,12 +143,16 @@ def get_temp_locations() -> list[Path]:
                 ]
             )
         if user_profile:
-            paths.append(Path(user_profile) / "AppData" / "Roaming" / "Mozilla" / "Firefox" / "Profiles")
+            paths.append(
+                Path(user_profile) / "AppData" / "Roaming" / "Mozilla" / "Firefox" / "Profiles"
+            )
         paths.append(Path("C:/Windows/Temp"))
     return list(dict.fromkeys(paths))
 
 
-def collect_processes() -> tuple[list[tuple[int, str, float, float]], list[tuple[int, str, float, float]]]:
+def collect_processes() -> tuple[
+    list[tuple[int, str, float, float]], list[tuple[int, str, float, float]]
+]:
     """Obtiene procesos destacados evitando valores falsos del primer muestreo.
 
     psutil.cpu_percent() necesita una primera llamada de inicialización. Si se mide
@@ -308,10 +312,16 @@ def report_to_text(data: ReportData) -> str:
     blocks.extend(f"{key}: {value}" for key, value in data.network_rows)
 
     blocks.append("\nProcesos con más CPU\n====================")
-    blocks.extend(f"PID {pid} | {name} | CPU {cpu:.1f}% | RAM {mem:.2f}%" for pid, name, cpu, mem in data.top_cpu)
+    blocks.extend(
+        f"PID {pid} | {name} | CPU {cpu:.1f}% | RAM {mem:.2f}%"
+        for pid, name, cpu, mem in data.top_cpu
+    )
 
     blocks.append("\nProcesos con más RAM\n====================")
-    blocks.extend(f"PID {pid} | {name} | CPU {cpu:.1f}% | RAM {mem:.2f}%" for pid, name, cpu, mem in data.top_memory)
+    blocks.extend(
+        f"PID {pid} | {name} | CPU {cpu:.1f}% | RAM {mem:.2f}%"
+        for pid, name, cpu, mem in data.top_memory
+    )
 
     blocks.append("\nTemporales y cachés\n==================")
     blocks.extend(f"{path}: {size}" for path, size in data.temp_summary)
@@ -330,7 +340,9 @@ def table_html(headers: list[str], rows: list[list[str] | tuple]) -> str:
     header_html = "".join(f"<th>{html.escape(str(header))}</th>" for header in headers)
     body = []
     for row in rows:
-        body.append("<tr>" + "".join(f"<td>{html.escape(str(cell))}</td>" for cell in row) + "</tr>")
+        body.append(
+            "<tr>" + "".join(f"<td>{html.escape(str(cell))}</td>" for cell in row) + "</tr>"
+        )
     return f"<table><thead><tr>{header_html}</tr></thead><tbody>{''.join(body)}</tbody></table>"
 
 
@@ -587,7 +599,9 @@ class Tool(QMainWindow):
         self.report_data: ReportData | None = None
 
         layout = QVBoxLayout()
-        layout.addWidget(QLabel("Genera un informe técnico con sistema, discos, red, procesos y temporales."))
+        layout.addWidget(
+            QLabel("Genera un informe técnico con sistema, discos, red, procesos y temporales.")
+        )
 
         button_layout = QHBoxLayout()
         self.btn_generate = QPushButton("Generar informe")
@@ -656,7 +670,9 @@ class Tool(QMainWindow):
         self.report_data = data
         self.preview.setPlainText(report_to_text(data))
         self.fill_table(self.system_table, ["Campo", "Valor"], data.system_rows)
-        self.fill_table(self.disk_table, ["Dispositivo", "Punto de montaje", "Total", "Libre"], data.disk_rows)
+        self.fill_table(
+            self.disk_table, ["Dispositivo", "Punto de montaje", "Total", "Libre"], data.disk_rows
+        )
         self.fill_table(self.network_table, ["Campo", "Valor"], data.network_rows)
         self.fill_table(self.cpu_table, ["PID", "Nombre", "CPU %", "RAM %"], data.top_cpu)
         self.fill_table(self.memory_table, ["PID", "Nombre", "CPU %", "RAM %"], data.top_memory)
@@ -689,14 +705,20 @@ class Tool(QMainWindow):
         return self.report_data
 
     def default_filename(self, extension: str) -> str:
-        suffix = self.report_data.generated_at if self.report_data else datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
+        suffix = (
+            self.report_data.generated_at
+            if self.report_data
+            else datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
+        )
         return f"informe_tecnico_{suffix}.{extension}"
 
     def export_html(self) -> None:
         data = self.require_report()
         if not data:
             return
-        file_path, _ = QFileDialog.getSaveFileName(self, "Guardar HTML", self.default_filename("html"), "HTML (*.html)")
+        file_path, _ = QFileDialog.getSaveFileName(
+            self, "Guardar HTML", self.default_filename("html"), "HTML (*.html)"
+        )
         if not file_path:
             return
         Path(file_path).write_text(report_to_html(data), encoding="utf-8")
@@ -706,7 +728,9 @@ class Tool(QMainWindow):
         data = self.require_report()
         if not data:
             return
-        file_path, _ = QFileDialog.getSaveFileName(self, "Guardar TXT", self.default_filename("txt"), "Texto (*.txt)")
+        file_path, _ = QFileDialog.getSaveFileName(
+            self, "Guardar TXT", self.default_filename("txt"), "Texto (*.txt)"
+        )
         if not file_path:
             return
         Path(file_path).write_text(report_to_text(data), encoding="utf-8")
@@ -716,7 +740,9 @@ class Tool(QMainWindow):
         data = self.require_report()
         if not data:
             return
-        file_path, _ = QFileDialog.getSaveFileName(self, "Guardar PDF", self.default_filename("pdf"), "PDF (*.pdf)")
+        file_path, _ = QFileDialog.getSaveFileName(
+            self, "Guardar PDF", self.default_filename("pdf"), "PDF (*.pdf)"
+        )
         if not file_path:
             return
 

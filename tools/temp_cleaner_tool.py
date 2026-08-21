@@ -112,8 +112,12 @@ def get_browser_cache_targets() -> list[CleanTarget]:
     if system == "Windows":
         local = Path(os.environ.get("LOCALAPPDATA", home / "AppData" / "Local"))
         targets = [
-            CleanTarget("Chrome Cache", local / "Google" / "Chrome" / "User Data" / "Default" / "Cache"),
-            CleanTarget("Edge Cache", local / "Microsoft" / "Edge" / "User Data" / "Default" / "Cache"),
+            CleanTarget(
+                "Chrome Cache", local / "Google" / "Chrome" / "User Data" / "Default" / "Cache"
+            ),
+            CleanTarget(
+                "Edge Cache", local / "Microsoft" / "Edge" / "User Data" / "Default" / "Cache"
+            ),
         ]
         firefox_profiles = local / "Mozilla" / "Firefox" / "Profiles"
     elif system == "Darwin":
@@ -275,7 +279,9 @@ class Tool(QMainWindow):
             QMessageBox.No,
         )
         if confirm != QMessageBox.Yes:
-            QMessageBox.information(self, "Simulacion completada", "No se ha borrado ningun archivo.")
+            QMessageBox.information(
+                self, "Simulacion completada", "No se ha borrado ningun archivo."
+            )
             return
 
         result = clean_targets(preview.targets)
