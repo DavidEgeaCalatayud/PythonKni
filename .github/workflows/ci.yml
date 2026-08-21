@@ -23,7 +23,7 @@ jobs:
         run: |
           python -m pip install --upgrade pip
           pip install -r requirements.txt
-          pip install pytest pytest-qt ruff
+          pip install pytest pytest-qt ruff pyinstaller
 
       - name: Compile Python files
         run: python -m compileall .
@@ -36,3 +36,19 @@ jobs:
 
       - name: Ruff format check
         run: python -m ruff format --check .
+
+      - name: Build Windows bundle
+        run: pyinstaller --noconfirm --clean PythonKni.spec
+
+      - name: Smoke test packaged application
+        shell: powershell
+        run: |
+          $exe = Join-Path $PWD "dist\PythonKni\PythonKni.exe"
+          if (-not (Test-Path $exe)) {
+            throw "PyInstaller did not produce $exe"
+          }
+
+          & $exe --smoke-test
+          if ($LASTEXITCODE -ne 0) {
+            throw "Packaged application smoke test failed with exit code $LASTEXITCODE"
+          }
