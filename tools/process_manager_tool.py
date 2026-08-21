@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from tools.base_tool import BaseTool
+
 import hashlib
 import logging
 import os
@@ -198,11 +200,12 @@ def analyze_process_task(worker, pid, api_key):
     )
 
 
-class Tool(QMainWindow):
+class Tool(BaseTool):
     name = "Gestor de Procesos"
+    description = "Consulta, analiza y administra procesos del sistema."
+    category = "Sistema"
 
-    def __init__(self):
-        super().__init__()
+    def setup_ui(self):
         self.setWindowTitle(self.name)
         self.setGeometry(250, 250, 1000, 600)
         self._process_worker = None

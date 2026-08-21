@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from tools.base_tool import BaseTool
+
 import logging
 import os
 from xml.dom.minidom import Document as XMLDocument
@@ -216,11 +218,12 @@ def batch_conversion_task(worker, function, jobs):
     return outputs
 
 
-class Tool(QMainWindow):
+class Tool(BaseTool):
     name = "Convertidor de Archivos"
+    description = "Convierte imágenes, PDF, texto, Word y KML."
+    category = "Archivos"
 
-    def __init__(self):
-        super().__init__()
+    def setup_ui(self):
         self.setWindowTitle(self.name)
         self.setGeometry(200, 200, 420, 460)
         self._worker = None

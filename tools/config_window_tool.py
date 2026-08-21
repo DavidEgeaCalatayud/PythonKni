@@ -1,3 +1,5 @@
+from tools.base_tool import BaseTool
+
 import logging
 
 from PyQt5.QtWidgets import (
@@ -21,11 +23,12 @@ from tools.theme_manager import ThemeManager
 logger = logging.getLogger(__name__)
 
 
-class Tool(QMainWindow):
+class Tool(BaseTool):
     name = "Configuracion"
+    description = "Configura el tema y el idioma de la aplicación."
+    category = "Configuración"
 
-    def __init__(self):
-        super().__init__()
+    def setup_ui(self):
         self.setWindowTitle(self.name)
         self.setGeometry(100, 100, 400, 300)
 

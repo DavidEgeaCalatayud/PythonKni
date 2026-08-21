@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from tools.base_tool import BaseTool
+
 import subprocess
 import tempfile
 import xml.etree.ElementTree as ET
@@ -70,11 +72,12 @@ def get_wifi_profiles():
         return [("Error", str(e))]
 
 
-class Tool(QMainWindow):
+class Tool(BaseTool):
     name = "Listado WiFi + Claves"
+    description = "Consulta perfiles y datos de redes Wi-Fi guardadas."
+    category = "Red"
 
-    def __init__(self):
-        super().__init__()
+    def setup_ui(self):
         self.setWindowTitle(self.name)
         self.setGeometry(100, 100, 800, 600)
 
