@@ -64,17 +64,13 @@ def test_load_event_snapshot_reads_saved_events(monkeypatch, tmp_path):
             }
         ]
     }
-    (tmp_path / "event_report_snapshot.json").write_text(
-        json.dumps(payload), encoding="utf-8"
-    )
+    (tmp_path / "event_report_snapshot.json").write_text(json.dumps(payload), encoding="utf-8")
     monkeypatch.setattr(report, "DATA_DIR", tmp_path)
     monkeypatch.setattr(report, "ensure_app_dirs", lambda: None)
 
     rows = report.load_event_snapshot()
 
-    assert rows == [
-        ("21/08/2026", "Error", "Disk", "7", "Alto", "Revisar disco")
-    ]
+    assert rows == [("21/08/2026", "Error", "Disk", "7", "Alto", "Revisar disco")]
 
 
 def test_system_report_gui_populates_preview_tables_and_exports(qtbot, monkeypatch, tmp_path):
