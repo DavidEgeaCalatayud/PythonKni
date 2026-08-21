@@ -105,12 +105,16 @@ def parse_network_cidr(value: str, max_hosts: int = MAX_NETWORK_HOSTS) -> ipaddr
     try:
         network = ipaddress.ip_network(value.strip(), strict=False)
     except ValueError as error:
-        raise ValueError("Introduce una red IPv4 en formato CIDR, por ejemplo 192.168.1.0/24.") from error
+        raise ValueError(
+            "Introduce una red IPv4 en formato CIDR, por ejemplo 192.168.1.0/24."
+        ) from error
 
     if not isinstance(network, ipaddress.IPv4Network):
         raise ValueError("El escáner de red admite actualmente redes IPv4.")
 
-    host_count = sum(1 for _ in network.hosts())
+    host_count = network.num_addresses
+    if network.prefixlen < 31:
+        host_count = max(0, host_count - 2)
     if host_count > max_hosts:
         raise ValueError(
             f"La red {network.with_prefixlen} contiene {host_count} hosts utilizables. "
@@ -322,8 +326,7 @@ class NetworkScanWorker(QThread):
 
         if found_devices:
             rows = [
-                f"{host.ip} - Hostname: {host.hostname} - MAC: {host.mac}"
-                for host in found_devices
+                f"{host.ip} - Hostname: {host.hostname} - MAC: {host.mac}" for host in found_devices
             ]
             summary = f"Escaneo de {network.with_prefixlen}:\n" + "\n".join(rows)
         else:
@@ -398,7 +401,9 @@ class NetworkScanner(QWidget):
         self.interfaces = get_ipv4_interfaces()
 
         layout = QVBoxLayout()
-        layout.addWidget(QLabel("Selecciona una interfaz detectada o introduce una red CIDR manualmente."))
+        layout.addWidget(
+            QLabel("Selecciona una interfaz detectada o introduce una red CIDR manualmente.")
+        )
 
         interface_layout = QHBoxLayout()
         interface_layout.addWidget(QLabel("Interfaz:"))
@@ -488,7 +493,9 @@ class PortScanner(QWidget):
         port_layout.addWidget(self.port_range_input)
         layout.addLayout(port_layout)
 
-        layout.addWidget(QLabel("Se muestran principalmente puertos abiertos y su servicio conocido."))
+        layout.addWidget(
+            QLabel("Se muestran principalmente puertos abiertos y su servicio conocido.")
+        )
         self.result_area = QTextEdit()
         self.result_area.setReadOnly(True)
         layout.addWidget(self.result_area)

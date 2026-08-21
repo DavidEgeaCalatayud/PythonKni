@@ -1,5 +1,3 @@
-from types import SimpleNamespace
-
 from tools import network_tool as network
 
 
