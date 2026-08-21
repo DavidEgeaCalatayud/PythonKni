@@ -1,4 +1,5 @@
 import os
+from contextlib import ExitStack
 from types import SimpleNamespace
 from unittest.mock import Mock, patch
 
@@ -65,10 +66,11 @@ def test_confirmation_identity_contains_pid_name_and_path():
 def test_kill_process_blocks_pythonkni_own_pid():
     window = SimpleNamespace(table=FakeTable(os.getpid()))
 
-    with (
-        patch("tools.process_manager_tool.QMessageBox.warning") as warning,
-        patch("tools.process_manager_tool.psutil.Process") as process,
-    ):
+    with ExitStack() as stack:
+        warning = stack.enter_context(
+            patch("tools.process_manager_tool.QMessageBox.warning")
+        )
+        process = stack.enter_context(patch("tools.process_manager_tool.psutil.Process"))
         Tool.kill_process(window)
 
     warning.assert_called_once()
@@ -80,11 +82,19 @@ def test_kill_process_requires_confirmation_before_terminate():
     proc = Mock(pid=1234)
     details = make_details()
 
-    with (
-        patch("tools.process_manager_tool.psutil.Process", return_value=proc),
-        patch("tools.process_manager_tool.get_process_details", return_value=details),
-        patch("tools.process_manager_tool.QMessageBox.question", return_value=QMessageBox.No) as question,
-    ):
+    with ExitStack() as stack:
+        stack.enter_context(
+            patch("tools.process_manager_tool.psutil.Process", return_value=proc)
+        )
+        stack.enter_context(
+            patch("tools.process_manager_tool.get_process_details", return_value=details)
+        )
+        question = stack.enter_context(
+            patch(
+                "tools.process_manager_tool.QMessageBox.question",
+                return_value=QMessageBox.No,
+            )
+        )
         Tool.kill_process(window)
 
     proc.terminate.assert_not_called()
@@ -103,14 +113,19 @@ def test_kill_process_requires_second_confirmation_for_system_process():
         username=r"NT AUTHORITY\SYSTEM",
     )
 
-    with (
-        patch("tools.process_manager_tool.psutil.Process", return_value=proc),
-        patch("tools.process_manager_tool.get_process_details", return_value=details),
-        patch(
-            "tools.process_manager_tool.QMessageBox.question",
-            side_effect=[QMessageBox.Yes, QMessageBox.No],
-        ) as question,
-    ):
+    with ExitStack() as stack:
+        stack.enter_context(
+            patch("tools.process_manager_tool.psutil.Process", return_value=proc)
+        )
+        stack.enter_context(
+            patch("tools.process_manager_tool.get_process_details", return_value=details)
+        )
+        question = stack.enter_context(
+            patch(
+                "tools.process_manager_tool.QMessageBox.question",
+                side_effect=[QMessageBox.Yes, QMessageBox.No],
+            )
+        )
         Tool.kill_process(window)
 
     assert question.call_count == 2
@@ -124,12 +139,20 @@ def test_kill_process_terminates_after_confirmations_and_identity_check():
     proc.create_time.return_value = 100.0
     details = make_details()
 
-    with (
-        patch("tools.process_manager_tool.psutil.Process", return_value=proc),
-        patch("tools.process_manager_tool.get_process_details", return_value=details),
-        patch("tools.process_manager_tool.QMessageBox.question", return_value=QMessageBox.Yes),
-        patch("tools.process_manager_tool.QMessageBox.information"),
-    ):
+    with ExitStack() as stack:
+        stack.enter_context(
+            patch("tools.process_manager_tool.psutil.Process", return_value=proc)
+        )
+        stack.enter_context(
+            patch("tools.process_manager_tool.get_process_details", return_value=details)
+        )
+        stack.enter_context(
+            patch(
+                "tools.process_manager_tool.QMessageBox.question",
+                return_value=QMessageBox.Yes,
+            )
+        )
+        stack.enter_context(patch("tools.process_manager_tool.QMessageBox.information"))
         Tool.kill_process(window)
 
     proc.terminate.assert_called_once_with()
@@ -143,12 +166,22 @@ def test_kill_process_aborts_if_pid_identity_changes():
     proc.create_time.return_value = 101.0
     details = make_details(create_time=100.0)
 
-    with (
-        patch("tools.process_manager_tool.psutil.Process", return_value=proc),
-        patch("tools.process_manager_tool.get_process_details", return_value=details),
-        patch("tools.process_manager_tool.QMessageBox.question", return_value=QMessageBox.Yes),
-        patch("tools.process_manager_tool.QMessageBox.warning") as warning,
-    ):
+    with ExitStack() as stack:
+        stack.enter_context(
+            patch("tools.process_manager_tool.psutil.Process", return_value=proc)
+        )
+        stack.enter_context(
+            patch("tools.process_manager_tool.get_process_details", return_value=details)
+        )
+        stack.enter_context(
+            patch(
+                "tools.process_manager_tool.QMessageBox.question",
+                return_value=QMessageBox.Yes,
+            )
+        )
+        warning = stack.enter_context(
+            patch("tools.process_manager_tool.QMessageBox.warning")
+        )
         Tool.kill_process(window)
 
     warning.assert_called_once()
