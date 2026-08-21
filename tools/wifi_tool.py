@@ -34,8 +34,12 @@ def _parse_profiles(output: str) -> list[str]:
 
 
 def _read_exported_password(profile: str, export_dir: Path) -> str:
-    _run_netsh(["wlan", "export", "profile", f"name={profile}", "key=clear", f"folder={export_dir}"])
-    exported_files = sorted(export_dir.glob("*.xml"), key=lambda item: item.stat().st_mtime, reverse=True)
+    _run_netsh(
+        ["wlan", "export", "profile", f"name={profile}", "key=clear", f"folder={export_dir}"]
+    )
+    exported_files = sorted(
+        export_dir.glob("*.xml"), key=lambda item: item.stat().st_mtime, reverse=True
+    )
     if not exported_files:
         return "No Password"
 

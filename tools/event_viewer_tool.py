@@ -48,6 +48,7 @@ try:
     from reportlab.lib.styles import getSampleStyleSheet
     from reportlab.lib.units import cm
     from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle
+
     _REPORTLAB_AVAILABLE = True
 except ImportError:
     _REPORTLAB_AVAILABLE = False
@@ -231,8 +232,13 @@ def run_wevtutil(
 ) -> tuple[str, str]:
     query = build_event_query(hours=hours, include_info=include_info)
     command = [
-        "wevtutil", "qe", log_name,
-        f"/q:{query}", f"/c:{max_events}", "/rd:true", "/f:RenderedXml",
+        "wevtutil",
+        "qe",
+        log_name,
+        f"/q:{query}",
+        f"/c:{max_events}",
+        "/rd:true",
+        "/f:RenderedXml",
     ]
 
     try:
@@ -300,11 +306,15 @@ def rendered_message(event: ET.Element) -> str:
 
     userdata = find_child(event, "UserData")
     if userdata is not None:
-        parts = [clean_text(node.text) for node in userdata.iter() if node.text and clean_text(node.text)]
+        parts = [
+            clean_text(node.text) for node in userdata.iter() if node.text and clean_text(node.text)
+        ]
         if parts:
             return " | ".join(parts)
 
-    return "Mensaje no disponible. Puede requerir permisos o componentes de Windows para renderizarse."
+    return (
+        "Mensaje no disponible. Puede requerir permisos o componentes de Windows para renderizarse."
+    )
 
 
 def interpret_event(provider: str, event_id: str, level_number: int, message: str) -> str:
@@ -333,7 +343,9 @@ def interpret_event(provider: str, event_id: str, level_number: int, message: st
     if "application hang" in provider_low:
         return "Una aplicación dejó de responder. Puede deberse a bloqueo, espera de red, disco lento o fallo interno."
     if "dns client events" in provider_low and event_id_int == 1014:
-        return "Problema temporal de resolución DNS. Revisar DNS configurado, red, VPN o conectividad."
+        return (
+            "Problema temporal de resolución DNS. Revisar DNS configurado, red, VPN o conectividad."
+        )
     if "windowsupdateclient" in provider_low or "windows update" in provider_low:
         return "Evento relacionado con Windows Update. Revisar conectividad, espacio en disco y estado del servicio de actualización."
     if "eventlog" in provider_low and event_id_int == 6008:
@@ -390,7 +402,9 @@ def parse_events_xml(output: str, fallback_log_name: str) -> list[EventItem]:
     try:
         root = ET.fromstring(xml_text)
     except ET.ParseError as error:
-        raise RuntimeError(f"No se pudo interpretar la salida XML de {fallback_log_name}: {error}") from error
+        raise RuntimeError(
+            f"No se pudo interpretar la salida XML de {fallback_log_name}: {error}"
+        ) from error
 
     if root.tag.split("}")[-1] == "Event":
         event_nodes = [root]
@@ -405,7 +419,11 @@ def parse_events_xml(output: str, fallback_log_name: str) -> list[EventItem]:
         event_id_node = first_child(system, "EventID")
         execution_node = first_child(system, "Execution")
 
-        provider = clean_text(provider_node.attrib.get("Name", "Desconocido") if provider_node is not None else "Desconocido")
+        provider = clean_text(
+            provider_node.attrib.get("Name", "Desconocido")
+            if provider_node is not None
+            else "Desconocido"
+        )
         event_id = clean_text(event_id_node.text if event_id_node is not None else "") or "-"
         level_number_raw = child_text(system, "Level", "0")
         try:
@@ -421,8 +439,12 @@ def parse_events_xml(output: str, fallback_log_name: str) -> list[EventItem]:
         record_id = child_text(system, "EventRecordID", "-")
         system_time = child_attr(system, "TimeCreated", "SystemTime", "")
         date, timestamp_sort = parse_windows_time(system_time)
-        process_id = execution_node.attrib.get("ProcessID", "-") if execution_node is not None else "-"
-        thread_id = execution_node.attrib.get("ThreadID", "-") if execution_node is not None else "-"
+        process_id = (
+            execution_node.attrib.get("ProcessID", "-") if execution_node is not None else "-"
+        )
+        thread_id = (
+            execution_node.attrib.get("ThreadID", "-") if execution_node is not None else "-"
+        )
         message = rendered_message(event)
         risk = classify_risk(provider, event_id, level_number, message)
         interpretation = interpret_event(provider, event_id, level_number, message)
@@ -501,7 +523,9 @@ def collect_events(
     return EventResult(events=all_events[:max_events], warnings=warnings)
 
 
-def events_to_html(events: list[EventItem], title: str = "Diagnóstico de eventos de Windows") -> str:
+def events_to_html(
+    events: list[EventItem], title: str = "Diagnóstico de eventos de Windows"
+) -> str:
     rows = []
     for item in events:
         rows.append(
@@ -534,7 +558,7 @@ th {{ background: #eee; text-align: left; }}
 </head>
 <body>
 <h1>{html.escape(title)}</h1>
-<p class="small">Generado: {datetime.now().strftime('%d/%m/%Y %H:%M:%S')}</p>
+<p class="small">Generado: {datetime.now().strftime("%d/%m/%Y %H:%M:%S")}</p>
 <table>
 <thead>
 <tr>
@@ -542,7 +566,7 @@ th {{ background: #eee; text-align: left; }}
 </tr>
 </thead>
 <tbody>
-{''.join(rows)}
+{"".join(rows)}
 </tbody>
 </table>
 </body>
@@ -569,7 +593,9 @@ def events_to_pdf(events: list[EventItem], summary: str, path: str) -> None:
     story = []
 
     story.append(Paragraph("Diagnóstico de eventos de Windows", styles["Title"]))
-    story.append(Paragraph(f"Generado: {datetime.now().strftime('%d/%m/%Y %H:%M:%S')}", styles["Normal"]))
+    story.append(
+        Paragraph(f"Generado: {datetime.now().strftime('%d/%m/%Y %H:%M:%S')}", styles["Normal"])
+    )
     story.append(Spacer(1, 0.4 * cm))
 
     story.append(Paragraph("Resumen ejecutivo", styles["Heading2"]))
@@ -599,14 +625,16 @@ def events_to_pdf(events: list[EventItem], summary: str, path: str) -> None:
     ]
 
     for i, item in enumerate(events[:100], start=1):
-        table_data.append([
-            Paragraph(html.escape(item.date), small),
-            Paragraph(html.escape(item.level), small),
-            Paragraph(html.escape(clean_text(item.provider, 35)), small),
-            Paragraph(html.escape(item.event_id), small),
-            Paragraph(html.escape(item.risk), small),
-            Paragraph(html.escape(clean_text(item.interpretation, 120)), small),
-        ])
+        table_data.append(
+            [
+                Paragraph(html.escape(item.date), small),
+                Paragraph(html.escape(item.level), small),
+                Paragraph(html.escape(clean_text(item.provider, 35)), small),
+                Paragraph(html.escape(item.event_id), small),
+                Paragraph(html.escape(item.risk), small),
+                Paragraph(html.escape(clean_text(item.interpretation, 120)), small),
+            ]
+        )
         color = risk_pdf_colors.get(item.risk)
         if color:
             row_bg.append(("BACKGROUND", (0, i), (-1, i), color))
@@ -636,7 +664,9 @@ def save_events_snapshot(events: list[EventItem], summary: dict | None = None) -
         "summary": summary or {},
         "events": [asdict(item) for item in events],
     }
-    EVENT_SNAPSHOT_FILE.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
+    EVENT_SNAPSHOT_FILE.write_text(
+        json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8"
+    )
     return EVENT_SNAPSHOT_FILE
 
 
@@ -856,10 +886,19 @@ class Tool(QMainWindow):
 
         # --- Tabla ---
         self.table = QTableWidget(0, 9)
-        self.table.setHorizontalHeaderLabels([
-            "Fecha", "Nivel", "Origen", "ID Evento",
-            "Registro", "Categoría", "Mensaje resumido", "Riesgo", "Interpretación",
-        ])
+        self.table.setHorizontalHeaderLabels(
+            [
+                "Fecha",
+                "Nivel",
+                "Origen",
+                "ID Evento",
+                "Registro",
+                "Categoría",
+                "Mensaje resumido",
+                "Riesgo",
+                "Interpretación",
+            ]
+        )
         self.table.setSelectionBehavior(QTableWidget.SelectRows)
         self.table.setEditTriggers(QTableWidget.NoEditTriggers)
         self.table.doubleClicked.connect(self.show_detail)
@@ -903,7 +942,9 @@ class Tool(QMainWindow):
     def refresh_events(self) -> None:
         logs = self.selected_logs()
         if not logs:
-            QMessageBox.warning(self, "Sin registros", "Selecciona al menos un registro de eventos.")
+            QMessageBox.warning(
+                self, "Sin registros", "Selecciona al menos un registro de eventos."
+            )
             return
 
         hours = int(self.cmb_period.currentData())
@@ -916,7 +957,9 @@ class Tool(QMainWindow):
         self.lbl_summary.setText("Cargando...")
         self.table.setRowCount(0)
 
-        self.worker = EventWorker(logs=logs, hours=hours, max_events=max_events, include_info=include_info)
+        self.worker = EventWorker(
+            logs=logs, hours=hours, max_events=max_events, include_info=include_info
+        )
         self.worker.finished.connect(self.on_events_loaded)
         self.worker.failed.connect(self.on_events_failed)
         self.worker.start()
@@ -983,11 +1026,19 @@ class Tool(QMainWindow):
             if filter_risk and item.risk != filter_risk:
                 continue
             if search:
-                haystack = " ".join([
-                    item.date, item.level, item.provider, item.event_id,
-                    item.log_name, item.category, item.message, item.risk,
-                    item.interpretation,
-                ]).lower()
+                haystack = " ".join(
+                    [
+                        item.date,
+                        item.level,
+                        item.provider,
+                        item.event_id,
+                        item.log_name,
+                        item.category,
+                        item.message,
+                        item.risk,
+                        item.interpretation,
+                    ]
+                ).lower()
                 if search not in haystack:
                     continue
             filtered.append(item)
@@ -1053,7 +1104,9 @@ class Tool(QMainWindow):
     def show_detail(self) -> None:
         item = self.selected_event()
         if item is None:
-            QMessageBox.information(self, "Sin selección", "Selecciona un evento para ver el detalle.")
+            QMessageBox.information(
+                self, "Sin selección", "Selecciona un evento para ver el detalle."
+            )
             return
         dialog = EventDetailDialog(item, self)
         dialog.exec_()
@@ -1071,23 +1124,45 @@ class Tool(QMainWindow):
             QMessageBox.information(self, "Sin datos", "No hay eventos para exportar.")
             return
         default_name = f"eventos_windows_{datetime.now().strftime('%Y-%m-%d_%H-%M-%S')}.csv"
-        file_path, _ = QFileDialog.getSaveFileName(self, "Exportar CSV", default_name, "CSV (*.csv)")
+        file_path, _ = QFileDialog.getSaveFileName(
+            self, "Exportar CSV", default_name, "CSV (*.csv)"
+        )
         if not file_path:
             return
 
         with open(file_path, "w", newline="", encoding="utf-8-sig") as handle:
             writer = csv.writer(handle, delimiter=";")
-            writer.writerow([
-                "Fecha", "Nivel", "Origen", "ID Evento", "Registro",
-                "Categoría", "Mensaje", "Riesgo", "Interpretación",
-                "Equipo", "Record ID",
-            ])
+            writer.writerow(
+                [
+                    "Fecha",
+                    "Nivel",
+                    "Origen",
+                    "ID Evento",
+                    "Registro",
+                    "Categoría",
+                    "Mensaje",
+                    "Riesgo",
+                    "Interpretación",
+                    "Equipo",
+                    "Record ID",
+                ]
+            )
             for item in self.events:
-                writer.writerow([
-                    item.date, item.level, item.provider, item.event_id, item.log_name,
-                    item.category, item.message, item.risk, item.interpretation,
-                    item.computer, item.record_id,
-                ])
+                writer.writerow(
+                    [
+                        item.date,
+                        item.level,
+                        item.provider,
+                        item.event_id,
+                        item.log_name,
+                        item.category,
+                        item.message,
+                        item.risk,
+                        item.interpretation,
+                        item.computer,
+                        item.record_id,
+                    ]
+                )
         QMessageBox.information(self, "Exportado", "Eventos exportados correctamente en CSV.")
 
     def export_html(self) -> None:
@@ -1095,7 +1170,9 @@ class Tool(QMainWindow):
             QMessageBox.information(self, "Sin datos", "No hay eventos para exportar.")
             return
         default_name = f"eventos_windows_{datetime.now().strftime('%Y-%m-%d_%H-%M-%S')}.html"
-        file_path, _ = QFileDialog.getSaveFileName(self, "Exportar HTML", default_name, "HTML (*.html)")
+        file_path, _ = QFileDialog.getSaveFileName(
+            self, "Exportar HTML", default_name, "HTML (*.html)"
+        )
         if not file_path:
             return
 
@@ -1114,7 +1191,9 @@ class Tool(QMainWindow):
             )
             return
         default_name = f"eventos_windows_{datetime.now().strftime('%Y-%m-%d_%H-%M-%S')}.pdf"
-        file_path, _ = QFileDialog.getSaveFileName(self, "Exportar PDF", default_name, "PDF (*.pdf)")
+        file_path, _ = QFileDialog.getSaveFileName(
+            self, "Exportar PDF", default_name, "PDF (*.pdf)"
+        )
         if not file_path:
             return
         try:
@@ -1131,7 +1210,9 @@ class Tool(QMainWindow):
 
     def add_to_technical_report(self) -> None:
         if not self.events:
-            QMessageBox.information(self, "Sin datos", "No hay eventos para añadir al informe técnico.")
+            QMessageBox.information(
+                self, "Sin datos", "No hay eventos para añadir al informe técnico."
+            )
             return
 
         selected_events = sorted(

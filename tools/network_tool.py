@@ -174,7 +174,9 @@ class NetworkScanner(QWidget):
         self.worker: NetworkScanWorker | None = None
 
         layout = QVBoxLayout()
-        layout.addWidget(QLabel("Haz clic en 'Explorar red' para detectar dispositivos conectados."))
+        layout.addWidget(
+            QLabel("Haz clic en 'Explorar red' para detectar dispositivos conectados.")
+        )
 
         self.result_area = QTextEdit()
         self.result_area.setReadOnly(True)
