@@ -1,9 +1,8 @@
 from __future__ import annotations
 
-from tools.base_tool import BaseTool
-
 import logging
 import os
+from pathlib import Path
 from xml.dom.minidom import Document as XMLDocument
 
 import fitz
@@ -14,7 +13,6 @@ from PyQt5.QtWidgets import (
     QFileDialog,
     QHBoxLayout,
     QLabel,
-    QMainWindow,
     QMessageBox,
     QPushButton,
     QVBoxLayout,
@@ -23,6 +21,9 @@ from PyQt5.QtWidgets import (
 from reportlab.lib.pagesizes import A4
 from reportlab.pdfgen import canvas
 
+from pythonkni.core.tasks import WorkerCancelled
+from tools.base_tool import BaseTool
+from tools.converter_outputs import ConversionResult, OutputTransaction
 from tools.worker import Worker
 
 
@@ -47,54 +48,99 @@ def _report(worker, message, current=None, total=None):
     worker.report_progress(payload)
 
 
+def _single_output_transaction(output_file: str | os.PathLike[str]) -> OutputTransaction:
+    output = Path(output_file)
+    return OutputTransaction(output.parent)
+
+
 # ---------------- IMÁGENES ----------------
 def images_to_pdf(image_files, output_file, worker=None):
-    """Convierte una lista de imágenes en un PDF."""
-    pdf_canvas = canvas.Canvas(output_file, pagesize=A4)
-    width, height = A4
-    total = len(image_files)
-    for index, img_path in enumerate(image_files, start=1):
-        _check_worker(worker)
+    """Convierte imágenes a PDF sin publicar resultados parciales."""
+    output = Path(output_file)
+    warnings = []
+    added_pages = 0
+
+    with _single_output_transaction(output) as transaction:
+        stage = transaction.stage_for(output)
+        pdf_canvas = canvas.Canvas(str(stage), pagesize=A4)
+        width, height = A4
+        total = len(image_files)
+
         try:
-            with Image.open(img_path) as image:
-                img_width, img_height = image.size
-            aspect = img_height / img_width
-            new_width = width
-            new_height = width * aspect
-            if new_height > height:
-                new_height = height
-                new_width = height / aspect
-            pdf_canvas.drawImage(img_path, 0, height - new_height, new_width, new_height)
-            pdf_canvas.showPage()
+            for index, img_path in enumerate(image_files, start=1):
+                _check_worker(worker)
+                try:
+                    with Image.open(img_path) as image:
+                        img_width, img_height = image.size
+                        if img_width <= 0 or img_height <= 0:
+                            raise ValueError("Dimensiones de imagen no válidas.")
+
+                    aspect = img_height / img_width
+                    new_width = width
+                    new_height = width * aspect
+                    if new_height > height:
+                        new_height = height
+                        new_width = height / aspect
+                    pdf_canvas.drawImage(
+                        img_path,
+                        0,
+                        height - new_height,
+                        new_width,
+                        new_height,
+                    )
+                    pdf_canvas.showPage()
+                    added_pages += 1
+                except Exception as error:
+                    warning = f"{img_path}: {error}"
+                    warnings.append(warning)
+                    logger.warning("No se pudo añadir la imagen %s al PDF", img_path, exc_info=True)
+                _report(worker, f"Añadiendo imagen {index}/{total}", index, total)
+
+            _check_worker(worker)
+            pdf_canvas.save()
+            _check_worker(worker)
         except Exception:
-            logger.warning("No se pudo añadir la imagen %s al PDF", img_path, exc_info=True)
-        _report(worker, f"Añadiendo imagen {index}/{total}", index, total)
-    _check_worker(worker)
-    pdf_canvas.save()
-    return output_file
+            raise
+
+        if added_pages == 0:
+            return ConversionResult.failed(
+                "No se pudo añadir ninguna imagen al PDF; no se publicó ningún archivo.",
+                warnings=warnings,
+            )
+
+        outputs = transaction.commit()
+        return ConversionResult.completed(outputs, warnings=warnings)
 
 
 def pdf_to_images(pdf_file, output_folder, worker=None):
-    """Convierte un PDF en imágenes (PNG)."""
+    """Convierte un PDF en PNG como una única transacción de lote."""
+    output_dir = Path(output_folder)
     document = fitz.open(pdf_file)
-    saved_files = []
     try:
         total = len(document)
-        for index, page in enumerate(document, start=1):
+        if total == 0:
+            return ConversionResult.failed("El PDF no contiene páginas para convertir.")
+
+        with OutputTransaction(output_dir) as transaction:
+            for index, page in enumerate(document, start=1):
+                _check_worker(worker)
+                final_path = output_dir / f"page_{index}.png"
+                stage = transaction.stage_for(final_path)
+                pix = page.get_pixmap()
+                pix.save(str(stage))
+                _report(worker, f"Renderizando página {index}/{total}", index, total)
+
             _check_worker(worker)
-            pix = page.get_pixmap()
-            output_path = os.path.join(output_folder, f"page_{index}.png")
-            pix.save(output_path)
-            saved_files.append(output_path)
-            _report(worker, f"Renderizando página {index}/{total}", index, total)
+            outputs = transaction.commit()
+            return ConversionResult.completed(outputs)
     finally:
         document.close()
-    return saved_files
 
 
 # ---------------- TEXTO Y WORD ----------------
 def text_to_docx(text_file, output_file, worker=None):
-    """Convierte un archivo TXT en DOCX."""
+    """Convierte un TXT en DOCX mediante staging + publicación atómica."""
+    output = Path(output_file)
     document = Document()
     with open(text_file, "r", encoding="utf-8", errors="ignore") as file:
         for index, line in enumerate(file, start=1):
@@ -102,47 +148,66 @@ def text_to_docx(text_file, output_file, worker=None):
             document.add_paragraph(line.strip())
             if index % 100 == 0:
                 _report(worker, f"Procesando línea {index}")
+
     _check_worker(worker)
-    document.save(output_file)
-    return output_file
+    with _single_output_transaction(output) as transaction:
+        stage = transaction.stage_for(output)
+        document.save(str(stage))
+        _check_worker(worker)
+        return ConversionResult.completed(transaction.commit())
 
 
 def docx_to_text(docx_file, output_file, worker=None):
-    """Convierte un archivo DOCX en TXT."""
+    """Convierte DOCX a TXT sin tocar el destino hasta terminar."""
+    output = Path(output_file)
     document = Document(docx_file)
     total = len(document.paragraphs)
-    with open(output_file, "w", encoding="utf-8") as file:
-        for index, paragraph in enumerate(document.paragraphs, start=1):
-            _check_worker(worker)
-            file.write(paragraph.text + "\n")
-            _report(worker, f"Procesando párrafo {index}/{total}", index, total)
-    return output_file
+
+    with _single_output_transaction(output) as transaction:
+        stage = transaction.stage_for(output)
+        with stage.open("w", encoding="utf-8") as file:
+            for index, paragraph in enumerate(document.paragraphs, start=1):
+                _check_worker(worker)
+                file.write(paragraph.text + "\n")
+                _report(worker, f"Procesando párrafo {index}/{total}", index, total)
+            file.flush()
+            os.fsync(file.fileno())
+
+        _check_worker(worker)
+        return ConversionResult.completed(transaction.commit())
 
 
 def docx_to_pdf(docx_file, output_file, worker=None):
-    """Convierte un DOCX en PDF (simplificado como texto plano)."""
+    """Convierte DOCX en PDF simplificado con publicación atómica."""
+    output = Path(output_file)
     document = Document(docx_file)
-    pdf_canvas = canvas.Canvas(output_file, pagesize=A4)
-    _, height = A4
-    y = height - 50
     total = len(document.paragraphs)
 
-    for index, paragraph in enumerate(document.paragraphs, start=1):
+    with _single_output_transaction(output) as transaction:
+        stage = transaction.stage_for(output)
+        pdf_canvas = canvas.Canvas(str(stage), pagesize=A4)
+        _, height = A4
+        y = height - 50
+
+        for index, paragraph in enumerate(document.paragraphs, start=1):
+            _check_worker(worker)
+            pdf_canvas.drawString(50, y, paragraph.text)
+            y -= 15
+            if y < 50:
+                pdf_canvas.showPage()
+                y = height - 50
+            _report(worker, f"Procesando párrafo {index}/{total}", index, total)
+
         _check_worker(worker)
-        pdf_canvas.drawString(50, y, paragraph.text)
-        y -= 15
-        if y < 50:
-            pdf_canvas.showPage()
-            y = height - 50
-        _report(worker, f"Procesando párrafo {index}/{total}", index, total)
-    _check_worker(worker)
-    pdf_canvas.save()
-    return output_file
+        pdf_canvas.save()
+        _check_worker(worker)
+        return ConversionResult.completed(transaction.commit())
 
 
 # ---------------- TXT Y KML ----------------
 def text_to_kml(txt_file, output_file, worker=None):
-    """Convierte un archivo TXT (lat,lon,nombre opcional) a KML."""
+    """Convierte TXT (lat,lon,nombre opcional) a KML de forma atómica."""
+    output = Path(output_file)
     document = XMLDocument()
     kml = document.createElement("kml")
     kml.setAttribute("xmlns", "http://www.opengis.net/kml/2.2")
@@ -171,51 +236,105 @@ def text_to_kml(txt_file, output_file, worker=None):
                 _report(worker, f"Procesando línea {index}")
 
     _check_worker(worker)
-    with open(output_file, "w", encoding="utf-8") as file:
-        file.write(document.toprettyxml(indent="  "))
-    return output_file
+    with _single_output_transaction(output) as transaction:
+        stage = transaction.stage_for(output)
+        with stage.open("w", encoding="utf-8") as file:
+            file.write(document.toprettyxml(indent="  "))
+            file.flush()
+            os.fsync(file.fileno())
+        _check_worker(worker)
+        return ConversionResult.completed(transaction.commit())
 
 
 def kml_to_text(kml_file, output_file, worker=None):
-    """Convierte un archivo KML a TXT (lat,lon,nombre)."""
+    """Convierte KML a TXT (lat,lon,nombre) mediante staging."""
     from xml.dom import minidom
 
+    output = Path(output_file)
     document = minidom.parse(kml_file)
     placemarks = document.getElementsByTagName("Placemark")
     total = len(placemarks)
-    with open(output_file, "w", encoding="utf-8") as file:
-        for index, placemark in enumerate(placemarks, start=1):
-            _check_worker(worker)
-            names = placemark.getElementsByTagName("name")
-            name = names[0].firstChild.nodeValue if names else ""
-            coords_node = placemark.getElementsByTagName("coordinates")[0]
-            coords = coords_node.firstChild.nodeValue.strip()
-            lon, lat, *_ = coords.split(",")
-            file.write(f"{lat},{lon},{name}\n")
-            _report(worker, f"Procesando punto {index}/{total}", index, total)
-    return output_file
+
+    with _single_output_transaction(output) as transaction:
+        stage = transaction.stage_for(output)
+        with stage.open("w", encoding="utf-8") as file:
+            for index, placemark in enumerate(placemarks, start=1):
+                _check_worker(worker)
+                names = placemark.getElementsByTagName("name")
+                name = names[0].firstChild.nodeValue if names else ""
+                coords_nodes = placemark.getElementsByTagName("coordinates")
+                if not coords_nodes or coords_nodes[0].firstChild is None:
+                    raise ValueError(f"Placemark {index} sin coordenadas.")
+                coords = coords_nodes[0].firstChild.nodeValue.strip()
+                lon, lat, *_ = coords.split(",")
+                file.write(f"{lat},{lon},{name}\n")
+                _report(worker, f"Procesando punto {index}/{total}", index, total)
+            file.flush()
+            os.fsync(file.fileno())
+
+        _check_worker(worker)
+        return ConversionResult.completed(transaction.commit())
 
 
 def conversion_task(worker, function, args):
-    worker.check_cancelled()
-    result = function(*args, worker=worker)
-    worker.check_cancelled()
-    return result
+    """Run one conversion and turn ordinary failures into structured results."""
+    try:
+        worker.check_cancelled()
+        result = function(*args, worker=worker)
+        if not isinstance(result, ConversionResult):
+            result = ConversionResult.completed([str(result)])
+        return result
+    except WorkerCancelled:
+        raise
+    except Exception as error:
+        logger.exception("Conversion failed")
+        return ConversionResult.failed(str(error))
 
 
 def batch_conversion_task(worker, function, jobs):
-    outputs = []
-    total = len(jobs)
-    for index, args in enumerate(jobs, start=1):
-        worker.check_cancelled()
-        outputs.append(function(*args, worker=worker))
-        worker.report_progress(
-            {
-                "message": f"Archivo {index}/{total}",
-                "percent": int((index / total) * 100),
-            }
+    """Convert a folder as all-or-nothing output publication."""
+    if not jobs:
+        return ConversionResult.failed("No hay archivos para convertir.")
+
+    final_paths = [Path(args[-1]) for args in jobs]
+    destination_dir = final_paths[0].parent
+    if any(
+        path.parent.resolve(strict=False) != destination_dir.resolve(strict=False)
+        for path in final_paths
+    ):
+        return ConversionResult.failed(
+            "Todos los destinos del lote deben estar en la misma carpeta."
         )
-    return outputs
+
+    warnings = []
+    total = len(jobs)
+    with OutputTransaction(destination_dir) as transaction:
+        try:
+            for index, (args, final_path) in enumerate(zip(jobs, final_paths), start=1):
+                worker.check_cancelled()
+                stage = transaction.stage_for(final_path)
+                staged_args = (*args[:-1], str(stage))
+                result = function(*staged_args, worker=worker)
+                if not isinstance(result, ConversionResult):
+                    result = ConversionResult.completed([str(result)])
+                warnings.extend(result.warnings)
+                if not result.success:
+                    failures = result.failures or (f"Falló la conversión de {args[0]}",)
+                    return ConversionResult.failed(*failures, warnings=warnings)
+                worker.report_progress(
+                    {
+                        "message": f"Archivo {index}/{total}",
+                        "percent": int((index / total) * 100),
+                    }
+                )
+
+            worker.check_cancelled()
+            return ConversionResult.completed(transaction.commit(), warnings=warnings)
+        except WorkerCancelled:
+            raise
+        except Exception as error:
+            logger.exception("Batch conversion failed")
+            return ConversionResult.failed(str(error), warnings=warnings)
 
 
 class Tool(BaseTool):
@@ -290,8 +409,28 @@ class Tool(BaseTool):
             self.task_status.setText(str(progress))
 
     def _conversion_done(self, success_message, result):
-        message = success_message(result) if callable(success_message) else success_message
-        QMessageBox.information(self, "Conversión completada", message)
+        if not isinstance(result, ConversionResult):
+            result = ConversionResult.completed([str(result)])
+
+        if result.success:
+            message = (
+                success_message(list(result.outputs))
+                if callable(success_message)
+                else success_message
+            )
+            if result.warnings:
+                message += "\n\nAvisos:\n- " + "\n- ".join(result.warnings)
+                QMessageBox.warning(self, "Conversión completada con avisos", message)
+            else:
+                QMessageBox.information(self, "Conversión completada", message)
+            return
+
+        message = "No se publicó ningún resultado incompleto."
+        if result.failures:
+            message += "\n\nErrores:\n- " + "\n- ".join(result.failures)
+        if result.warnings:
+            message += "\n\nAvisos:\n- " + "\n- ".join(result.warnings)
+        QMessageBox.critical(self, "Conversión fallida", message)
 
     def _conversion_error(self, error):
         logger.error("Conversion failed: %s", error)
