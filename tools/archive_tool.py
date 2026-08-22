@@ -94,7 +94,9 @@ class Tool(BaseTool):
 
         worker = Worker(task, *args, parent=self)
         worker.progress.connect(self._on_progress)
-        worker.result.connect(lambda _result: QMessageBox.information(self, "Éxito", success_message))
+        worker.result.connect(
+            lambda _result: QMessageBox.information(self, "Éxito", success_message)
+        )
         worker.error.connect(self._on_error)
         worker.cancelled.connect(self._on_cancelled)
         worker.finished.connect(lambda worker=worker: self._on_finished(worker))
