@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from tools.base_tool import BaseTool
+from tools.csv_utils import safe_csv_row
 
 import csv
 import os
@@ -233,7 +234,9 @@ class Tool(BaseTool):
             writer.writerow(["Nombre", "Tipo", "Tamaño", "Bytes", "Ruta"])
             for item in self.items:
                 writer.writerow(
-                    [item.name, item.item_type, format_bytes(item.size), item.size, item.path]
+                    safe_csv_row(
+                        [item.name, item.item_type, format_bytes(item.size), item.size, item.path]
+                    )
                 )
 
         QMessageBox.information(self, "Exportado", "CSV generado correctamente.")

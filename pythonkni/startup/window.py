@@ -19,6 +19,7 @@ from PyQt5.QtWidgets import (
 )
 
 from tools.base_tool import BaseTool
+from tools.csv_utils import safe_csv_row
 from tools.theme_manager import ThemeManager
 
 from .models import StartupItem
@@ -281,15 +282,17 @@ class Tool(BaseTool):
             )
             for item in self.items:
                 writer.writerow(
-                    [
-                        "Sí" if item.active else "No",
-                        item.name,
-                        item.source,
-                        item.command,
-                        item.item_type,
-                        item.exists,
-                        item.risk,
-                    ]
+                    safe_csv_row(
+                        [
+                            "Sí" if item.active else "No",
+                            item.name,
+                            item.source,
+                            item.command,
+                            item.item_type,
+                            item.exists,
+                            item.risk,
+                        ]
+                    )
                 )
 
         QMessageBox.information(self, "Exportado", "CSV generado correctamente.")
