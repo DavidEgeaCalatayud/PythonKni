@@ -1,3 +1,4 @@
+import random
 import threading
 import zipfile
 from pathlib import Path
@@ -23,6 +24,11 @@ class FakeWorker:
         self.progress.append(payload)
         if self.cancel_after_progress:
             self.cancel_event.set()
+
+
+def _realistic_binary_payload(size=700_000):
+    """Deterministic incompressible-ish data that does not trip bomb-ratio safeguards."""
+    return random.Random(42).randbytes(size)
 
 
 def test_zip_creation_cancellation_preserves_existing_destination(tmp_path):
@@ -55,7 +61,7 @@ def test_zip_extraction_cancellation_removes_staging(tmp_path):
 
 def test_7z_streaming_extraction_reports_progress(tmp_path):
     source = tmp_path / "payload.bin"
-    source.write_bytes(b"payload" * 100_000)
+    source.write_bytes(_realistic_binary_payload())
     archive_path = tmp_path / "payload.7z"
     destination = tmp_path / "out"
     with py7zr.SevenZipFile(archive_path, "w") as archive:
@@ -72,7 +78,7 @@ def test_7z_streaming_extraction_reports_progress(tmp_path):
 
 def test_7z_streaming_extraction_cancellation_never_publishes(tmp_path):
     source = tmp_path / "payload.bin"
-    source.write_bytes(b"payload" * 100_000)
+    source.write_bytes(_realistic_binary_payload())
     archive_path = tmp_path / "payload.7z"
     destination = tmp_path / "out"
     with py7zr.SevenZipFile(archive_path, "w") as archive:
