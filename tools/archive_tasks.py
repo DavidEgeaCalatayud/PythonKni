@@ -241,9 +241,7 @@ class _SevenZipWriter(Py7zIO):
         self._factory.worker.check_cancelled()
         size = len(data)
         if self._written + size > self._expected_size:
-            raise ArchiveSecurityError(
-                f"{self._output.name} produce más datos de los declarados."
-            )
+            raise ArchiveSecurityError(f"{self._output.name} produce más datos de los declarados.")
         written = self._file.write(data)
         self._written += written
         self._factory.record(written)
@@ -305,7 +303,11 @@ class _SevenZipFactory(WriterFactory):
             self.total_written += count
             if self.total_written > self.limits.max_total_uncompressed:
                 raise ArchiveSecurityError("La extracción real supera el tamaño total permitido.")
-            percent = int((self.total_written / self.total_expected) * 100) if self.total_expected else 100
+            percent = (
+                int((self.total_written / self.total_expected) * 100)
+                if self.total_expected
+                else 100
+            )
             if percent == self._last_percent:
                 return
             self._last_percent = percent
