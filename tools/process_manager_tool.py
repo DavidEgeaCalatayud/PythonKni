@@ -122,13 +122,29 @@ def get_process_details(proc):
     )
 
 
+CPU_SAMPLE_SECONDS = 0.1
+
+
 def load_processes_task(worker, cpu_min, mem_min):
-    """Collect process metrics outside the Qt GUI thread."""
-    processes = []
+    """Collect process metrics with one shared non-blocking CPU sample window."""
+    candidates = []
     for proc in psutil.process_iter(["pid", "name"]):
         worker.check_cancelled()
         try:
-            cpu = proc.cpu_percent(interval=0.1)
+            proc.cpu_percent(interval=None)
+            candidates.append(proc)
+        except (psutil.NoSuchProcess, psutil.AccessDenied, psutil.ZombieProcess):
+            continue
+
+    if candidates:
+        if worker.cancel_event.wait(CPU_SAMPLE_SECONDS):
+            worker.check_cancelled()
+
+    processes = []
+    for proc in candidates:
+        worker.check_cancelled()
+        try:
+            cpu = proc.cpu_percent(interval=None)
             mem = proc.memory_percent()
             if cpu < cpu_min and mem < mem_min:
                 continue

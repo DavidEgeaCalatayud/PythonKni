@@ -1,18 +1,55 @@
 import os
+import threading
+import time
 import zipfile
 from pathlib import Path
 
 from PyQt5.QtWidgets import QMessageBox, QPushButton
 
+from tools import archive_tool, zip_7zip_utils
 from tools.archive_tool import Tool as ArchiveTool
-from tools import zip_7zip_utils
 
 
 def test_archive_tool_exposes_all_compression_actions(qtbot):
     tool = ArchiveTool()
     qtbot.addWidget(tool)
     labels = {button.text() for button in tool.findChildren(QPushButton)}
-    assert labels == {"Extraer ZIP", "Crear ZIP", "Extraer 7z", "Crear 7z"}
+    assert {"Extraer ZIP", "Crear ZIP", "Extraer 7z", "Crear 7z"}.issubset(labels)
+    assert "Cancelar" in labels
+
+
+def test_archive_tool_runs_extraction_in_background_and_can_cancel(monkeypatch, qtbot, tmp_path):
+    archive_path = tmp_path / "sample.zip"
+    archive_path.write_bytes(b"unused")
+    started = threading.Event()
+
+    def blocking_task(worker, _source, _destination):
+        started.set()
+        while True:
+            worker.check_cancelled()
+            time.sleep(0.01)
+
+    monkeypatch.setattr(archive_tool, "extract_zip_task", blocking_task)
+    monkeypatch.setattr(
+        archive_tool.QFileDialog,
+        "getOpenFileName",
+        lambda *args, **kwargs: (str(archive_path), ""),
+    )
+
+    tool = ArchiveTool()
+    qtbot.addWidget(tool)
+    tool.extract_zip_action()
+
+    assert started.wait(1)
+    assert tool.worker is not None and tool.worker.isRunning()
+    assert tool.btn_cancel.isEnabled()
+    assert all(not button.isEnabled() for button in tool._action_buttons)
+
+    tool.cancel_operation()
+    qtbot.waitUntil(lambda: tool.worker is None, timeout=2000)
+
+    assert tool.status.text() == "Operación cancelada"
+    assert all(button.isEnabled() for button in tool._action_buttons)
 
 
 def test_create_and_extract_zip_round_trip(monkeypatch, tmp_path):
