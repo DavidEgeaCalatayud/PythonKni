@@ -1,0 +1,31 @@
+name: Apply process CPU patch
+
+on:
+  push:
+    branches:
+      - fix/archive-worker-process-cpu
+    paths:
+      - scripts/apply_process_cpu_patch.py
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: fix/archive-worker-process-cpu
+      - name: Apply targeted patch
+        run: python scripts/apply_process_cpu_patch.py
+      - name: Commit patch
+        shell: powershell
+        run: |
+          if (-not (git diff --quiet -- tools/process_manager_tool.py)) {
+            git config user.name "github-actions[bot]"
+            git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+            git add tools/process_manager_tool.py
+            git commit -m "Sample process CPU in two passes"
+            git push origin HEAD:fix/archive-worker-process-cpu
+          }
