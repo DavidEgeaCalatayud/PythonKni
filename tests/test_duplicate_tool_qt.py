@@ -30,7 +30,7 @@ def test_second_scan_is_rejected_while_first_worker_runs(monkeypatch, qtbot, tmp
     qtbot.waitUntil(entered.is_set, timeout=1000)
     first_worker = tool.worker
 
-    assert first_worker is not None
+    assert isinstance(first_worker, duplicate.Worker)
     assert tool._start_scan(str(tmp_path / "other")) is False
     assert tool.worker is first_worker
     assert not tool.btn_select_folder.isEnabled()
@@ -71,6 +71,7 @@ def test_move_revalidation_runs_off_gui_thread(monkeypatch, qtbot, tmp_path):
     assert tool._start_move() is True
     qtbot.waitUntil(entered.is_set, timeout=1000)
 
+    assert isinstance(tool.worker, duplicate.Worker)
     assert worker_threads
     assert worker_threads[0] is not gui_thread
     assert not tool.btn_select_folder.isEnabled()
@@ -114,6 +115,6 @@ def test_move_can_be_cancelled_without_blocking_gui(monkeypatch, qtbot, tmp_path
 
     text = tool.result_box.toPlainText().lower()
     assert "movimiento cancelado" in text
-    assert "2 archivo" in text
+    assert "manifiesto" in text
     assert tool.btn_select_folder.isEnabled()
     assert not tool.btn_move.isEnabled()
