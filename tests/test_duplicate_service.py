@@ -1,6 +1,9 @@
 import hashlib
 import json
+import threading
 from pathlib import Path
+
+import pytest
 
 from tools import duplicate_tool as duplicate
 
@@ -82,8 +85,8 @@ def test_final_byte_comparison_splits_forced_hash_collision(monkeypatch, tmp_pat
     copy.write_bytes(b"AAAA")
     collision.write_bytes(b"BBBB")
 
-    monkeypatch.setattr(duplicate, "quick_hash_file", lambda _path: "forced-quick")
-    monkeypatch.setattr(duplicate, "hash_file", lambda _path: "forced-secure")
+    monkeypatch.setattr(duplicate, "quick_hash_file", lambda _path, **_kwargs: "forced-quick")
+    monkeypatch.setattr(duplicate, "hash_file", lambda _path, **_kwargs: "forced-secure")
 
     duplicates = duplicate.find_duplicates(tmp_path)
 
@@ -116,6 +119,16 @@ def test_symlink_files_are_not_scanned(tmp_path):
         return
 
     assert duplicate.find_duplicates(tmp_path) == {}
+
+
+def test_find_duplicates_honours_pre_cancelled_event(tmp_path):
+    (tmp_path / "a.txt").write_text("same", encoding="utf-8")
+    (tmp_path / "b.txt").write_text("same", encoding="utf-8")
+    cancel_event = threading.Event()
+    cancel_event.set()
+
+    with pytest.raises(duplicate.DuplicateOperationCancelled):
+        duplicate.find_duplicates(tmp_path, cancel_event=cancel_event)
 
 
 def test_move_duplicates_rechecks_content_before_moving(tmp_path):
@@ -190,3 +203,28 @@ def test_move_duplicates_uses_unique_destination_names(tmp_path):
     assert moved == 1
     assert (target / "a.txt").read_text(encoding="utf-8") == "existing"
     assert (target / "a_1.txt").read_text(encoding="utf-8") == "same"
+
+
+def test_cancelled_move_marks_manifest_and_keeps_unmoved_files(tmp_path):
+    original = tmp_path / "a.txt"
+    copy = tmp_path / "b.txt"
+    original.write_text("same", encoding="utf-8")
+    copy.write_text("same", encoding="utf-8")
+    duplicates = duplicate.find_duplicates(tmp_path)
+    cancel_event = threading.Event()
+    cancel_event.set()
+
+    with pytest.raises(duplicate.DuplicateOperationCancelled) as exc_info:
+        duplicate.move_duplicates(duplicates, tmp_path, cancel_event=cancel_event)
+
+    assert exc_info.value.moved_count == 0
+    assert original.exists()
+    assert copy.exists()
+
+    target = tmp_path / duplicate.DUPLICATES_DIR_NAME
+    manifests = list(target.glob(f"{duplicate.RESTORE_MANIFEST_PREFIX}_*.json"))
+    assert len(manifests) == 1
+    manifest = json.loads(manifests[0].read_text(encoding="utf-8"))
+    assert manifest["status"] == "cancelled"
+    assert manifest["moved_count"] == 0
+    assert "cancelled_at" in manifest
