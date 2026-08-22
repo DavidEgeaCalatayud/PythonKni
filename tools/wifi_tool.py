@@ -6,7 +6,6 @@ import threading
 import xml.etree.ElementTree as ET
 from pathlib import Path
 
-from PyQt5.QtCore import QTimer
 from PyQt5.QtWidgets import (
     QPushButton,
     QTableWidget,
@@ -125,7 +124,7 @@ def get_wifi_profiles(cancel_event: threading.Event | None = None):
     except WorkerCancelled:
         raise
     except subprocess.TimeoutExpired:
-        return [("Error", "Tiempo de espera agotado ejecutando netsh." )]
+        return [("Error", "Tiempo de espera agotado ejecutando netsh.")]
     except Exception as error:
         return [("Error", str(error))]
 
@@ -186,9 +185,8 @@ class Tool(BaseTool):
         container.setLayout(layout)
         self.setCentralWidget(container)
 
-        # Defer until setup_ui has returned. The callback only starts a worker;
-        # no netsh invocation occurs on the GUI thread.
-        QTimer.singleShot(0, self.refresh_wifi_data)
+        # Starting a QThread is non-blocking; all netsh work runs inside Worker.run().
+        self.refresh_wifi_data()
 
     def _loading_active(self) -> bool:
         return self.worker is not None and self.worker.isRunning()
