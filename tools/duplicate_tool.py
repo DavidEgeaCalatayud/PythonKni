@@ -10,7 +10,6 @@ from collections import defaultdict
 from datetime import datetime, timezone
 from pathlib import Path
 
-from PyQt5.QtCore import QThread, pyqtSignal
 from PyQt5.QtWidgets import (
     QFileDialog,
     QMessageBox,
@@ -20,7 +19,9 @@ from PyQt5.QtWidgets import (
     QWidget,
 )
 
+from pythonkni.core.tasks import WorkerCancelled
 from tools.base_tool import BaseTool
+from tools.worker import Worker
 
 
 logger = logging.getLogger(__name__)
@@ -339,59 +340,18 @@ def move_duplicates(
     return moved_count
 
 
-class DuplicateFinderThread(QThread):
-    scan_finished = pyqtSignal(dict)
-    operation_cancelled = pyqtSignal()
-    operation_failed = pyqtSignal(str)
-
-    def __init__(self, folder_path):
-        super().__init__()
-        self.folder_path = folder_path
-        self._cancel_event = threading.Event()
-
-    def cancel(self):
-        self._cancel_event.set()
-
-    def run(self):
-        try:
-            duplicates = find_duplicates(self.folder_path, cancel_event=self._cancel_event)
-        except DuplicateOperationCancelled:
-            self.operation_cancelled.emit()
-        except Exception as error:
-            logger.exception("Error buscando duplicados")
-            self.operation_failed.emit(str(error))
-        else:
-            self.scan_finished.emit(duplicates)
+def _scan_duplicates_task(worker: Worker, folder_path: str):
+    try:
+        return find_duplicates(folder_path, cancel_event=worker.cancel_event)
+    except DuplicateOperationCancelled as error:
+        raise WorkerCancelled() from error
 
 
-class DuplicateMoveThread(QThread):
-    move_finished = pyqtSignal(int)
-    move_cancelled = pyqtSignal(int)
-    operation_failed = pyqtSignal(str)
-
-    def __init__(self, duplicates, base_folder):
-        super().__init__()
-        self.duplicates = duplicates
-        self.base_folder = base_folder
-        self._cancel_event = threading.Event()
-
-    def cancel(self):
-        self._cancel_event.set()
-
-    def run(self):
-        try:
-            moved_count = move_duplicates(
-                self.duplicates,
-                self.base_folder,
-                cancel_event=self._cancel_event,
-            )
-        except DuplicateOperationCancelled as error:
-            self.move_cancelled.emit(error.moved_count)
-        except Exception as error:
-            logger.exception("Error moviendo duplicados")
-            self.operation_failed.emit(str(error))
-        else:
-            self.move_finished.emit(moved_count)
+def _move_duplicates_task(worker: Worker, duplicates, base_folder: str):
+    try:
+        return move_duplicates(duplicates, base_folder, cancel_event=worker.cancel_event)
+    except DuplicateOperationCancelled as error:
+        raise WorkerCancelled() from error
 
 
 class Tool(BaseTool):
@@ -405,7 +365,7 @@ class Tool(BaseTool):
 
         self.folder_path = None
         self.duplicates = {}
-        self.worker: QThread | None = None
+        self.worker: Worker | None = None
         self._operation_kind: str | None = None
 
         layout = QVBoxLayout()
@@ -440,6 +400,13 @@ class Tool(BaseTool):
         self.btn_cancel.setEnabled(busy)
         self.btn_move.setEnabled(not busy and bool(self.duplicates))
 
+    def _bind_worker(self, worker: Worker) -> None:
+        worker.error.connect(lambda error: self.on_operation_failed(str(error)))
+        worker.finished.connect(lambda worker=worker: self._on_operation_thread_finished(worker))
+        self.worker = worker
+        self._set_busy(True)
+        self.start_managed_worker(worker, cancel=worker.cancel)
+
     def _start_scan(self, folder_path: str) -> bool:
         if self._operation_active():
             return False
@@ -450,16 +417,10 @@ class Tool(BaseTool):
         self.result_box.setPlainText("Buscando duplicados, por favor espere...")
         self._operation_kind = "scan"
 
-        worker = DuplicateFinderThread(folder_path)
-        worker.scan_finished.connect(self.on_duplicates_found)
-        worker.operation_cancelled.connect(self.on_scan_cancelled)
-        worker.operation_failed.connect(self.on_operation_failed)
-        QThread.finished.__get__(worker, type(worker)).connect(
-            lambda worker=worker: self._on_operation_thread_finished(worker)
-        )
-        self.worker = worker
-        self._set_busy(True)
-        self.start_managed_worker(worker, cancel=worker.cancel)
+        worker = Worker(_scan_duplicates_task, folder_path)
+        worker.result.connect(self.on_duplicates_found)
+        worker.cancelled.connect(self.on_scan_cancelled)
+        self._bind_worker(worker)
         return True
 
     def select_folder(self):
@@ -497,16 +458,10 @@ class Tool(BaseTool):
 
         self._operation_kind = "move"
         self.result_box.append("\nRevalidando y moviendo duplicados, por favor espere...")
-        worker = DuplicateMoveThread(dict(self.duplicates), self.folder_path)
-        worker.move_finished.connect(self.on_move_finished)
-        worker.move_cancelled.connect(self.on_move_cancelled)
-        worker.operation_failed.connect(self.on_operation_failed)
-        QThread.finished.__get__(worker, type(worker)).connect(
-            lambda worker=worker: self._on_operation_thread_finished(worker)
-        )
-        self.worker = worker
-        self._set_busy(True)
-        self.start_managed_worker(worker, cancel=worker.cancel)
+        worker = Worker(_move_duplicates_task, dict(self.duplicates), self.folder_path)
+        worker.result.connect(self.on_move_finished)
+        worker.cancelled.connect(self.on_move_cancelled)
+        self._bind_worker(worker)
         return True
 
     def move_duplicates_action(self):
@@ -525,11 +480,11 @@ class Tool(BaseTool):
             "Vuelve a escanear para actualizar los resultados."
         )
 
-    def on_move_cancelled(self, moved_count: int):
+    def on_move_cancelled(self):
         self.duplicates = {}
         self.result_box.append(
-            f"\nMovimiento cancelado. Se habían movido {moved_count} archivo(s). "
-            "El manifiesto de restauración se ha marcado como cancelado. "
+            "\nMovimiento cancelado. Puede haber archivos ya movidos; el manifiesto de "
+            "restauración conserva el estado parcial y se ha marcado como cancelado. "
             "Vuelve a escanear para actualizar los resultados."
         )
 
@@ -542,13 +497,11 @@ class Tool(BaseTool):
         worker = self.worker
         if worker is None or not worker.isRunning():
             return
-        cancel = getattr(worker, "cancel", None)
-        if callable(cancel):
-            cancel()
+        worker.cancel()
         self.btn_cancel.setEnabled(False)
         self.result_box.append("\nCancelando operación...")
 
-    def _on_operation_thread_finished(self, worker: QThread) -> None:
+    def _on_operation_thread_finished(self, worker: Worker) -> None:
         if self.worker is not worker:
             return
         self.worker = None
