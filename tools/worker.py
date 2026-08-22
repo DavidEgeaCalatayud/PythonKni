@@ -29,6 +29,11 @@ class Worker(QThread):
         self._kwargs = kwargs
         self._cancel_event = threading.Event()
 
+    @property
+    def cancel_event(self) -> threading.Event:
+        """Cancellation event for long-running tasks that need chunk-level checks."""
+        return self._cancel_event
+
     def cancel(self) -> None:
         """Request cooperative cancellation from the GUI thread."""
         self._cancel_event.set()
