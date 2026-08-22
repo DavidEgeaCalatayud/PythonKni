@@ -31,6 +31,7 @@ from PyQt5.QtWidgets import (
 )
 
 from tools.base_tool import BaseTool
+from tools.csv_utils import safe_csv_row
 from tools.theme_manager import ThemeManager
 
 from .models import EventItem, EventResult
@@ -526,19 +527,21 @@ class Tool(BaseTool):
             )
             for item in self.events:
                 writer.writerow(
-                    [
-                        item.date,
-                        item.level,
-                        item.provider,
-                        item.event_id,
-                        item.log_name,
-                        item.category,
-                        item.message,
-                        item.risk,
-                        item.interpretation,
-                        item.computer,
-                        item.record_id,
-                    ]
+                    safe_csv_row(
+                        [
+                            item.date,
+                            item.level,
+                            item.provider,
+                            item.event_id,
+                            item.log_name,
+                            item.category,
+                            item.message,
+                            item.risk,
+                            item.interpretation,
+                            item.computer,
+                            item.record_id,
+                        ]
+                    )
                 )
         QMessageBox.information(self, "Exportado", "Eventos exportados correctamente en CSV.")
 
