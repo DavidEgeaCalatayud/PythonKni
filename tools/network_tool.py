@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from tools.base_tool import BaseTool
+from tools.csv_utils import safe_csv_cell
 
 import csv
 import ipaddress
@@ -804,7 +805,7 @@ class HistoryTab(QWidget):
             with open(file_path, "w", newline="", encoding="utf-8") as file:
                 writer = csv.writer(file)
                 for line in data:
-                    writer.writerow([line])
+                    writer.writerow([safe_csv_cell(line)])
 
     def import_history(self):
         file_path, _ = QFileDialog.getOpenFileName(
