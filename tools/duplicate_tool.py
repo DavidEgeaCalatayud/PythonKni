@@ -44,6 +44,28 @@ def _check_cancel(cancel_event: threading.Event | None, moved_count: int = 0) ->
         raise DuplicateOperationCancelled(moved_count)
 
 
+def _physical_identity(path: str | Path) -> tuple[int, int] | None:
+    """Return a stable filesystem identity when the platform exposes one."""
+    try:
+        stat_result = Path(path).stat()
+    except OSError:
+        return None
+
+    inode = getattr(stat_result, "st_ino", 0)
+    device = getattr(stat_result, "st_dev", 0)
+    if not inode:
+        return None
+    return int(device), int(inode)
+
+
+def _same_physical_file(first_path: str | Path, second_path: str | Path) -> bool:
+    """Return True when two paths refer to the same underlying filesystem object."""
+    try:
+        return os.path.samefile(first_path, second_path)
+    except (OSError, ValueError):
+        return False
+
+
 def hash_file(
     file_path: str | Path,
     cancel_event: threading.Event | None = None,
@@ -133,13 +155,42 @@ def _group_readable_files_by_size(
     folder_path: str | Path,
     cancel_event: threading.Event | None = None,
 ) -> dict[int, list[Path]]:
+    """Group files by size while keeping only one path per physical file.
+
+    Hardlinks are multiple directory entries for the same physical file. Treating
+    them as duplicates is misleading because moving one link does not free its
+    data blocks and may remove a path the user intentionally relies on.
+    """
     groups: dict[int, list[Path]] = defaultdict(list)
+    seen_identities: dict[tuple[int, int], Path] = {}
+    seen_paths: list[Path] = []
+
     for path in _iter_scan_files(folder_path, cancel_event=cancel_event):
         _check_cancel(cancel_event)
         try:
-            groups[path.stat().st_size].append(path)
+            stat_result = path.stat()
         except OSError:
             logger.debug("No se pudo leer el tamaño de %s", path, exc_info=True)
+            continue
+
+        identity = _physical_identity(path)
+        if identity is not None:
+            existing = seen_identities.get(identity)
+            if existing is not None:
+                logger.info("Hardlink ignorado: %s apunta al mismo archivo que %s", path, existing)
+                continue
+            seen_identities[identity] = path
+        else:
+            existing = next(
+                (candidate for candidate in seen_paths if _same_physical_file(candidate, path)),
+                None,
+            )
+            if existing is not None:
+                logger.info("Hardlink ignorado: %s apunta al mismo archivo que %s", path, existing)
+                continue
+
+        seen_paths.append(path)
+        groups[stat_result.st_size].append(path)
     return groups
 
 
@@ -147,15 +198,21 @@ def _verified_byte_groups(
     paths: list[Path],
     cancel_event: threading.Event | None = None,
 ) -> list[list[Path]]:
-    """Split a secure-hash group into byte-identical groups."""
+    """Split a secure-hash group into byte-identical groups, excluding hardlinks."""
     groups: list[list[Path]] = []
     for path in sorted(paths, key=lambda item: str(item).casefold()):
         _check_cancel(cancel_event)
+        matched = False
         for group in groups:
+            if _same_physical_file(group[0], path):
+                logger.info("Hardlink ignorado durante verificación: %s", path)
+                matched = True
+                break
             if files_equal(group[0], path, cancel_event=cancel_event):
                 group.append(path)
+                matched = True
                 break
-        else:
+        if not matched:
             groups.append([path])
     return [group for group in groups if len(group) > 1]
 
@@ -283,6 +340,14 @@ def move_duplicates(
                 _check_cancel(cancel_event, moved_count)
                 source = Path(file_path)
                 if not source.exists() or source.is_symlink() or _is_inside(source, target_folder):
+                    continue
+
+                if _same_physical_file(original, source):
+                    logger.info(
+                        "Se omite hardlink %s porque apunta al mismo archivo físico que %s",
+                        source,
+                        original,
+                    )
                     continue
 
                 source_hash = hash_file(source, cancel_event=cancel_event)
