@@ -93,7 +93,9 @@ def _read_exported_password(profile: str, export_root: Path) -> str:
                 matching_roots.append(root)
 
         if not matching_roots:
-            raise ValueError(f"No se encontró un XML exportado que corresponda al perfil '{profile}'.")
+            raise ValueError(
+                f"No se encontró un XML exportado que corresponda al perfil '{profile}'."
+            )
 
         password = _key_material_from_xml(matching_roots[0])
         return password or "No Password"
