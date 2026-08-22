@@ -298,8 +298,13 @@ def batch_conversion_task(worker, function, jobs):
 
     final_paths = [Path(args[-1]) for args in jobs]
     destination_dir = final_paths[0].parent
-    if any(path.parent.resolve(strict=False) != destination_dir.resolve(strict=False) for path in final_paths):
-        return ConversionResult.failed("Todos los destinos del lote deben estar en la misma carpeta.")
+    if any(
+        path.parent.resolve(strict=False) != destination_dir.resolve(strict=False)
+        for path in final_paths
+    ):
+        return ConversionResult.failed(
+            "Todos los destinos del lote deben estar en la misma carpeta."
+        )
 
     warnings = []
     total = len(jobs)
