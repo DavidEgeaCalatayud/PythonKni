@@ -14,7 +14,7 @@ from tools.csv_utils import safe_csv_cell, safe_csv_row
         ("+SUM(A1:A2)", "'+SUM(A1:A2)"),
         ("-2+3", "'-2+3"),
         ("@SUM(A1:A2)", "'@SUM(A1:A2)"),
-        ("  =HYPERLINK(\"https://example.invalid\")", "'  =HYPERLINK(\"https://example.invalid\")"),
+        ('  =HYPERLINK("https://example.invalid")', '\'  =HYPERLINK("https://example.invalid")'),
         ("\t+CMD", "'\t+CMD"),
     ],
 )
