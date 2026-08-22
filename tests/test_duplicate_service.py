@@ -1,5 +1,6 @@
 import hashlib
 import json
+import os
 import threading
 from pathlib import Path
 
@@ -10,6 +11,13 @@ from tools import duplicate_tool as duplicate
 
 def normalized_paths(paths):
     return {Path(path).as_posix() for path in paths}
+
+
+def make_hardlink(source: Path, destination: Path) -> None:
+    try:
+        os.link(source, destination)
+    except (OSError, NotImplementedError) as error:
+        pytest.skip(f"Hardlinks are not available on this filesystem: {error}")
 
 
 def test_hash_file_returns_none_for_missing_file(tmp_path):
@@ -43,6 +51,34 @@ def test_find_duplicates_groups_files_with_same_content(tmp_path):
     assert len(duplicates) == 1
     duplicate_paths = next(iter(duplicates.values()))
     assert normalized_paths(duplicate_paths) == {original.as_posix(), copy.as_posix()}
+
+
+def test_hardlink_pair_is_not_reported_as_duplicate(tmp_path):
+    original = tmp_path / "original.bin"
+    hardlink = tmp_path / "hardlink.bin"
+    original.write_bytes(b"same physical file")
+    make_hardlink(original, hardlink)
+
+    assert duplicate._same_physical_file(original, hardlink)
+    assert duplicate.find_duplicates(tmp_path) == {}
+
+
+def test_hardlink_is_ignored_but_real_copy_is_reported(tmp_path):
+    original = tmp_path / "a-original.bin"
+    hardlink = tmp_path / "b-hardlink.bin"
+    real_copy = tmp_path / "c-copy.bin"
+    original.write_bytes(b"same payload")
+    make_hardlink(original, hardlink)
+    real_copy.write_bytes(b"same payload")
+
+    duplicates = duplicate.find_duplicates(tmp_path)
+
+    assert len(duplicates) == 1
+    paths = normalized_paths(next(iter(duplicates.values())))
+    assert real_copy.as_posix() in paths
+    assert len(paths) == 2
+    assert {original.as_posix(), hardlink.as_posix()} & paths
+    assert not {original.as_posix(), hardlink.as_posix()} <= paths
 
 
 def test_unique_sizes_never_reach_quick_or_secure_hash(monkeypatch, tmp_path):
@@ -148,6 +184,26 @@ def test_move_duplicates_rechecks_content_before_moving(tmp_path):
     assert manifest["status"] == "complete"
     assert manifest["moved_count"] == 0
     assert manifest["moves"] == []
+
+
+def test_move_duplicates_refuses_hardlink_even_with_manual_input(tmp_path):
+    original = tmp_path / "original.bin"
+    hardlink = tmp_path / "hardlink.bin"
+    original.write_bytes(b"same physical file")
+    make_hardlink(original, hardlink)
+
+    moved = duplicate.move_duplicates({"manual": [str(original), str(hardlink)]}, tmp_path)
+
+    assert moved == 0
+    assert original.exists()
+    assert hardlink.exists()
+    assert duplicate._same_physical_file(original, hardlink)
+    target = tmp_path / duplicate.DUPLICATES_DIR_NAME
+    manifests = list(target.glob(f"{duplicate.RESTORE_MANIFEST_PREFIX}_*.json"))
+    assert len(manifests) == 1
+    manifest = json.loads(manifests[0].read_text(encoding="utf-8"))
+    assert manifest["moves"] == []
+    assert manifest["moved_count"] == 0
 
 
 def test_move_duplicates_creates_atomic_restoration_manifest(tmp_path):
