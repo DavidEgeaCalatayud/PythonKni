@@ -1,0 +1,115 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*.*.*"
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: windows-latest
+    env:
+      QT_QPA_PLATFORM: offscreen
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Validate release tag
+        shell: powershell
+        run: |
+          $tag = $env:GITHUB_REF_NAME
+          if ($tag -notmatch '^v\d+\.\d+\.\d+$') {
+            throw "Release tags must use the exact vX.Y.Z format. Received: $tag"
+          }
+
+          git fetch origin main
+          git merge-base --is-ancestor $env:GITHUB_SHA origin/main
+          if ($LASTEXITCODE -ne 0) {
+            throw "Release tag $tag must point to a commit contained in main."
+          }
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.10"
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install pytest pytest-qt ruff pyinstaller
+
+      - name: Compile Python files
+        run: python -m compileall .
+
+      - name: Run tests
+        run: python -m pytest
+
+      - name: Ruff check
+        run: python -m ruff check .
+
+      - name: Ruff format check
+        run: python -m ruff format --check .
+
+      - name: Build Windows bundle
+        run: pyinstaller --noconfirm --clean PythonKni.spec
+
+      - name: Smoke test packaged application
+        shell: powershell
+        run: |
+          $exe = Join-Path $PWD "dist\PythonKni\PythonKni.exe"
+          if (-not (Test-Path $exe)) {
+            throw "PyInstaller did not produce $exe"
+          }
+
+          $process = Start-Process -FilePath $exe -ArgumentList "--smoke-test" -Wait -PassThru
+          if ($process.ExitCode -ne 0) {
+            throw "Packaged application smoke test failed with exit code $($process.ExitCode)"
+          }
+
+      - name: Package validated release bundle
+        shell: powershell
+        run: |
+          $tag = $env:GITHUB_REF_NAME
+          $zip = Join-Path $PWD "dist\PythonKni-$tag-windows-x64.zip"
+          $checksum = Join-Path $PWD "dist\PythonKni-$tag-windows-x64.sha256"
+
+          if (Test-Path $zip) {
+            Remove-Item $zip -Force
+          }
+
+          Compress-Archive -Path "dist\PythonKni\*" -DestinationPath $zip -CompressionLevel Optimal
+          $hash = (Get-FileHash $zip -Algorithm SHA256).Hash.ToLowerInvariant()
+          "$hash  $(Split-Path $zip -Leaf)" | Set-Content -Path $checksum -Encoding ascii
+
+      - name: Upload validated release artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: PythonKni-${{ github.ref_name }}-windows-x64
+          path: |
+            dist/PythonKni-${{ github.ref_name }}-windows-x64.zip
+            dist/PythonKni-${{ github.ref_name }}-windows-x64.sha256
+          if-no-files-found: error
+          retention-days: 30
+
+      - name: Publish GitHub Release
+        shell: powershell
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          $tag = $env:GITHUB_REF_NAME
+          $zip = "dist\PythonKni-$tag-windows-x64.zip"
+          $checksum = "dist\PythonKni-$tag-windows-x64.sha256"
+
+          gh release view $tag *> $null
+          if ($LASTEXITCODE -eq 0) {
+            gh release upload $tag $zip $checksum --clobber
+          } else {
+            gh release create $tag $zip $checksum --title "PythonKni $tag" --generate-notes --verify-tag
+          }
