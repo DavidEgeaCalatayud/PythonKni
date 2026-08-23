@@ -2,7 +2,12 @@ name: CI
 
 on:
   push:
+    branches:
+      - "**"
   pull_request:
+
+permissions:
+  contents: read
 
 jobs:
   validate:
@@ -52,3 +57,11 @@ jobs:
           if ($process.ExitCode -ne 0) {
             throw "Packaged application smoke test failed with exit code $($process.ExitCode)"
           }
+
+      - name: Upload validated Windows bundle
+        uses: actions/upload-artifact@v4
+        with:
+          name: PythonKni-windows-${{ github.sha }}
+          path: dist/PythonKni/
+          if-no-files-found: error
+          retention-days: 14
