@@ -37,6 +37,7 @@ from . import service as _service
 import sys as _sys
 import types as _types
 
+
 class Tool(BaseTool):
     name = "Configuracion"
     description = "Configura el tema y el idioma de la aplicación."
@@ -134,6 +135,7 @@ class Tool(BaseTool):
         self.theme_combobox.setCurrentText(config["theme"])
         self.language_combobox.setCurrentText(config["language"])
         self.refresh_language_texts()
+
 
 class _CompatibilityModule(_types.ModuleType):
     """Forward legacy monkeypatches to the separated service module."""

@@ -12,6 +12,7 @@ from .models import (
     DiskItem,
 )
 
+
 def format_bytes(num_bytes: int | float) -> str:
     value = float(num_bytes)
     for unit in ("B", "KB", "MB", "GB", "TB"):
@@ -19,6 +20,8 @@ def format_bytes(num_bytes: int | float) -> str:
             return f"{value:.2f} {unit}"
         value /= 1024
     return f"{value:.2f} TB"
+
+
 def directory_size(path: Path) -> int:
     total = 0
     for root, dirs, files in os.walk(path):
@@ -31,6 +34,8 @@ def directory_size(path: Path) -> int:
             except OSError:
                 continue
     return total
+
+
 def analyze_directory(path: Path, limit: int = 100) -> list[DiskItem]:
     items: list[DiskItem] = []
 

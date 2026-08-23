@@ -15,6 +15,7 @@ from .models import (
     VALID_THEMES,
 )
 
+
 def normalize_config(config: dict[str, Any]) -> dict[str, str]:
     theme = config.get("theme")
     if theme not in VALID_THEMES:
@@ -30,6 +31,8 @@ def normalize_config(config: dict[str, Any]) -> dict[str, str]:
         "theme": theme,
         "language": language,
     }
+
+
 def load_config(config_file: Path) -> dict[str, str]:
     if not config_file.exists():
         return DEFAULT_CONFIG.copy()
@@ -38,6 +41,8 @@ def load_config(config_file: Path) -> dict[str, str]:
         raw_config: dict[str, Any] = json.load(file)
 
     return normalize_config(raw_config)
+
+
 def save_config(config_file: Path, config: dict[str, str]) -> None:
     """Persist config atomically so the previous valid file survives failures."""
     config_file.parent.mkdir(parents=True, exist_ok=True)
@@ -66,19 +71,27 @@ def save_config(config_file: Path, config: dict[str, str]) -> None:
         except OSError:
             pass
         raise
+
+
 def apply_runtime_config(config: dict[str, str]) -> None:
     """Sincroniza los managers globales con una configuración ya validada."""
     ThemeManager.set_theme(config["theme"])
     LanguageManager.set_language(config["language"])
+
+
 def load_runtime_config(config_file: Path) -> dict[str, str]:
     """Carga la configuración persistida y la aplica antes de crear la UI."""
     config = load_config(config_file)
     apply_runtime_config(config)
     return config
+
+
 def save_runtime_config(config_file: Path, config: dict[str, str]) -> dict[str, str]:
     """Guarda valores canónicos y actualiza ambos managers en la misma ruta."""
     normalized_config = normalize_config(config)
     save_config(config_file, normalized_config)
     apply_runtime_config(normalized_config)
     return normalized_config
+
+
 logger = logging.getLogger(__name__)

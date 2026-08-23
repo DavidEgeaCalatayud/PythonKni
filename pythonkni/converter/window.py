@@ -46,6 +46,7 @@ from . import service as _service
 import sys as _sys
 import types as _types
 
+
 class Tool(BaseTool):
     name = "Convertidor de Archivos"
     description = "Convierte imágenes, PDF, texto, Word y KML."
@@ -346,6 +347,7 @@ class Tool(BaseTool):
             (file_path, save_path),
             f"TXT creado en:\n{save_path}",
         )
+
 
 class _CompatibilityModule(_types.ModuleType):
     """Forward legacy monkeypatches to the separated service module."""

@@ -7,9 +7,13 @@ from pathlib import Path
 from pythonkni.core.tasks import WorkerCancelled
 
 NETSH_TIMEOUT_SECONDS = 10.0
+
+
 def _check_cancel(cancel_event: threading.Event | None) -> None:
     if cancel_event is not None and cancel_event.is_set():
         raise WorkerCancelled()
+
+
 def _run_netsh(args: list[str], timeout: float = NETSH_TIMEOUT_SECONDS) -> str:
     completed = subprocess.run(
         ["netsh", *args],
@@ -21,6 +25,8 @@ def _run_netsh(args: list[str], timeout: float = NETSH_TIMEOUT_SECONDS) -> str:
         timeout=timeout,
     )
     return completed.stdout
+
+
 def _parse_profiles(output: str) -> list[str]:
     profiles = []
     for line in output.splitlines():
@@ -32,18 +38,26 @@ def _parse_profiles(output: str) -> list[str]:
         if profile and ("profile" in label or "perfil" in label):
             profiles.append(profile)
     return profiles
+
+
 def _local_name(tag: str) -> str:
     return tag.rsplit("}", 1)[-1]
+
+
 def _profile_name_from_xml(root: ET.Element) -> str | None:
     for child in root:
         if _local_name(child.tag) == "name":
             return child.text.strip() if child.text else None
     return None
+
+
 def _key_material_from_xml(root: ET.Element) -> str | None:
     for node in root.iter():
         if _local_name(node.tag) == "keyMaterial":
             return node.text if node.text else None
     return None
+
+
 def _read_exported_password(profile: str, export_root: Path) -> str:
     """Export one profile into an isolated directory and read only its matching XML."""
     with tempfile.TemporaryDirectory(prefix="wifi_profile_", dir=export_root) as temp_dir:
@@ -72,6 +86,8 @@ def _read_exported_password(profile: str, export_root: Path) -> str:
 
         password = _key_material_from_xml(matching_roots[0])
         return password or "No Password"
+
+
 def get_wifi_profiles(cancel_event: threading.Event | None = None):
     """Obtiene las redes WiFi guardadas en Windows junto con sus contrasenas."""
     _check_cancel(cancel_event)

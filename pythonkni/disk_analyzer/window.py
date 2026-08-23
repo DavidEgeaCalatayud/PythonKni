@@ -32,6 +32,7 @@ from . import service as _service
 import sys as _sys
 import types as _types
 
+
 class DiskAnalyzerWorker(QThread):
     finished = pyqtSignal(list)
     failed = pyqtSignal(str)
@@ -46,6 +47,8 @@ class DiskAnalyzerWorker(QThread):
             self.finished.emit(analyze_directory(Path(self.folder), self.limit))
         except Exception as error:
             self.failed.emit(str(error))
+
+
 class Tool(BaseTool):
     name = "Analizador de Disco"
     description = "Analiza el uso de espacio en disco y carpetas."
@@ -180,6 +183,7 @@ class Tool(BaseTool):
                 )
 
         QMessageBox.information(self, "Exportado", "CSV generado correctamente.")
+
 
 class _CompatibilityModule(_types.ModuleType):
     """Forward legacy monkeypatches to the separated service module."""

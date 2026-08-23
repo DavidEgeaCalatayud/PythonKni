@@ -6,6 +6,7 @@ from dataclasses import dataclass
 import psutil
 import requests
 
+
 @dataclass(frozen=True)
 class ProcessDetails:
     pid: int
@@ -13,6 +14,8 @@ class ProcessDetails:
     exe_path: str
     username: str
     create_time: float
+
+
 @dataclass(frozen=True)
 class VirusTotalResult:
     status: str

@@ -29,8 +29,11 @@ from . import service as _service
 import sys as _sys
 import types as _types
 
+
 def _load_wifi_task(worker: Worker):
     return get_wifi_profiles(cancel_event=worker.cancel_event)
+
+
 class Tool(BaseTool):
     name = "Listado WiFi + Claves"
     description = "Consulta perfiles y datos de redes Wi-Fi guardadas."
@@ -133,6 +136,7 @@ class Tool(BaseTool):
             return
         self.worker = None
         self._set_loading(False)
+
 
 class _CompatibilityModule(_types.ModuleType):
     """Forward legacy monkeypatches to the separated service module."""

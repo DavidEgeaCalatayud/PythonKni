@@ -34,11 +34,17 @@ SYSTEM_USERNAMES = {
     "nt authority\\system",
     "system",
 }
+
+
 def get_vt_api_key():
     return os.getenv("VIRUSTOTAL_API_KEY")
+
+
 def is_own_process(pid, app_pid=None):
     """Indica si el PID pertenece a la instancia actual de PythonKni."""
     return pid == (os.getpid() if app_pid is None else app_pid)
+
+
 def is_system_process(details):
     """Clasifica conservadoramente procesos que requieren una advertencia extra."""
     name = details.name.casefold()
@@ -52,14 +58,20 @@ def is_system_process(details):
     if username in SYSTEM_USERNAMES:
         return True
     return "\\windows\\system32\\" in exe_path or "\\windows\\syswow64\\" in exe_path
+
+
 def format_process_identity(details):
     return f"PID: {details.pid}\nNombre: {details.name}\nRuta: {details.exe_path}"
+
+
 def _safe_process_value(getter, fallback="No disponible"):
     try:
         value = getter()
     except (psutil.NoSuchProcess, psutil.AccessDenied, psutil.ZombieProcess):
         return fallback
     return str(value) if value else fallback
+
+
 def get_process_details(proc):
     """Obtiene una instantánea del proceso sin fallar por campos restringidos."""
     return ProcessDetails(
@@ -69,7 +81,11 @@ def get_process_details(proc):
         username=_safe_process_value(proc.username),
         create_time=proc.create_time(),
     )
+
+
 CPU_SAMPLE_SECONDS = 0.1
+
+
 def load_processes_task(worker, cpu_min, mem_min):
     """Collect process metrics with one shared non-blocking CPU sample window."""
     candidates = []
@@ -97,6 +113,8 @@ def load_processes_task(worker, cpu_min, mem_min):
         except (psutil.NoSuchProcess, psutil.AccessDenied, psutil.ZombieProcess):
             continue
     return processes
+
+
 def analyze_process_task(worker, pid, api_key):
     """Hash an executable and query VirusTotal without blocking the GUI."""
     worker.report_progress({"message": f"Leyendo proceso {pid}..."})

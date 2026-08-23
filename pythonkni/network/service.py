@@ -55,6 +55,8 @@ COMMON_TCP_SERVICES = {
     6379: "redis",
     8080: "http-alt",
 }
+
+
 def validate_port_range(port_range: str) -> tuple[int, int]:
     try:
         start_text, end_text = port_range.split("-", 1)
@@ -69,10 +71,14 @@ def validate_port_range(port_range: str) -> tuple[int, int]:
         raise ValueError("El puerto inicial no puede ser mayor que el final.")
 
     return start_port, end_port
+
+
 def _usable_host_count(network: ipaddress.IPv4Network) -> int:
     if network.prefixlen >= 31:
         return network.num_addresses
     return max(0, network.num_addresses - 2)
+
+
 def parse_network_cidr(value: str, max_hosts: int = MAX_NETWORK_HOSTS) -> ipaddress.IPv4Network:
     try:
         network = ipaddress.ip_network(value.strip(), strict=False)
@@ -91,6 +97,8 @@ def parse_network_cidr(value: str, max_hosts: int = MAX_NETWORK_HOSTS) -> ipaddr
             f"Acota el CIDR a un máximo de {max_hosts} hosts por escaneo."
         )
     return network
+
+
 def get_ipv4_interfaces() -> list[NetworkInterface]:
     interfaces = []
     stats = psutil.net_if_stats()
@@ -118,6 +126,8 @@ def get_ipv4_interfaces() -> list[NetworkInterface]:
                 )
             )
     return interfaces
+
+
 def get_default_route_address() -> str | None:
     """Return the IPv4 address selected by the OS routing table without sending data."""
     sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
@@ -128,6 +138,8 @@ def get_default_route_address() -> str | None:
         return None
     finally:
         sock.close()
+
+
 def detect_default_network(
     interfaces: list[NetworkInterface] | None = None,
 ) -> NetworkInterface:
@@ -146,13 +158,19 @@ def detect_default_network(
         return (ip.is_link_local, not ip.is_private, interface.name.casefold())
 
     return sorted(interfaces, key=priority)[0]
+
+
 def _ping_command(ip: str) -> list[str]:
     if platform.system() == "Windows":
         return ["ping", "-n", "1", "-w", "800", ip]
     return ["ping", "-c", "1", "-W", "1", ip]
+
+
 def _ping_succeeded(output: str) -> bool:
     lowered = output.lower()
     return "ttl=" in lowered or "time=" in lowered or "tiempo=" in lowered
+
+
 def _parse_arp_mac(output: str, ip: str) -> str:
     for line in output.splitlines():
         tokens = [token.strip("()") for token in line.split()]
@@ -162,6 +180,8 @@ def _parse_arp_mac(output: str, ip: str) -> str:
         if match:
             return match.group(0)
     return "No disponible"
+
+
 def get_mac_address(ip: str) -> str:
     try:
         output = subprocess.run(["arp", "-a", ip], capture_output=True, text=True, timeout=2)
@@ -169,6 +189,8 @@ def get_mac_address(ip: str) -> str:
     except (OSError, subprocess.TimeoutExpired):
         logger.exception("Could not read MAC address for %s", ip)
     return "No disponible"
+
+
 def reverse_dns_name(ip: str, timeout: float = REVERSE_DNS_TIMEOUT_SECONDS) -> str:
     """Resolve reverse DNS without allowing the system resolver to stall a scan worker."""
     result = []
@@ -185,6 +207,8 @@ def reverse_dns_name(ip: str, timeout: float = REVERSE_DNS_TIMEOUT_SECONDS) -> s
     if resolver.is_alive() or not result:
         return "No resuelto"
     return result[0]
+
+
 def _probe_host(ip: str, stop_event: threading.Event) -> DiscoveredHost | None:
     if stop_event.is_set():
         return None
@@ -200,6 +224,8 @@ def _probe_host(ip: str, stop_event: threading.Event) -> DiscoveredHost | None:
         return DiscoveredHost(ip=ip, hostname=host_name, mac=get_mac_address(ip))
     except (subprocess.TimeoutExpired, OSError):
         return None
+
+
 def _bounded_future_results(
     items,
     executor,
@@ -233,6 +259,8 @@ def _bounded_future_results(
                 future.cancel()
             break
         fill_pending()
+
+
 def scan_network_hosts(
     cidr: str,
     stop_event: threading.Event | None = None,
@@ -274,15 +302,21 @@ def scan_network_hosts(
                     on_found(host)
 
     return sorted(found, key=lambda item: ipaddress.ip_address(item.ip))
+
+
 def known_service_name(port: int) -> str:
     try:
         return socket.getservbyport(port, "tcp")
     except OSError:
         return COMMON_TCP_SERVICES.get(port, "desconocido")
+
+
 def _probe_port(ip: str, port: int, timeout: float) -> bool:
     with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
         sock.settimeout(timeout)
         return sock.connect_ex((ip, port)) == 0
+
+
 def scan_open_ports(
     target: str,
     start_port: int,

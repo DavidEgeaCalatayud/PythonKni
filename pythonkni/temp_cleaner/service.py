@@ -16,17 +16,23 @@ from .models import (
 )
 
 logger = logging.getLogger(__name__)
+
+
 def _resolve_existing(path: Path) -> Path | None:
     try:
         resolved = path.expanduser().resolve()
     except OSError:
         return None
     return resolved if resolved.exists() and resolved.is_dir() else None
+
+
 def _resolved_path(path: Path) -> Path | None:
     try:
         return path.expanduser().resolve()
     except OSError:
         return None
+
+
 def _temp_candidates() -> list[CleanTarget]:
     if platform.system() != "Windows":
         return []
@@ -37,6 +43,8 @@ def _temp_candidates() -> list[CleanTarget]:
         if env_path:
             targets.append(CleanTarget(f"Temporal de usuario ({env_name})", Path(env_path)))
     return targets
+
+
 def _browser_cache_candidates() -> list[CleanTarget]:
     system = platform.system()
     home = Path.home()
@@ -75,10 +83,14 @@ def _browser_cache_candidates() -> list[CleanTarget]:
         )
 
     return targets
+
+
 def _log_candidates() -> list[CleanTarget]:
     if platform.system() != "Windows":
         return []
     return [CleanTarget("Windows Temp", Path(os.environ.get("SystemRoot", "C:/Windows")) / "Temp")]
+
+
 def _allowed_clean_containers() -> set[Path]:
     """Return broad containers used only to locate known clean targets.
 
@@ -118,6 +130,8 @@ def _allowed_clean_containers() -> set[Path]:
             containers.add(cache_home)
 
     return containers
+
+
 def _forbidden_clean_roots() -> set[Path]:
     """Return general-purpose roots that must never be emptied directly."""
     forbidden: set[Path] = set()
@@ -152,6 +166,8 @@ def _forbidden_clean_roots() -> set[Path]:
             forbidden.add(container)
 
     return forbidden
+
+
 def _allowed_exact_clean_targets() -> set[Path]:
     allowed: set[Path] = set()
     for target in _temp_candidates() + _browser_cache_candidates() + _log_candidates():
@@ -159,6 +175,8 @@ def _allowed_exact_clean_targets() -> set[Path]:
         if resolved:
             allowed.add(resolved)
     return allowed
+
+
 def _is_safe_clean_root(path: Path) -> bool:
     """Allow only exact known cleanup targets, never their broad containers."""
     resolved = _resolve_existing(path)
@@ -171,6 +189,8 @@ def _is_safe_clean_root(path: Path) -> bool:
 
     containers = _allowed_clean_containers()
     return any(container in resolved.parents for container in containers)
+
+
 def _unique_safe_targets(targets: list[CleanTarget]) -> list[CleanTarget]:
     seen: set[Path] = set()
     safe_targets: list[CleanTarget] = []
@@ -182,12 +202,20 @@ def _unique_safe_targets(targets: list[CleanTarget]) -> list[CleanTarget]:
             seen.add(resolved)
 
     return safe_targets
+
+
 def get_temp_targets() -> list[CleanTarget]:
     return _unique_safe_targets(_temp_candidates())
+
+
 def get_browser_cache_targets() -> list[CleanTarget]:
     return _unique_safe_targets(_browser_cache_candidates())
+
+
 def get_log_targets() -> list[CleanTarget]:
     return _unique_safe_targets(_log_candidates())
+
+
 def build_preview(targets: list[CleanTarget]) -> CleanPreview:
     preview = CleanPreview(targets=targets)
     for target in targets:
@@ -199,6 +227,8 @@ def build_preview(targets: list[CleanTarget]) -> CleanPreview:
                 except OSError:
                     pass
     return preview
+
+
 def delete_folder_contents(folder, dry_run: bool = False) -> CleanResult:
     """Borra todos los archivos y carpetas dentro de una ruta segura."""
     result = CleanResult()
@@ -230,14 +260,22 @@ def delete_folder_contents(folder, dry_run: bool = False) -> CleanResult:
                 logger.warning("No se pudo borrar %s", path, exc_info=True)
 
     return result
+
+
 def clean_targets(targets: list[CleanTarget], dry_run: bool = False) -> CleanResult:
     result = CleanResult()
     for target in targets:
         result.add(delete_folder_contents(target.path, dry_run=dry_run))
     return result
+
+
 def clean_temp(dry_run: bool = False) -> CleanResult:
     return clean_targets(get_temp_targets(), dry_run=dry_run)
+
+
 def clean_browser_cache(dry_run: bool = False) -> CleanResult:
     return clean_targets(get_browser_cache_targets(), dry_run=dry_run)
+
+
 def clean_logs(dry_run: bool = False) -> CleanResult:
     return clean_targets(get_log_targets(), dry_run=dry_run)

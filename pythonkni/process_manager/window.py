@@ -44,6 +44,7 @@ from . import service as _service
 import sys as _sys
 import types as _types
 
+
 class Tool(BaseTool):
     name = "Gestor de Procesos"
     description = "Consulta, analiza y administra procesos del sistema."
@@ -377,6 +378,7 @@ class Tool(BaseTool):
             event.ignore()
             return
         super().closeEvent(event)
+
 
 class _CompatibilityModule(_types.ModuleType):
     """Forward legacy monkeypatches to the separated service module."""

@@ -47,16 +47,21 @@ from . import service as _service
 import sys as _sys
 import types as _types
 
+
 def _scan_duplicates_task(worker: Worker, folder_path: str):
     try:
         return find_duplicates(folder_path, cancel_event=worker.cancel_event)
     except DuplicateOperationCancelled as error:
         raise WorkerCancelled() from error
+
+
 def _move_duplicates_task(worker: Worker, duplicates, base_folder: str):
     try:
         return move_duplicates(duplicates, base_folder, cancel_event=worker.cancel_event)
     except DuplicateOperationCancelled as error:
         raise WorkerCancelled() from error
+
+
 class Tool(BaseTool):
     name = "Buscador de Archivos Duplicados"
     description = "Localiza y gestiona archivos duplicados."
@@ -210,6 +215,7 @@ class Tool(BaseTool):
         self.worker = None
         self._operation_kind = None
         self._set_busy(False)
+
 
 class _CompatibilityModule(_types.ModuleType):
     """Forward legacy monkeypatches to the separated service module."""

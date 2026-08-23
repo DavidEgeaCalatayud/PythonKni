@@ -38,6 +38,7 @@ from . import service as _service
 import sys as _sys
 import types as _types
 
+
 class Tool(BaseTool):
     name = "Limpieza de Temporales"
     description = "Analiza y limpia ubicaciones temporales autorizadas."
@@ -113,6 +114,7 @@ class Tool(BaseTool):
             f"Se han eliminado {result.deleted} archivos/carpetas temporales.\n"
             f"No se pudieron eliminar {result.failed} elementos.",
         )
+
 
 class _CompatibilityModule(_types.ModuleType):
     """Forward legacy monkeypatches to the separated service module."""

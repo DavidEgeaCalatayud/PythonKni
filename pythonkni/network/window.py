@@ -65,6 +65,7 @@ from . import service as _service
 import sys as _sys
 import types as _types
 
+
 class NetworkScanWorker(QThread):
     message = pyqtSignal(str)
     finished_summary = pyqtSignal(str)
@@ -128,6 +129,8 @@ class NetworkScanWorker(QThread):
 
         self.message.emit("Exploración completada.\n")
         self.finished_summary.emit(summary)
+
+
 class PortScanWorker(QThread):
     message = pyqtSignal(str)
     finished_summary = pyqtSignal(str)
@@ -200,6 +203,8 @@ class PortScanWorker(QThread):
             f"Escaneo completado: {len(results)} puertos abiertos de {checked} comprobados.\n"
         )
         self.finished_summary.emit(summary)
+
+
 class NetworkScanner(QWidget):
     def __init__(self, history_tab):
         super().__init__()
@@ -303,6 +308,8 @@ class NetworkScanner(QWidget):
         if self.worker and self.worker.isRunning():
             return self.worker
         return None
+
+
 class PortScanner(QWidget):
     def __init__(self, history_tab):
         super().__init__()
@@ -391,6 +398,8 @@ class PortScanner(QWidget):
         if self.worker and self.worker.isRunning():
             return self.worker
         return None
+
+
 class HistoryTab(QWidget):
     def __init__(self):
         super().__init__()
@@ -486,6 +495,8 @@ class HistoryTab(QWidget):
         self.history_area.setText("\n".join(data))
         with self.history_file.open("w", encoding="utf-8") as file:
             file.write("\n".join(data))
+
+
 class Tool(BaseTool):
     name = "Explorador de Red"
     description = "Ejecuta diagnósticos y utilidades de red."
@@ -545,6 +556,7 @@ class Tool(BaseTool):
             for worker in unfinished:
                 worker.finished.connect(self._retry_deferred_close)
         event.ignore()
+
 
 class _CompatibilityModule(_types.ModuleType):
     """Forward legacy monkeypatches to the separated service module."""

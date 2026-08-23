@@ -16,6 +16,7 @@ from reportlab.lib.pagesizes import A4
 from reportlab.pdfgen import canvas
 from pythonkni.core.tasks import WorkerCancelled
 
+
 class OutputTransaction:
     """Stage one or more outputs and publish them atomically as a logical batch.
 
@@ -84,12 +85,20 @@ class OutputTransaction:
     def __exit__(self, exc_type, exc_value, traceback) -> None:
         if not self._committed:
             self.abort()
+
+
 logger = logging.getLogger(__name__)
+
+
 def validate_extension(file_path: str, allowed_extensions: set[str]) -> bool:
     return os.path.splitext(file_path)[1].lower() in allowed_extensions
+
+
 def _check_worker(worker):
     if worker is not None:
         worker.check_cancelled()
+
+
 def _report(worker, message, current=None, total=None):
     if worker is None:
         return
@@ -97,9 +106,13 @@ def _report(worker, message, current=None, total=None):
     if current is not None and total:
         payload["percent"] = int((current / total) * 100)
     worker.report_progress(payload)
+
+
 def _single_output_transaction(output_file: str | os.PathLike[str]) -> OutputTransaction:
     output = Path(output_file)
     return OutputTransaction(output.parent)
+
+
 def images_to_pdf(image_files, output_file, worker=None):
     """Convierte imágenes a PDF sin publicar resultados parciales."""
     output = Path(output_file)
@@ -156,6 +169,8 @@ def images_to_pdf(image_files, output_file, worker=None):
 
         outputs = transaction.commit()
         return ConversionResult.completed(outputs, warnings=warnings)
+
+
 def pdf_to_images(pdf_file, output_folder, worker=None):
     """Convierte un PDF en PNG como una única transacción de lote."""
     output_dir = Path(output_folder)
@@ -179,6 +194,8 @@ def pdf_to_images(pdf_file, output_folder, worker=None):
             return ConversionResult.completed(outputs)
     finally:
         document.close()
+
+
 def text_to_docx(text_file, output_file, worker=None):
     """Convierte un TXT en DOCX mediante staging + publicación atómica."""
     output = Path(output_file)
@@ -196,6 +213,8 @@ def text_to_docx(text_file, output_file, worker=None):
         document.save(str(stage))
         _check_worker(worker)
         return ConversionResult.completed(transaction.commit())
+
+
 def docx_to_text(docx_file, output_file, worker=None):
     """Convierte DOCX a TXT sin tocar el destino hasta terminar."""
     output = Path(output_file)
@@ -214,6 +233,8 @@ def docx_to_text(docx_file, output_file, worker=None):
 
         _check_worker(worker)
         return ConversionResult.completed(transaction.commit())
+
+
 def docx_to_pdf(docx_file, output_file, worker=None):
     """Convierte DOCX en PDF simplificado con publicación atómica."""
     output = Path(output_file)
@@ -239,6 +260,8 @@ def docx_to_pdf(docx_file, output_file, worker=None):
         pdf_canvas.save()
         _check_worker(worker)
         return ConversionResult.completed(transaction.commit())
+
+
 def text_to_kml(txt_file, output_file, worker=None):
     """Convierte TXT (lat,lon,nombre opcional) a KML de forma atómica."""
     output = Path(output_file)
@@ -278,6 +301,8 @@ def text_to_kml(txt_file, output_file, worker=None):
             os.fsync(file.fileno())
         _check_worker(worker)
         return ConversionResult.completed(transaction.commit())
+
+
 def kml_to_text(kml_file, output_file, worker=None):
     """Convierte KML a TXT (lat,lon,nombre) mediante staging."""
     from xml.dom import minidom
@@ -306,6 +331,8 @@ def kml_to_text(kml_file, output_file, worker=None):
 
         _check_worker(worker)
         return ConversionResult.completed(transaction.commit())
+
+
 def conversion_task(worker, function, args):
     """Run one conversion and turn ordinary failures into structured results."""
     try:
@@ -319,6 +346,8 @@ def conversion_task(worker, function, args):
     except Exception as error:
         logger.exception("Conversion failed")
         return ConversionResult.failed(str(error))
+
+
 def batch_conversion_task(worker, function, jobs):
     """Convert a folder as all-or-nothing output publication."""
     if not jobs:

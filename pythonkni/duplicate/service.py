@@ -15,15 +15,21 @@ DUPLICATES_DIR_NAME = "DuplicadosEncontrados"
 RESTORE_MANIFEST_PREFIX = "restauracion_duplicados"
 HASH_CHUNK_SIZE = 1024 * 1024
 QUICK_SAMPLE_SIZE = 64 * 1024
+
+
 class DuplicateOperationCancelled(RuntimeError):
     """Raised when a duplicate scan or move is cancelled cooperatively."""
 
     def __init__(self, moved_count: int = 0):
         super().__init__("Operación cancelada por el usuario.")
         self.moved_count = moved_count
+
+
 def _check_cancel(cancel_event: threading.Event | None, moved_count: int = 0) -> None:
     if cancel_event is not None and cancel_event.is_set():
         raise DuplicateOperationCancelled(moved_count)
+
+
 def _physical_identity(path: str | Path) -> tuple[int, int] | None:
     """Return a stable filesystem identity when the platform exposes one."""
     try:
@@ -36,12 +42,16 @@ def _physical_identity(path: str | Path) -> tuple[int, int] | None:
     if not inode:
         return None
     return int(device), int(inode)
+
+
 def _same_physical_file(first_path: str | Path, second_path: str | Path) -> bool:
     """Return True when two paths refer to the same underlying filesystem object."""
     try:
         return os.path.samefile(first_path, second_path)
     except (OSError, ValueError):
         return False
+
+
 def hash_file(
     file_path: str | Path,
     cancel_event: threading.Event | None = None,
@@ -59,6 +69,8 @@ def hash_file(
     except OSError:
         return None
     return hasher.hexdigest()
+
+
 def quick_hash_file(
     file_path: str | Path,
     sample_size: int = QUICK_SAMPLE_SIZE,
@@ -81,6 +93,8 @@ def quick_hash_file(
     except OSError:
         return None
     return hasher.hexdigest()
+
+
 def files_equal(
     first_path: str | Path,
     second_path: str | Path,
@@ -104,6 +118,8 @@ def files_equal(
                     return True
     except OSError:
         return False
+
+
 def _iter_scan_files(
     folder_path: str | Path,
     cancel_event: threading.Event | None = None,
@@ -119,6 +135,8 @@ def _iter_scan_files(
             if path.is_symlink():
                 continue
             yield path
+
+
 def _group_readable_files_by_size(
     folder_path: str | Path,
     cancel_event: threading.Event | None = None,
@@ -160,6 +178,8 @@ def _group_readable_files_by_size(
         seen_paths.append(path)
         groups[stat_result.st_size].append(path)
     return groups
+
+
 def _verified_byte_groups(
     paths: list[Path],
     cancel_event: threading.Event | None = None,
@@ -181,6 +201,8 @@ def _verified_byte_groups(
         if not matched:
             groups.append([path])
     return [group for group in groups if len(group) > 1]
+
+
 def find_duplicates(
     folder_path: str | Path,
     cancel_event: threading.Event | None = None,
@@ -221,6 +243,8 @@ def find_duplicates(
             duplicates[key] = [str(path) for path in group]
 
     return duplicates
+
+
 def _unique_destination(target_folder: Path, filename: str) -> Path:
     destination = target_folder / filename
     stem = Path(filename).stem
@@ -230,6 +254,8 @@ def _unique_destination(target_folder: Path, filename: str) -> Path:
         destination = target_folder / f"{stem}_{counter}{suffix}"
         counter += 1
     return destination
+
+
 def _new_manifest_path(target_folder: Path) -> Path:
     timestamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
     candidate = target_folder / f"{RESTORE_MANIFEST_PREFIX}_{timestamp}.json"
@@ -238,6 +264,8 @@ def _new_manifest_path(target_folder: Path) -> Path:
         candidate = target_folder / f"{RESTORE_MANIFEST_PREFIX}_{timestamp}_{counter}.json"
         counter += 1
     return candidate
+
+
 def _write_manifest_atomic(manifest_path: Path, manifest: dict) -> None:
     temporary = manifest_path.with_name(f"{manifest_path.name}.tmp")
     with temporary.open("w", encoding="utf-8") as file:
@@ -245,17 +273,23 @@ def _write_manifest_atomic(manifest_path: Path, manifest: dict) -> None:
         file.flush()
         os.fsync(file.fileno())
     os.replace(temporary, manifest_path)
+
+
 def _is_inside(path: Path, parent: Path) -> bool:
     try:
         path.resolve(strict=False).relative_to(parent.resolve(strict=False))
         return True
     except ValueError:
         return False
+
+
 def _finish_cancelled_manifest(manifest_path: Path, manifest: dict, moved_count: int) -> None:
     manifest["status"] = "cancelled"
     manifest["cancelled_at"] = datetime.now(timezone.utc).isoformat()
     manifest["moved_count"] = moved_count
     _write_manifest_atomic(manifest_path, manifest)
+
+
 def move_duplicates(
     duplicates,
     base_folder,

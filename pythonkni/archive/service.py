@@ -27,11 +27,14 @@ import logging
 from tools.theme_manager import ThemeManager
 from tools.zip_7zip_utils import _default_extract_path
 
+
 def _report(worker, message: str, current: int | None = None, total: int | None = None) -> None:
     payload: dict[str, object] = {"message": message}
     if current is not None and total:
         payload["percent"] = min(100, int((current / total) * 100))
     worker.report_progress(payload)
+
+
 def _temporary_output(destination: Path) -> Path:
     destination.parent.mkdir(parents=True, exist_ok=True)
     handle, name = tempfile.mkstemp(
@@ -41,10 +44,14 @@ def _temporary_output(destination: Path) -> Path:
     )
     os.close(handle)
     return Path(name)
+
+
 def _publish_file(staging: Path, destination: Path, worker) -> Path:
     worker.check_cancelled()
     os.replace(staging, destination)
     return destination
+
+
 def _archive_input_size(files: list[str]) -> int:
     total = 0
     for file_path in files:
@@ -53,6 +60,8 @@ def _archive_input_size(files: list[str]) -> int:
         except OSError:
             continue
     return total
+
+
 def create_zip_task(worker, files: list[str], destination: str | Path) -> Path:
     """Create a ZIP in staging and atomically publish it after successful completion."""
     destination_path = Path(destination)
@@ -81,6 +90,8 @@ def create_zip_task(worker, files: list[str], destination: str | Path) -> Path:
     except Exception:
         staging.unlink(missing_ok=True)
         raise
+
+
 class _CancellableReader(io.BufferedReader):
     def __init__(self, raw, worker, tracker, label: str):
         super().__init__(raw)
@@ -101,6 +112,8 @@ class _CancellableReader(io.BufferedReader):
         if count:
             self._tracker(count, self._label)
         return count
+
+
 def create_7z_task(worker, files: list[str], destination: str | Path) -> Path:
     """Create a 7Z with cancellable source readers and atomic publication."""
     destination_path = Path(destination)
@@ -135,6 +148,8 @@ def create_7z_task(worker, files: list[str], destination: str | Path) -> Path:
     except Exception:
         staging.unlink(missing_ok=True)
         raise
+
+
 def extract_zip_task(
     worker,
     file_path: str | Path,
@@ -211,6 +226,8 @@ def extract_zip_task(
             raise
 
     return destination_path
+
+
 class _SevenZipWriter(Py7zIO):
     def __init__(self, output: Path, expected_size: int, factory: "_SevenZipFactory") -> None:
         self._output = output
@@ -245,6 +262,8 @@ class _SevenZipWriter(Py7zIO):
     def close(self) -> None:
         if not self._file.closed:
             self._file.close()
+
+
 class _SevenZipFactory(WriterFactory):
     def __init__(
         self,
@@ -298,6 +317,8 @@ class _SevenZipFactory(WriterFactory):
     def close_all(self) -> None:
         for writer in self._writers:
             writer.close()
+
+
 def extract_7z_task(
     worker,
     file_path: str | Path,
@@ -334,4 +355,6 @@ def extract_7z_task(
         raise
 
     return destination_path
+
+
 logger = logging.getLogger(__name__)

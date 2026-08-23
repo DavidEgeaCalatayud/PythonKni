@@ -6,6 +6,7 @@ import shutil
 from dataclasses import dataclass, field
 from pathlib import Path
 
+
 @dataclass
 class CleanResult:
     deleted: int = 0
@@ -16,10 +17,14 @@ class CleanResult:
         self.deleted += other.deleted
         self.failed += other.failed
         self.errors.extend(other.errors)
+
+
 @dataclass(frozen=True)
 class CleanTarget:
     label: str
     path: Path
+
+
 @dataclass
 class CleanPreview:
     targets: list[CleanTarget] = field(default_factory=list)

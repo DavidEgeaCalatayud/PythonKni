@@ -56,6 +56,7 @@ from . import service as _service
 import sys as _sys
 import types as _types
 
+
 class Tool(BaseTool):
     name = "Gestor de Archivos (ZIP/7Z)"
     description = "Comprime y extrae archivos ZIP y 7Z."
@@ -222,6 +223,7 @@ class Tool(BaseTool):
             "Creando 7Z...",
             f"7Z creado en:\n{save_path}",
         )
+
 
 class _CompatibilityModule(_types.ModuleType):
     """Forward legacy monkeypatches to the separated service module."""

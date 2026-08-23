@@ -13,6 +13,7 @@ from reportlab.lib.pagesizes import A4
 from reportlab.pdfgen import canvas
 from pythonkni.core.tasks import WorkerCancelled
 
+
 @dataclass(frozen=True)
 class ConversionResult:
     """Structured result for converter operations."""
