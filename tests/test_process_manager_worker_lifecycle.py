@@ -42,11 +42,8 @@ def test_refresh_keeps_replaced_worker_managed_until_it_finishes(qtbot, monkeypa
     assert second in tool._managed_workers
 
     release.set()
-    qtbot.waitUntil(
-        lambda: not first.isRunning() and not second.isRunning(),
-        timeout=3000,
-    )
     qtbot.waitUntil(lambda: not tool._managed_workers, timeout=3000)
+    assert tool._process_worker is None
 
 
 def test_close_cancels_every_replaced_refresh_worker(qtbot, monkeypatch):
@@ -78,10 +75,7 @@ def test_close_cancels_every_replaced_refresh_worker(qtbot, monkeypatch):
     assert tool.isVisible()
 
     release.set()
-    qtbot.waitUntil(
-        lambda: not first.isRunning() and not second.isRunning(),
-        timeout=3000,
-    )
+    qtbot.waitUntil(lambda: not tool._managed_workers, timeout=3000)
     qtbot.waitUntil(lambda: not tool.isVisible(), timeout=3000)
 
 
@@ -116,5 +110,5 @@ def test_analysis_worker_uses_base_tool_lifecycle(qtbot, monkeypatch):
 
     worker.cancel()
     release.set()
-    qtbot.waitUntil(lambda: not worker.isRunning(), timeout=3000)
-    qtbot.waitUntil(lambda: worker not in tool._managed_workers, timeout=3000)
+    qtbot.waitUntil(lambda: not tool._managed_workers, timeout=3000)
+    assert tool._analysis_worker is None
