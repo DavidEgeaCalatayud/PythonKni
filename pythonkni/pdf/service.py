@@ -1,6 +1,9 @@
 from __future__ import annotations
 
 import os
+import shutil
+import tempfile
+from pathlib import Path
 from typing import Iterable
 
 from pythonkni.core.tasks import WorkerCancelled
@@ -9,6 +12,76 @@ try:
     from PyPDF2 import PdfMerger, PdfReader, PdfWriter
 except ImportError:
     PdfReader = PdfWriter = PdfMerger = None
+
+
+class _PdfOutputTransaction:
+    """Stage PDF-tool outputs and publish them as one logical batch.
+
+    Existing destinations are moved to backups only during commit. If any
+    publication step fails, already-published files are removed and the
+    previous destinations are restored before the staging directory is cleaned.
+    """
+
+    def __init__(self, destination_dir: str | Path):
+        self.destination_dir = Path(destination_dir)
+        self.destination_dir.mkdir(parents=True, exist_ok=True)
+        self.staging_dir = Path(
+            tempfile.mkdtemp(prefix=".pythonkni-pdf-", dir=self.destination_dir)
+        )
+        self._entries: list[tuple[Path, Path]] = []
+        self._committed = False
+
+    def stage_for(self, final_path: str | Path) -> Path:
+        final = Path(final_path)
+        if final.parent.resolve(strict=False) != self.destination_dir.resolve(strict=False):
+            raise ValueError("Todos los destinos de una transacción PDF deben compartir carpeta.")
+        index = len(self._entries)
+        stage = self.staging_dir / f"{index:04d}_{final.stem}.stage{final.suffix}"
+        self._entries.append((stage, final))
+        return stage
+
+    def commit(self) -> list[str]:
+        states: list[tuple[Path, Path | None]] = []
+        try:
+            for index, (stage, final) in enumerate(self._entries):
+                if not stage.exists():
+                    raise FileNotFoundError(f"No existe el resultado temporal: {stage}")
+
+                backup = None
+                if final.exists():
+                    backup = self.staging_dir / f"{index:04d}_{final.name}.backup"
+                    os.replace(final, backup)
+                states.append((final, backup))
+                os.replace(stage, final)
+        except Exception:
+            for final, backup in reversed(states):
+                try:
+                    if final.exists():
+                        final.unlink()
+                    if backup is not None and backup.exists():
+                        os.replace(backup, final)
+                except OSError:
+                    pass
+            raise
+
+        self._committed = True
+        outputs = [str(final) for _, final in self._entries]
+        self._cleanup()
+        return outputs
+
+    def _cleanup(self) -> None:
+        shutil.rmtree(self.staging_dir, ignore_errors=True)
+
+    def abort(self) -> None:
+        if not self._committed:
+            self._cleanup()
+
+    def __enter__(self) -> "_PdfOutputTransaction":
+        return self
+
+    def __exit__(self, exc_type, exc_value, traceback) -> None:
+        if not self._committed:
+            self.abort()
 
 
 def require_pypdf_available() -> bool:
@@ -80,12 +153,16 @@ def _remove_quietly(path: str) -> None:
         pass
 
 
+def _write_writer(writer, output_path: str | Path) -> None:
+    with open(output_path, "wb") as file:
+        writer.write(file)
+
+
 def _write_writer_atomic(writer, output_path: str) -> None:
     temp_path = _temp_path(output_path)
     _remove_quietly(temp_path)
     try:
-        with open(temp_path, "wb") as file:
-            writer.write(file)
+        _write_writer(writer, temp_path)
         os.replace(temp_path, output_path)
     except Exception:
         _remove_quietly(temp_path)
@@ -105,17 +182,16 @@ def split_pdf_task(worker, src: str, out_dir: str, mode: str, spec: str):
     reader = _open_reader(src)
     page_count = len(reader.pages)
     base = os.path.splitext(os.path.basename(src))[0]
-    outputs = []
 
-    try:
+    with _PdfOutputTransaction(out_dir) as transaction:
         if mode == "individual":
             for index in range(page_count):
                 worker.check_cancelled()
                 writer = PdfWriter()
                 writer.add_page(reader.pages[index])
                 output_path = os.path.join(out_dir, f"{base}_p{index + 1}.pdf")
-                _write_writer_atomic(writer, output_path)
-                outputs.append(output_path)
+                stage_path = transaction.stage_for(output_path)
+                _write_writer(writer, stage_path)
                 _progress(
                     worker,
                     f"Dividiendo página {index + 1}/{page_count}",
@@ -134,13 +210,12 @@ def split_pdf_task(worker, src: str, out_dir: str, mode: str, spec: str):
                     worker.check_cancelled()
                     writer.add_page(reader.pages[page_index])
                 output_path = os.path.join(out_dir, f"{base}_part{number}.pdf")
-                _write_writer_atomic(writer, output_path)
-                outputs.append(output_path)
+                stage_path = transaction.stage_for(output_path)
+                _write_writer(writer, stage_path)
                 _progress(worker, f"Creando parte {number}/{total}", number, total)
-    except WorkerCancelled:
-        for output_path in outputs:
-            _remove_quietly(output_path)
-        raise
+
+        worker.check_cancelled()
+        outputs = transaction.commit()
 
     return {"outputs": outputs, "out_dir": out_dir, "mode": mode}
 
@@ -245,6 +320,11 @@ def extract_text_task(
     empty_pages = 0
     extracted = []
     created_files = []
+    transaction = None
+    if one_per_page:
+        if out_dir is None:
+            raise ValueError("Falta la carpeta de salida.")
+        transaction = _PdfOutputTransaction(out_dir)
 
     try:
         for position, page_index in enumerate(pages, start=1):
@@ -278,21 +358,19 @@ def extract_text_task(
             md_content = "\n".join(blocks).strip() + "\n"
 
             if one_per_page:
-                if out_dir is None:
-                    raise ValueError("Falta la carpeta de salida.")
                 output_path = os.path.join(out_dir, f"{base}_p{page_number}.md")
-                temp_path = _temp_path(output_path)
-                _remove_quietly(temp_path)
-                with open(temp_path, "w", encoding="utf-8") as file:
+                stage_path = transaction.stage_for(output_path)
+                with open(stage_path, "w", encoding="utf-8") as file:
                     file.write(md_content)
-                os.replace(temp_path, output_path)
-                created_files.append(output_path)
             else:
                 extracted.append(md_content)
 
             _progress(worker, f"Procesando página {position}/{total}", position, total)
 
-        if not one_per_page:
+        if one_per_page:
+            worker.check_cancelled()
+            created_files = transaction.commit()
+        else:
             if save_path is None:
                 raise ValueError("Falta el archivo de salida.")
             final_md = "\n\n".join(extracted).strip() + "\n"
@@ -307,9 +385,9 @@ def extract_text_task(
                 _remove_quietly(temp_path)
                 raise
             created_files.append(save_path)
-    except WorkerCancelled:
-        for output_path in created_files:
-            _remove_quietly(output_path)
+    except Exception:
+        if transaction is not None:
+            transaction.abort()
         raise
 
     empty_ratio = (empty_pages / total) * 100 if total else 0
