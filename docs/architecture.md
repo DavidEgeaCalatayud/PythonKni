@@ -1,60 +1,94 @@
 # Architecture
 
-PythonKni is a PyQt5 desktop application with a dynamic tool loader. The core
-architecture now separates domain logic from Qt windows for the largest tools.
+PythonKni is a PyQt5 desktop application with a dynamic tool loader. Every
+user-facing domain follows the same layered structure so domain and operating
+system logic are separated from Qt presentation code.
 
 ## Dependency rule
 
-The preferred dependency direction is:
+The dependency direction is:
 
-`models.py` → standard-library/domain data only
+```text
+models.py  <-  service.py  <-  window.py  <-  tools/*_tool.py adapter
+```
 
-`service.py` → models + framework-independent infrastructure, **never PyQt5 or Qt workers**
-
-`window.py` → PyQt5 + models + services
-
-`tools/*_tool.py` → thin compatibility adapter exposing `Tool` to the dynamic loader
+- `models.py` contains framework-independent value objects. It must not import
+  PyQt or `tools` modules.
+- `service.py` owns domain rules, operating-system integration, persistence,
+  parsing and transformations. It must not import PyQt, `tools.worker` or a
+  window module.
+- `window.py` owns PyQt widgets, dialogs and background-thread orchestration.
+- `tools/*_tool.py` remains only as the loader/legacy compatibility adapter.
 
 This lets business rules run in unit tests without constructing a QApplication
-and prevents UI code from becoming the owner of persistence, parsing, operating
-system calls, or document transformations. Cooperative task cancellation uses
-`pythonkni/core/tasks.py`, so long-running services do not need to import the Qt
+and prevents UI modules from becoming the owner of persistence, parsing,
+operating-system calls or document transformations. Cooperative task cancellation
+uses `pythonkni/core/tasks.py`, so long-running services do not depend on the Qt
 `Worker` implementation.
 
-## Current layout
+## Domain layout
+
+The layered domains are:
+
+- `pythonkni/archive/`
+- `pythonkni/config/`
+- `pythonkni/converter/`
+- `pythonkni/disk_analyzer/`
+- `pythonkni/duplicate/`
+- `pythonkni/event_viewer/`
+- `pythonkni/network/`
+- `pythonkni/pdf/`
+- `pythonkni/process_manager/`
+- `pythonkni/startup/`
+- `pythonkni/system_report/`
+- `pythonkni/temp_cleaner/`
+- `pythonkni/wifi/`
+
+Each directory exposes `models.py`, `service.py` and `window.py`. A domain that
+currently has no custom value object still keeps an explicit framework-independent
+`models.py` boundary rather than putting future data structures back into a
+service or window module.
+
+## Shared infrastructure
+
+Shared application infrastructure remains outside the domain packages where it is
+intentionally cross-cutting:
 
 - `main.py`: application entry point and dynamic tool menu.
-- `pythonkni/core/`
-  - `tasks.py`: framework-independent cooperative-cancellation primitive.
-- `pythonkni/event_viewer/`
-  - `models.py`: `EventItem` and `EventResult`.
-  - `service.py`: Windows event collection, parsing, risk classification and exports.
-  - `window.py`: Qt worker, detail dialog and tool window.
-- `pythonkni/startup/`
-  - `models.py`: startup-entry domain model.
-  - `service.py`: registry/startup-folder discovery and transactional enable/disable logic.
-  - `window.py`: startup-manager Qt window.
-- `pythonkni/system_report/`
-  - `models.py`: report data model.
-  - `service.py`: collection and TXT/HTML/PDF rendering.
-  - `window.py`: report worker and Qt window.
-- `pythonkni/pdf/`
-  - `service.py`: PDF parsing, splitting, merging, OCR and reorder tasks.
-  - `window.py`: PDF Toolkit Qt window.
-- `tools/*_tool.py`: loader-compatible adapters. The four migrated tools contain
-  no business implementation there.
-- `tools/worker.py`: reusable Qt worker that adapts the framework-independent
-  cancellation primitive to Qt signals and `QThread`.
+- `pythonkni/core/tasks.py`: framework-independent cooperative cancellation.
+- `tools/base_tool.py`: common Qt tool-window lifecycle contract.
+- `tools/worker.py`: reusable Qt worker and signal adapter.
 - `tools/app_paths.py`: application-specific filesystem paths.
+- `tools/csv_utils.py`: shared spreadsheet-safe CSV helpers.
+- `tools/theme_manager.py`, `tools/language_manager.py` and logging helpers:
+  application-wide UI/runtime infrastructure.
 - `assets/`: static UI assets.
 
-## Migration strategy
+These modules are infrastructure rather than user-facing domains; they are not
+allowed to become alternate homes for domain business logic.
 
-The loader still discovers `tools/*_tool.py`, so the refactor does not change the
-plugin contract or menu behavior. New or substantially modified tools should put
-domain code under `pythonkni/<domain>/` first and keep the legacy module as an
-adapter. Remaining tools can be migrated incrementally with the same pattern.
+## Compatibility adapters
 
-A `models.py` module is used when a domain has stable data structures. Domains
-without a useful model should not create placeholder classes merely to satisfy a
-folder convention.
+The dynamic loader still discovers `tools/*_tool.py`, so the migration does not
+change the plugin contract or menu behavior. Migrated tool modules are thin
+adapters that expose the corresponding `pythonkni.<domain>.window` module. Legacy
+imports and existing tests therefore continue to resolve while the implementation
+lives under `pythonkni/`.
+
+Where older tests or integrations monkeypatch symbols through a legacy tool
+module, the compatibility layer forwards those assignments to the separated
+service module so dependency injection behavior is preserved during the migration.
+
+## Architecture enforcement
+
+`tests/test_architecture_boundaries.py` enumerates the complete domain set and
+checks that:
+
+- every domain has `models.py`, `service.py` and `window.py`;
+- models do not depend on Qt or `tools`;
+- services do not depend on Qt, `tools.worker` or windows;
+- loader-facing tool modules stay thin compatibility adapters;
+- every domain window still implements the `BaseTool` contract.
+
+This turns the layered architecture into a CI-enforced boundary rather than a
+convention that can silently regress.

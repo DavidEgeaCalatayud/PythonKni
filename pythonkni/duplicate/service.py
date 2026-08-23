@@ -1,0 +1,391 @@
+from __future__ import annotations
+import hashlib
+import json
+import logging
+import os
+import shutil
+import threading
+from collections import defaultdict
+from datetime import datetime, timezone
+from pathlib import Path
+from pythonkni.core.tasks import WorkerCancelled
+
+logger = logging.getLogger(__name__)
+DUPLICATES_DIR_NAME = "DuplicadosEncontrados"
+RESTORE_MANIFEST_PREFIX = "restauracion_duplicados"
+HASH_CHUNK_SIZE = 1024 * 1024
+QUICK_SAMPLE_SIZE = 64 * 1024
+
+
+class DuplicateOperationCancelled(RuntimeError):
+    """Raised when a duplicate scan or move is cancelled cooperatively."""
+
+    def __init__(self, moved_count: int = 0):
+        super().__init__("Operación cancelada por el usuario.")
+        self.moved_count = moved_count
+
+
+def _check_cancel(cancel_event: threading.Event | None, moved_count: int = 0) -> None:
+    if cancel_event is not None and cancel_event.is_set():
+        raise DuplicateOperationCancelled(moved_count)
+
+
+def _physical_identity(path: str | Path) -> tuple[int, int] | None:
+    """Return a stable filesystem identity when the platform exposes one."""
+    try:
+        stat_result = Path(path).stat()
+    except OSError:
+        return None
+
+    inode = getattr(stat_result, "st_ino", 0)
+    device = getattr(stat_result, "st_dev", 0)
+    if not inode:
+        return None
+    return int(device), int(inode)
+
+
+def _same_physical_file(first_path: str | Path, second_path: str | Path) -> bool:
+    """Return True when two paths refer to the same underlying filesystem object."""
+    try:
+        return os.path.samefile(first_path, second_path)
+    except (OSError, ValueError):
+        return False
+
+
+def hash_file(
+    file_path: str | Path,
+    cancel_event: threading.Event | None = None,
+) -> str | None:
+    """Return the SHA-256 digest for a file, or None when it cannot be read."""
+    hasher = hashlib.sha256()
+    try:
+        with open(file_path, "rb") as file:
+            while True:
+                _check_cancel(cancel_event)
+                chunk = file.read(HASH_CHUNK_SIZE)
+                if not chunk:
+                    break
+                hasher.update(chunk)
+    except OSError:
+        return None
+    return hasher.hexdigest()
+
+
+def quick_hash_file(
+    file_path: str | Path,
+    sample_size: int = QUICK_SAMPLE_SIZE,
+    cancel_event: threading.Event | None = None,
+) -> str | None:
+    """Hash only file edges with BLAKE2b to cheaply narrow same-size candidates."""
+    path = Path(file_path)
+    try:
+        _check_cancel(cancel_event)
+        size = path.stat().st_size
+        hasher = hashlib.blake2b(digest_size=16)
+        hasher.update(size.to_bytes(8, "little", signed=False))
+        with path.open("rb") as file:
+            _check_cancel(cancel_event)
+            hasher.update(file.read(sample_size))
+            if size > sample_size:
+                _check_cancel(cancel_event)
+                file.seek(max(0, size - sample_size))
+                hasher.update(file.read(sample_size))
+    except OSError:
+        return None
+    return hasher.hexdigest()
+
+
+def files_equal(
+    first_path: str | Path,
+    second_path: str | Path,
+    cancel_event: threading.Event | None = None,
+) -> bool:
+    """Compare two files byte for byte after checking their current sizes."""
+    first = Path(first_path)
+    second = Path(second_path)
+    try:
+        _check_cancel(cancel_event)
+        if first.stat().st_size != second.stat().st_size:
+            return False
+        with first.open("rb") as first_file, second.open("rb") as second_file:
+            while True:
+                _check_cancel(cancel_event)
+                first_chunk = first_file.read(HASH_CHUNK_SIZE)
+                second_chunk = second_file.read(HASH_CHUNK_SIZE)
+                if first_chunk != second_chunk:
+                    return False
+                if not first_chunk:
+                    return True
+    except OSError:
+        return False
+
+
+def _iter_scan_files(
+    folder_path: str | Path,
+    cancel_event: threading.Event | None = None,
+):
+    base = Path(folder_path)
+    excluded_name = DUPLICATES_DIR_NAME.casefold()
+    for root, directories, filenames in os.walk(base):
+        _check_cancel(cancel_event)
+        directories[:] = [name for name in directories if name.casefold() != excluded_name]
+        for filename in filenames:
+            _check_cancel(cancel_event)
+            path = Path(root) / filename
+            if path.is_symlink():
+                continue
+            yield path
+
+
+def _group_readable_files_by_size(
+    folder_path: str | Path,
+    cancel_event: threading.Event | None = None,
+) -> dict[int, list[Path]]:
+    """Group files by size while keeping only one path per physical file.
+
+    Hardlinks are multiple directory entries for the same physical file. Treating
+    them as duplicates is misleading because moving one link does not free its
+    data blocks and may remove a path the user intentionally relies on.
+    """
+    groups: dict[int, list[Path]] = defaultdict(list)
+    seen_identities: dict[tuple[int, int], Path] = {}
+    seen_paths: list[Path] = []
+
+    for path in _iter_scan_files(folder_path, cancel_event=cancel_event):
+        _check_cancel(cancel_event)
+        try:
+            stat_result = path.stat()
+        except OSError:
+            logger.debug("No se pudo leer el tamaño de %s", path, exc_info=True)
+            continue
+
+        identity = _physical_identity(path)
+        if identity is not None:
+            existing = seen_identities.get(identity)
+            if existing is not None:
+                logger.info("Hardlink ignorado: %s apunta al mismo archivo que %s", path, existing)
+                continue
+            seen_identities[identity] = path
+        else:
+            existing = next(
+                (candidate for candidate in seen_paths if _same_physical_file(candidate, path)),
+                None,
+            )
+            if existing is not None:
+                logger.info("Hardlink ignorado: %s apunta al mismo archivo que %s", path, existing)
+                continue
+
+        seen_paths.append(path)
+        groups[stat_result.st_size].append(path)
+    return groups
+
+
+def _verified_byte_groups(
+    paths: list[Path],
+    cancel_event: threading.Event | None = None,
+) -> list[list[Path]]:
+    """Split a secure-hash group into byte-identical groups, excluding hardlinks."""
+    groups: list[list[Path]] = []
+    for path in sorted(paths, key=lambda item: str(item).casefold()):
+        _check_cancel(cancel_event)
+        matched = False
+        for group in groups:
+            if _same_physical_file(group[0], path):
+                logger.info("Hardlink ignorado durante verificación: %s", path)
+                matched = True
+                break
+            if files_equal(group[0], path, cancel_event=cancel_event):
+                group.append(path)
+                matched = True
+                break
+        if not matched:
+            groups.append([path])
+    return [group for group in groups if len(group) > 1]
+
+
+def find_duplicates(
+    folder_path: str | Path,
+    cancel_event: threading.Event | None = None,
+) -> dict[str, list[str]]:
+    """Find duplicates with size, quick hash, SHA-256 and byte comparison stages."""
+    size_groups = _group_readable_files_by_size(folder_path, cancel_event=cancel_event)
+    quick_groups: dict[tuple[int, str], list[Path]] = defaultdict(list)
+
+    for size, paths in size_groups.items():
+        _check_cancel(cancel_event)
+        if len(paths) < 2:
+            continue
+        for path in paths:
+            _check_cancel(cancel_event)
+            quick_hash = quick_hash_file(path, cancel_event=cancel_event)
+            if quick_hash is not None:
+                quick_groups[(size, quick_hash)].append(path)
+
+    secure_groups: dict[str, list[Path]] = defaultdict(list)
+    for paths in quick_groups.values():
+        _check_cancel(cancel_event)
+        if len(paths) < 2:
+            continue
+        for path in paths:
+            _check_cancel(cancel_event)
+            secure_hash = hash_file(path, cancel_event=cancel_event)
+            if secure_hash is not None:
+                secure_groups[secure_hash].append(path)
+
+    duplicates: dict[str, list[str]] = {}
+    for secure_hash, paths in secure_groups.items():
+        _check_cancel(cancel_event)
+        if len(paths) < 2:
+            continue
+        verified_groups = _verified_byte_groups(paths, cancel_event=cancel_event)
+        for index, group in enumerate(verified_groups, start=1):
+            key = secure_hash if index == 1 else f"{secure_hash}:{index}"
+            duplicates[key] = [str(path) for path in group]
+
+    return duplicates
+
+
+def _unique_destination(target_folder: Path, filename: str) -> Path:
+    destination = target_folder / filename
+    stem = Path(filename).stem
+    suffix = Path(filename).suffix
+    counter = 1
+    while destination.exists():
+        destination = target_folder / f"{stem}_{counter}{suffix}"
+        counter += 1
+    return destination
+
+
+def _new_manifest_path(target_folder: Path) -> Path:
+    timestamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
+    candidate = target_folder / f"{RESTORE_MANIFEST_PREFIX}_{timestamp}.json"
+    counter = 1
+    while candidate.exists():
+        candidate = target_folder / f"{RESTORE_MANIFEST_PREFIX}_{timestamp}_{counter}.json"
+        counter += 1
+    return candidate
+
+
+def _write_manifest_atomic(manifest_path: Path, manifest: dict) -> None:
+    temporary = manifest_path.with_name(f"{manifest_path.name}.tmp")
+    with temporary.open("w", encoding="utf-8") as file:
+        json.dump(manifest, file, ensure_ascii=False, indent=2)
+        file.flush()
+        os.fsync(file.fileno())
+    os.replace(temporary, manifest_path)
+
+
+def _is_inside(path: Path, parent: Path) -> bool:
+    try:
+        path.resolve(strict=False).relative_to(parent.resolve(strict=False))
+        return True
+    except ValueError:
+        return False
+
+
+def _finish_cancelled_manifest(manifest_path: Path, manifest: dict, moved_count: int) -> None:
+    manifest["status"] = "cancelled"
+    manifest["cancelled_at"] = datetime.now(timezone.utc).isoformat()
+    manifest["moved_count"] = moved_count
+    _write_manifest_atomic(manifest_path, manifest)
+
+
+def move_duplicates(
+    duplicates,
+    base_folder,
+    cancel_event: threading.Event | None = None,
+):
+    """Move revalidated copies and create an atomic restoration manifest."""
+    base = Path(base_folder)
+    target_folder = base / DUPLICATES_DIR_NAME
+    target_folder.mkdir(parents=True, exist_ok=True)
+    manifest_path = _new_manifest_path(target_folder)
+    manifest = {
+        "version": 1,
+        "created_at": datetime.now(timezone.utc).isoformat(),
+        "base_folder": str(base.resolve(strict=False)),
+        "duplicates_folder": str(target_folder.resolve(strict=False)),
+        "status": "in_progress",
+        "restore_instructions": "Move each existing destination back to its source path.",
+        "moves": [],
+    }
+    _write_manifest_atomic(manifest_path, manifest)
+
+    moved_count = 0
+    try:
+        for paths in duplicates.values():
+            _check_cancel(cancel_event, moved_count)
+            if len(paths) < 2:
+                continue
+
+            original = Path(paths[0])
+            if not original.exists() or _is_inside(original, target_folder):
+                continue
+
+            for file_path in paths[1:]:
+                _check_cancel(cancel_event, moved_count)
+                source = Path(file_path)
+                if not source.exists() or source.is_symlink() or _is_inside(source, target_folder):
+                    continue
+
+                if _same_physical_file(original, source):
+                    logger.info(
+                        "Se omite hardlink %s porque apunta al mismo archivo físico que %s",
+                        source,
+                        original,
+                    )
+                    continue
+
+                source_hash = hash_file(source, cancel_event=cancel_event)
+                original_hash = hash_file(original, cancel_event=cancel_event)
+                if source_hash is None or original_hash is None or source_hash != original_hash:
+                    logger.warning("Se omite %s porque ya no coincide con %s", source, original)
+                    continue
+
+                if not files_equal(original, source, cancel_event=cancel_event):
+                    logger.warning(
+                        "Se omite %s porque falla la comparación final con %s", source, original
+                    )
+                    continue
+
+                _check_cancel(cancel_event, moved_count)
+                destination = _unique_destination(target_folder, source.name)
+                try:
+                    size = source.stat().st_size
+                except OSError:
+                    continue
+
+                entry = {
+                    "source": str(source.resolve(strict=False)),
+                    "destination": str(destination.resolve(strict=False)),
+                    "retained_original": str(original.resolve(strict=False)),
+                    "sha256": source_hash,
+                    "size": size,
+                    "status": "planned",
+                }
+                manifest["moves"].append(entry)
+                _write_manifest_atomic(manifest_path, manifest)
+
+                _check_cancel(cancel_event, moved_count)
+                try:
+                    shutil.move(str(source), str(destination))
+                except Exception as error:
+                    entry["status"] = "failed"
+                    entry["error"] = str(error)
+                    _write_manifest_atomic(manifest_path, manifest)
+                    logger.warning("No se pudo mover %s", source, exc_info=True)
+                    continue
+
+                entry["status"] = "moved"
+                entry["moved_at"] = datetime.now(timezone.utc).isoformat()
+                moved_count += 1
+                _write_manifest_atomic(manifest_path, manifest)
+    except DuplicateOperationCancelled as error:
+        _finish_cancelled_manifest(manifest_path, manifest, moved_count)
+        raise DuplicateOperationCancelled(moved_count) from error
+
+    manifest["status"] = "complete"
+    manifest["completed_at"] = datetime.now(timezone.utc).isoformat()
+    manifest["moved_count"] = moved_count
+    _write_manifest_atomic(manifest_path, manifest)
+    return moved_count
