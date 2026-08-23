@@ -6,7 +6,6 @@ from PyQt5.QtWidgets import (
     QApplication,
     QComboBox,
     QLabel,
-    QMainWindow,
     QMessageBox,
     QPushButton,
     QVBoxLayout,
@@ -67,13 +66,22 @@ class Tool(BaseTool):
         self.close_button.setText(LanguageManager.translate("Cerrar"))
 
     def save_changes(self):
-        config = save_runtime_config(
-            CONFIG_FILE,
-            {
-                "theme": self.theme_combobox.currentText(),
-                "language": self.language_combobox.currentText(),
-            },
-        )
+        try:
+            config = save_runtime_config(
+                CONFIG_FILE,
+                {
+                    "theme": self.theme_combobox.currentText(),
+                    "language": self.language_combobox.currentText(),
+                },
+            )
+        except (OSError, ValueError, TypeError) as error:
+            logger.exception("Could not save config file: %s", CONFIG_FILE)
+            QMessageBox.critical(
+                self,
+                "Error al guardar",
+                f"No se pudo guardar la configuración. No se han aplicado los cambios.\n\n{error}",
+            )
+            return
 
         self.theme_combobox.setCurrentText(config["theme"])
         self.language_combobox.setCurrentText(config["language"])

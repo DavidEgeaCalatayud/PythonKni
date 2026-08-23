@@ -9,7 +9,7 @@ import shutil
 from dataclasses import dataclass, field
 from pathlib import Path
 
-from PyQt5.QtWidgets import QCheckBox, QMainWindow, QMessageBox, QPushButton, QVBoxLayout, QWidget
+from PyQt5.QtWidgets import QCheckBox, QMessageBox, QPushButton, QVBoxLayout, QWidget
 
 
 logger = logging.getLogger(__name__)
@@ -48,66 +48,26 @@ def _resolve_existing(path: Path) -> Path | None:
     return resolved if resolved.exists() and resolved.is_dir() else None
 
 
-def _is_safe_clean_root(path: Path) -> bool:
-    """Permite solo cachés y temporales acotados; nunca raíces generales del sistema."""
-    resolved = _resolve_existing(path)
-    if resolved is None:
-        return False
-
-    system = platform.system()
-    home = Path.home().resolve()
-    safe_roots: list[Path] = []
-
-    if system == "Windows":
-        for env_name in ("TEMP", "TMP", "LOCALAPPDATA"):
-            env_path = os.environ.get(env_name)
-            if env_path:
-                root = _resolve_existing(Path(env_path))
-                if root:
-                    safe_roots.append(root)
-
-        windows_temp = _resolve_existing(Path(os.environ.get("SystemRoot", "C:/Windows")) / "Temp")
-        if windows_temp:
-            safe_roots.append(windows_temp)
-    else:
-        for candidate in (
-            home / ".cache",
-            home / "Library" / "Caches",
-            Path(os.environ.get("XDG_CACHE_HOME", "")),
-        ):
-            root = _resolve_existing(candidate)
-            if root:
-                safe_roots.append(root)
-
-    return any(resolved == root or root in resolved.parents for root in safe_roots)
+def _resolved_path(path: Path) -> Path | None:
+    try:
+        return path.expanduser().resolve()
+    except OSError:
+        return None
 
 
-def _unique_safe_targets(targets: list[CleanTarget]) -> list[CleanTarget]:
-    seen: set[Path] = set()
-    safe_targets: list[CleanTarget] = []
-
-    for target in targets:
-        resolved = _resolve_existing(target.path)
-        if resolved and resolved not in seen and _is_safe_clean_root(resolved):
-            safe_targets.append(CleanTarget(target.label, resolved))
-            seen.add(resolved)
-
-    return safe_targets
-
-
-def get_temp_targets() -> list[CleanTarget]:
+def _temp_candidates() -> list[CleanTarget]:
     if platform.system() != "Windows":
         return []
 
-    targets = []
+    targets: list[CleanTarget] = []
     for env_name in ("TEMP", "TMP"):
         env_path = os.environ.get(env_name)
         if env_path:
             targets.append(CleanTarget(f"Temporal de usuario ({env_name})", Path(env_path)))
-    return _unique_safe_targets(targets)
+    return targets
 
 
-def get_browser_cache_targets() -> list[CleanTarget]:
+def _browser_cache_candidates() -> list[CleanTarget]:
     system = platform.system()
     home = Path.home()
 
@@ -144,15 +104,138 @@ def get_browser_cache_targets() -> list[CleanTarget]:
             if (profile / "cache2").is_dir()
         )
 
-    return _unique_safe_targets(targets)
+    return targets
+
+
+def _log_candidates() -> list[CleanTarget]:
+    if platform.system() != "Windows":
+        return []
+    return [CleanTarget("Windows Temp", Path(os.environ.get("SystemRoot", "C:/Windows")) / "Temp")]
+
+
+def _allowed_clean_containers() -> set[Path]:
+    """Return broad containers used only to locate known clean targets.
+
+    A container being present here never makes the container itself safe to empty.
+    """
+    containers: set[Path] = set()
+    system = platform.system()
+    home = _resolved_path(Path.home())
+
+    if system == "Windows":
+        local_app_data = os.environ.get("LOCALAPPDATA")
+        if local_app_data:
+            resolved = _resolved_path(Path(local_app_data))
+            if resolved:
+                containers.add(resolved)
+
+        system_root = _resolved_path(Path(os.environ.get("SystemRoot", "C:/Windows")))
+        if system_root:
+            containers.add(system_root)
+
+        for env_name in ("TEMP", "TMP"):
+            env_path = os.environ.get(env_name)
+            if env_path:
+                resolved = _resolved_path(Path(env_path))
+                if resolved:
+                    containers.add(resolved.parent)
+    elif system == "Darwin":
+        if home:
+            cache_home = _resolved_path(home / "Library" / "Caches")
+            if cache_home:
+                containers.add(cache_home)
+    else:
+        cache_home = _resolved_path(
+            Path(os.environ.get("XDG_CACHE_HOME", home / ".cache" if home else ""))
+        )
+        if cache_home:
+            containers.add(cache_home)
+
+    return containers
+
+
+def _forbidden_clean_roots() -> set[Path]:
+    """Return general-purpose roots that must never be emptied directly."""
+    forbidden: set[Path] = set()
+    home = _resolved_path(Path.home())
+    if home:
+        forbidden.add(home)
+        if home.anchor:
+            anchor = _resolved_path(Path(home.anchor))
+            if anchor:
+                forbidden.add(anchor)
+
+    if platform.system() == "Windows":
+        for env_name in ("LOCALAPPDATA", "SystemRoot"):
+            env_path = os.environ.get(env_name)
+            if env_path:
+                resolved = _resolved_path(Path(env_path))
+                if resolved:
+                    forbidden.add(resolved)
+                    if resolved.anchor:
+                        anchor = _resolved_path(Path(resolved.anchor))
+                        if anchor:
+                            forbidden.add(anchor)
+
+        for env_name in ("TEMP", "TMP"):
+            env_path = os.environ.get(env_name)
+            if env_path:
+                resolved = _resolved_path(Path(env_path))
+                if resolved:
+                    forbidden.add(resolved.parent)
+    else:
+        for container in _allowed_clean_containers():
+            forbidden.add(container)
+
+    return forbidden
+
+
+def _allowed_exact_clean_targets() -> set[Path]:
+    allowed: set[Path] = set()
+    for target in _temp_candidates() + _browser_cache_candidates() + _log_candidates():
+        resolved = _resolve_existing(target.path)
+        if resolved:
+            allowed.add(resolved)
+    return allowed
+
+
+def _is_safe_clean_root(path: Path) -> bool:
+    """Allow only exact known cleanup targets, never their broad containers."""
+    resolved = _resolve_existing(path)
+    if resolved is None or resolved in _forbidden_clean_roots():
+        return False
+
+    allowed_targets = _allowed_exact_clean_targets()
+    if resolved not in allowed_targets:
+        return False
+
+    containers = _allowed_clean_containers()
+    return any(container in resolved.parents for container in containers)
+
+
+def _unique_safe_targets(targets: list[CleanTarget]) -> list[CleanTarget]:
+    seen: set[Path] = set()
+    safe_targets: list[CleanTarget] = []
+
+    for target in targets:
+        resolved = _resolve_existing(target.path)
+        if resolved and resolved not in seen and _is_safe_clean_root(resolved):
+            safe_targets.append(CleanTarget(target.label, resolved))
+            seen.add(resolved)
+
+    return safe_targets
+
+
+def get_temp_targets() -> list[CleanTarget]:
+    return _unique_safe_targets(_temp_candidates())
+
+
+def get_browser_cache_targets() -> list[CleanTarget]:
+    return _unique_safe_targets(_browser_cache_candidates())
 
 
 def get_log_targets() -> list[CleanTarget]:
-    if platform.system() != "Windows":
-        return []
-    return _unique_safe_targets(
-        [CleanTarget("Windows Temp", Path(os.environ.get("SystemRoot", "C:/Windows")) / "Temp")]
-    )
+    return _unique_safe_targets(_log_candidates())
 
 
 def build_preview(targets: list[CleanTarget]) -> CleanPreview:
