@@ -82,8 +82,8 @@ PythonKni/
 ├─ assets/                      Runtime UI assets packaged with the application
 ├─ docs/
 │  ├─ architecture.md           Layering and dependency boundaries
-│  ├─ security.md               Security and secret-handling notes
-│  └─ usage.md                  Runtime/build usage notes
+│  ├─ security.md               Security and sensitive-operation guidance
+│  └─ usage.md                  Per-tool operation and troubleshooting guide
 ├─ pythonkni/
 │  ├─ core/
 │  │  └─ tasks.py               Framework-independent cancellation primitives
@@ -412,7 +412,7 @@ Some operations are inherently destructive or privileged. Back up important data
 
 ## Roadmap
 
-The previous roadmap contained several items that are now complete: layered service/UI separation, the plugin contract, substantial archive tests, managed background work/cancellation, progress feedback and CI executable builds are no longer listed as future work.
+The previous roadmap contained several items that are now complete: layered service/UI separation, the plugin contract, substantial archive tests, managed background work/cancellation, progress feedback, CI executable builds and the core usage/security documentation refresh are no longer listed as future work.
 
 The active roadmap is intentionally limited to work that remains open:
 
@@ -432,8 +432,6 @@ The active roadmap is intentionally limited to work that remains open:
 
 ### Documentation and releases
 
-- [ ] Expand per-tool instructions in `docs/usage.md`.
-- [ ] Expand `docs/security.md` with guarantees and risks for destructive/sensitive tools.
 - [ ] Update `CHANGELOG.md` for the recent architecture, safety and CI work.
 - [ ] Add screenshots/demo media for the main application and key tools.
 - [ ] Add tagged GitHub release automation and publish validated build artifacts.
@@ -444,8 +442,8 @@ The active roadmap is intentionally limited to work that remains open:
 ## Documentation
 
 - [`docs/architecture.md`](docs/architecture.md) — dependency rules, domains and compatibility adapters
-- [`docs/usage.md`](docs/usage.md) — current execution/build notes
-- [`docs/security.md`](docs/security.md) — authorization and secret-handling notes
+- [`docs/usage.md`](docs/usage.md) — per-tool operation, permissions, cancellation and troubleshooting
+- [`docs/security.md`](docs/security.md) — security controls, sensitive data flows, destructive operations and limits
 - [`CHANGELOG.md`](CHANGELOG.md) — project change history
 
 ---
