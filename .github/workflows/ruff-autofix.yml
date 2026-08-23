@@ -1,0 +1,83 @@
+name: Ruff autofix migration
+
+on:
+  push:
+    branches:
+      - quality/ruff-f-i
+
+permissions:
+  contents: write
+
+jobs:
+  autofix:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: quality/ruff-f-i
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.10"
+
+      - name: Preserve legacy window re-exports
+        shell: bash
+        run: |
+          python - <<'PY'
+          import re
+          from pathlib import Path
+
+          block_pattern = re.compile(
+              r"from \\.(service|models) import \\(\\n(?P<body>.*?)\\n\\)",
+              re.DOTALL,
+          )
+          single_pattern = re.compile(
+              r"^from \\.(service|models) import ([A-Za-z_][A-Za-z0-9_]*)$",
+              re.MULTILINE,
+          )
+
+          def make_explicit(body: str) -> str:
+              lines = []
+              for line in body.splitlines():
+                  match = re.fullmatch(r"(\\s*)([A-Za-z_][A-Za-z0-9_]*)(,?)(\\s*)", line)
+                  if match:
+                      indent, name, comma, trailing = match.groups()
+                      line = f"{indent}{name} as {name}{comma}{trailing}"
+                  lines.append(line)
+              return "\\n".join(lines)
+
+          for path in Path("pythonkni").glob("*/window.py"):
+              text = path.read_text(encoding="utf-8")
+              text = block_pattern.sub(
+                  lambda match: (
+                      f"from .{match.group(1)} import (\\n"
+                      f"{make_explicit(match.group('body'))}\\n)"
+                  ),
+                  text,
+              )
+              text = single_pattern.sub(
+                  lambda match: (
+                      f"from .{match.group(1)} import {match.group(2)} as {match.group(2)}"
+                  ),
+                  text,
+              )
+              path.write_text(text, encoding="utf-8")
+          PY
+
+      - name: Apply safe Ruff fixes
+        run: |
+          python -m pip install "ruff>=0.15"
+          python -m ruff check --fix .
+
+      - name: Commit fixes
+        shell: bash
+        run: |
+          if git diff --quiet; then
+            echo "No changes to commit"
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add .
+          git commit -m "Apply Ruff F and I baseline fixes"
+          git push origin HEAD:quality/ruff-f-i
