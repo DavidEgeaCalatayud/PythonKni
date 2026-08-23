@@ -1,42 +1,82 @@
 from __future__ import annotations
-from tools.base_tool import BaseTool
-import logging
-import os
-import platform
-import shutil
-from dataclasses import dataclass, field
-from pathlib import Path
-from PyQt5.QtWidgets import QCheckBox, QMessageBox, QPushButton, QVBoxLayout, QWidget
-from .models import (
-    CleanPreview,
-    CleanResult,
-)
-from .service import (
-    CleanTarget,
-    _allowed_clean_containers,
-    _allowed_exact_clean_targets,
-    _browser_cache_candidates,
-    _forbidden_clean_roots,
-    _is_safe_clean_root,
-    _log_candidates,
-    _resolve_existing,
-    _resolved_path,
-    _temp_candidates,
-    _unique_safe_targets,
-    build_preview,
-    clean_browser_cache,
-    clean_logs,
-    clean_targets,
-    clean_temp,
-    delete_folder_contents,
-    get_browser_cache_targets,
-    get_log_targets,
-    get_temp_targets,
-    logger,
-)
-from . import service as _service
+
 import sys as _sys
 import types as _types
+
+from PyQt5.QtWidgets import QCheckBox, QMessageBox, QPushButton, QVBoxLayout, QWidget
+
+from tools.base_tool import BaseTool
+
+from . import service as _service
+from .models import (
+    CleanPreview as CleanPreview,
+)
+from .models import (
+    CleanResult as CleanResult,
+)
+from .service import (
+    CleanTarget as CleanTarget,
+)
+from .service import (
+    _allowed_clean_containers as _allowed_clean_containers,
+)
+from .service import (
+    _allowed_exact_clean_targets as _allowed_exact_clean_targets,
+)
+from .service import (
+    _browser_cache_candidates as _browser_cache_candidates,
+)
+from .service import (
+    _forbidden_clean_roots as _forbidden_clean_roots,
+)
+from .service import (
+    _is_safe_clean_root as _is_safe_clean_root,
+)
+from .service import (
+    _log_candidates as _log_candidates,
+)
+from .service import (
+    _resolve_existing as _resolve_existing,
+)
+from .service import (
+    _resolved_path as _resolved_path,
+)
+from .service import (
+    _temp_candidates as _temp_candidates,
+)
+from .service import (
+    _unique_safe_targets as _unique_safe_targets,
+)
+from .service import (
+    build_preview as build_preview,
+)
+from .service import (
+    clean_browser_cache as clean_browser_cache,
+)
+from .service import (
+    clean_logs as clean_logs,
+)
+from .service import (
+    clean_targets as clean_targets,
+)
+from .service import (
+    clean_temp as clean_temp,
+)
+from .service import (
+    delete_folder_contents as delete_folder_contents,
+)
+from .service import (
+    get_browser_cache_targets as get_browser_cache_targets,
+)
+from .service import (
+    get_log_targets as get_log_targets,
+)
+from .service import (
+    get_temp_targets as get_temp_targets,
+)
+from .service import (
+    logger as logger,
+)
 
 
 class Tool(BaseTool):

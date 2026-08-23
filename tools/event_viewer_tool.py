@@ -5,4 +5,3 @@ New code should import from :mod:`pythonkni.event_viewer`.
 
 from pythonkni.event_viewer.models import *
 from pythonkni.event_viewer.service import *
-from pythonkni.event_viewer.window import EventDetailDialog, EventWorker, Tool

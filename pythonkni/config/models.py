@@ -1,10 +1,4 @@
 from __future__ import annotations
-import json
-import os
-import tempfile
-from pathlib import Path
-from typing import Any
-import logging
 
 DEFAULT_CONFIG: dict[str, str] = {
     "theme": "Claro",

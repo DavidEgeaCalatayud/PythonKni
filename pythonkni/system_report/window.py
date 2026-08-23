@@ -9,9 +9,9 @@ from PyQt5.QtWidgets import (
     QHBoxLayout,
     QLabel,
     QMessageBox,
-    QPushButton,
     QPlainTextEdit,
     QProgressBar,
+    QPushButton,
     QTableWidget,
     QTableWidgetItem,
     QTabWidget,
@@ -22,7 +22,7 @@ from PyQt5.QtWidgets import (
 from tools.base_tool import BaseTool
 from tools.theme_manager import ThemeManager
 
-from .models import ReportData
+from .models import ReportData as ReportData
 from .service import collect_report, report_to_html, report_to_pdf, report_to_text
 
 

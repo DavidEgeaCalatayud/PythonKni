@@ -1,24 +1,21 @@
 from __future__ import annotations
-from .models import (
-    DiscoveredHost,
-    NetworkInterface,
-    OpenPort,
-)
-from tools.csv_utils import safe_csv_cell
-import csv
+
 import ipaddress
-import json
 import logging
 import platform
 import re
 import socket
 import subprocess
 import threading
-import time
 from concurrent.futures import FIRST_COMPLETED, ThreadPoolExecutor, wait
-from dataclasses import dataclass
+
 import psutil
-from tools.app_paths import SCAN_HISTORY_FILE, ensure_app_dirs
+
+from .models import (
+    DiscoveredHost,
+    NetworkInterface,
+    OpenPort,
+)
 
 logger = logging.getLogger(__name__)
 MAX_NETWORK_HOSTS = 4096

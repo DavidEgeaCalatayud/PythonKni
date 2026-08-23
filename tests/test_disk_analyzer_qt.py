@@ -1,4 +1,3 @@
-from pathlib import Path
 
 from tools.disk_analyzer_tool import DiskItem, Tool, analyze_directory, directory_size, format_bytes
 

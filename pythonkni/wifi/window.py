@@ -1,9 +1,8 @@
 from __future__ import annotations
-import subprocess
-import tempfile
-import threading
-import xml.etree.ElementTree as ET
-from pathlib import Path
+
+import sys as _sys
+import types as _types
+
 from PyQt5.QtWidgets import (
     QPushButton,
     QTableWidget,
@@ -11,23 +10,38 @@ from PyQt5.QtWidgets import (
     QVBoxLayout,
     QWidget,
 )
-from pythonkni.core.tasks import WorkerCancelled
+
 from tools.base_tool import BaseTool
 from tools.worker import Worker
-from .service import (
-    NETSH_TIMEOUT_SECONDS,
-    _check_cancel,
-    _key_material_from_xml,
-    _local_name,
-    _parse_profiles,
-    _profile_name_from_xml,
-    _read_exported_password,
-    _run_netsh,
-    get_wifi_profiles,
-)
+
 from . import service as _service
-import sys as _sys
-import types as _types
+from .service import (
+    NETSH_TIMEOUT_SECONDS as NETSH_TIMEOUT_SECONDS,
+)
+from .service import (
+    _check_cancel as _check_cancel,
+)
+from .service import (
+    _key_material_from_xml as _key_material_from_xml,
+)
+from .service import (
+    _local_name as _local_name,
+)
+from .service import (
+    _parse_profiles as _parse_profiles,
+)
+from .service import (
+    _profile_name_from_xml as _profile_name_from_xml,
+)
+from .service import (
+    _read_exported_password as _read_exported_password,
+)
+from .service import (
+    _run_netsh as _run_netsh,
+)
+from .service import (
+    get_wifi_profiles as get_wifi_profiles,
+)
 
 
 def _load_wifi_task(worker: Worker):

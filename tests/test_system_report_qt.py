@@ -1,8 +1,8 @@
 import json
 
 from pythonkni.system_report import service as report
-from pythonkni.system_report.models import ReportData
 from pythonkni.system_report import window as report_window
+from pythonkni.system_report.models import ReportData
 
 
 def sample_report():
