@@ -1,11 +1,9 @@
-from tools.event_viewer_tool import (
-    EventDetailDialog,
-    EventWorker,
-    Tool as EventViewerTool,
-)
+from tools.event_viewer_tool import EventDetailDialog, EventWorker
+from tools.event_viewer_tool import Tool as EventViewerTool
 from tools.pdf_merge_tool import Tool as PdfTool
 from tools.startup_manager_tool import Tool as StartupTool
-from tools.system_report_tool import ReportWorker, Tool as SystemReportTool
+from tools.system_report_tool import ReportWorker
+from tools.system_report_tool import Tool as SystemReportTool
 
 
 def test_legacy_window_exports_remain_available():
