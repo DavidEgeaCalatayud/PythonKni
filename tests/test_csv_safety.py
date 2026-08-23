@@ -41,8 +41,8 @@ def test_safe_csv_row_is_safe_when_round_tripped_through_csv_writer():
 @pytest.mark.parametrize(
     ("path", "function_name", "sanitizer"),
     [
-        ("tools/disk_analyzer_tool.py", "def export_csv", "safe_csv_row("),
-        ("tools/network_tool.py", "def export_history", "safe_csv_cell(line)"),
+        ("pythonkni/disk_analyzer/window.py", "def export_csv", "safe_csv_row("),
+        ("pythonkni/network/window.py", "def export_history", "safe_csv_cell(line)"),
         ("pythonkni/startup/window.py", "def export_csv", "safe_csv_row("),
         ("pythonkni/event_viewer/window.py", "def export_csv", "safe_csv_row("),
     ],
