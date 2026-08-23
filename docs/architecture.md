@@ -75,9 +75,11 @@ adapters that expose the corresponding `pythonkni.<domain>.window` module. Legac
 imports and existing tests therefore continue to resolve while the implementation
 lives under `pythonkni/`.
 
-Where older tests or integrations monkeypatch symbols through a legacy tool
-module, the compatibility layer forwards those assignments to the separated
-service module so dependency injection behavior is preserved during the migration.
+Some older tests and integrations also access service dependencies or monkeypatch
+symbols through the legacy tool/window module. The compatibility layer therefore
+forwards both relevant attribute reads and assignments to the separated service
+module. Public legacy exports that are intentionally retained are made explicit
+and covered by regression tests so lint cleanup cannot silently remove them.
 
 ## Architecture enforcement
 

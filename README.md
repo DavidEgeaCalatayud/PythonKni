@@ -5,188 +5,158 @@
 ![Platform](https://img.shields.io/badge/platform-Windows-blue)
 ![Build](https://img.shields.io/badge/build-PyInstaller-orange)
 ![Tests](https://img.shields.io/badge/tests-pytest-green)
-![Lint](https://img.shields.io/badge/lint-ruff-purple)
+![Lint](https://img.shields.io/badge/lint-Ruff%20F%20%2B%20I-purple)
 ![License](https://img.shields.io/badge/license-MIT-lightgrey)
 
-PythonKni is a desktop utility suite developed in **Python** and **PyQt5**. It brings together file conversion, PDF processing, archive management, duplicate detection, network diagnostics, process inspection, temporary-file cleanup and local WiFi profile listing in a single graphical application.
+PythonKni is a **local-first Windows desktop utility suite** built with Python and PyQt5. It combines file and PDF operations, archive handling, duplicate detection, network diagnostics, process inspection, startup management, event analysis, system reporting and safe temporary-file cleanup in one application.
 
-The project is designed as a practical “Swiss army knife” for local maintenance tasks, technical support workflows and everyday file operations on Windows.
+The project is both a practical support toolkit and a structured desktop-application codebase: user-facing domains are separated into models, services and PyQt windows, while the dynamic loader is kept compatible through thin `tools/*_tool.py` adapters.
 
-> Use the tools only on your own systems or on systems where you have explicit authorization.
-
----
-
-## Features
-
-### Archive Management
-
-- Create ZIP files.
-- Extract ZIP files.
-- Create 7Z files.
-- Extract 7Z files.
-
-### File Conversion
-
-- Convert images to PDF.
-- Convert PDF pages to images.
-- Convert TXT files to DOCX.
-- Convert DOCX files to TXT.
-- Convert DOCX files to PDF.
-- Convert TXT coordinate files to KML.
-- Convert KML files to TXT.
-- Batch conversion support for TXT/KML folders.
-
-### PDF Toolkit
-
-- Merge multiple PDF files.
-- Split PDF files into individual pages.
-- Split PDF files by custom page ranges.
-- Extract selected pages into a new PDF.
-- Reorder PDF pages using a graphical interface.
-- Extract text from PDF files.
-- Export extracted text as Markdown.
-- Detect probably scanned PDFs based on empty text pages.
-- Optional OCR support for scanned documents.
-
-### Duplicate File Finder
-
-- Scan folders recursively.
-- Detect duplicate files using file hashes.
-- Display duplicate groups.
-- Move duplicate files to a dedicated `DuplicadosEncontrados` folder while keeping one original.
-
-### Network Tools
-
-- Scan the local network.
-- Detect reachable devices in the current subnet.
-- Resolve hostnames when available.
-- Attempt MAC address lookup through ARP.
-- Scan a custom port range for a selected IP address or domain.
-- Store scan history.
-- Import and export scan history as TXT, JSON or CSV.
-
-### Process Management
-
-- Inspect local running processes.
-- Support maintenance-oriented process workflows through the graphical interface.
-
-### Temporary File Cleanup
-
-- Clean temporary files from local system/user folders.
-- Support safe maintenance operations from the desktop interface.
-
-### WiFi Profile Tools
-
-- List locally saved WiFi profiles.
-- Assist with local network support and diagnostics.
-
-### Configuration and Logs
-
-- Stores user-specific configuration outside the repository.
-- Stores logs and runtime data in the user profile.
-- Supports application-level configuration through local files and environment variables.
+> Use system, network, process and WiFi features only on systems and networks you own or are explicitly authorized to manage.
 
 ---
 
-## Technical Highlights
+## Toolset
 
-- Desktop application built with PyQt5.
-- Dynamic tool loader based on `tools/*_tool.py` modules.
-- Modular tool-oriented structure.
-- Background threads for long-running operations such as duplicate scans and network scans.
-- Local-only execution for file, network and maintenance tasks.
-- User data stored outside the repository in `%LOCALAPPDATA%`.
-- PyInstaller specification included for reproducible Windows builds.
-- CI workflow with compile checks, tests, Ruff linting and Ruff format validation.
-- Testable service logic separated from part of the UI logic.
-- External OCR support through Tesseract OCR and Poppler.
-
----
-
-## Why this project exists
-
-Many maintenance tasks require jumping between different applications: archive tools, PDF utilities, image converters, network scanners, process managers and cleanup scripts.
-
-PythonKni centralizes these common operations into a single desktop interface. The goal is not to replace specialized professional tools, but to provide a practical, extensible and local-first toolkit for technical support, file handling and system maintenance.
-
-The project also serves as a technical exercise in:
-
-- PyQt5 desktop application development;
-- modular application architecture;
-- file processing;
-- PDF manipulation;
-- local system automation;
-- network diagnostics;
-- packaging Python applications for Windows;
-- safe handling of local configuration, logs and API keys.
+| Tool | Main capabilities |
+|---|---|
+| **Archive Manager** | Create and extract ZIP/7Z archives with hardened extraction checks and background execution |
+| **File Converter** | Convert images, PDF, DOCX, TXT and KML files, including batch TXT/KML workflows |
+| **PDF Toolkit** | Merge, split, extract, reorder and read PDFs; optional OCR for scanned documents |
+| **Duplicate Finder** | Detect duplicates through staged hashing and byte verification, then move duplicate copies safely |
+| **Network Explorer** | Detect IPv4 interfaces, scan authorized networks, resolve hosts, inspect ARP data and scan port ranges |
+| **Process Manager** | Inspect running processes, filter resource usage, terminate selected processes and query optional VirusTotal analysis |
+| **Temporary Cleaner** | Preview and clean explicitly authorized temporary/cache targets without following symlinks or Windows reparse points |
+| **WiFi Profiles** | Read locally saved WiFi profile information for support and diagnostics |
+| **Disk Analyzer** | Analyze a directory, rank large files/folders and export results |
+| **Windows Startup Manager** | Inspect startup entries and enable/disable supported registry/folder entries with recoverable changes |
+| **Windows Event Viewer** | Read Windows event logs, filter and classify events, inspect details and export snapshots/reports |
+| **System Report** | Collect system, disk, network, process and temporary-data diagnostics and export TXT/HTML/PDF reports |
+| **Configuration** | Persist application settings such as theme/language configuration outside the repository |
 
 ---
 
-## Architecture Overview
+## Architecture
+
+PythonKni no longer keeps first-party business logic inside the loader-facing tool modules. Every user-facing domain follows the same dependency direction:
+
+```text
+models.py  <-  service.py  <-  window.py  <-  tools/*_tool.py adapter
+```
+
+At application level:
 
 ```text
 main.py
   │
-  │ loads tools dynamically
+  ├─ discovers and validates tools/*_tool.py
+  │
   ▼
 tools/*_tool.py
-  │
-  ├── archive_tool.py
-  ├── converter_tool.py
-  ├── duplicate_tool.py
-  ├── network_tool.py
-  ├── pdf_merge_tool.py
-  ├── process_manager_tool.py
-  ├── temp_cleaner_tool.py
-  ├── wifi_tool.py
-  └── config_window_tool.py
-        │
-        ▼
-PyQt5 windows and widgets
-        │
-        ▼
-Local file system, network, process and PDF operations
+  │  thin loader / legacy compatibility adapters
+  ▼
+pythonkni/<domain>/window.py
+  │  PyQt presentation + background-task orchestration
+  ▼
+pythonkni/<domain>/service.py
+  │  domain rules, OS integration, parsing, persistence, transformations
+  ▼
+pythonkni/<domain>/models.py
+     framework-independent value objects
 ```
 
-The current design uses a dynamic loader: each module ending in `_tool.py` exposes a `Tool` class that satisfies the `BaseTool` contract and provides its own PyQt interface.
+The architecture is **CI-enforced**, not just a convention. `tests/test_architecture_boundaries.py` verifies that every domain has the expected layers and prevents services/models from depending back on PyQt windows or inappropriate `tools` infrastructure.
 
-This makes it easy to add new tools without modifying the main application menu.
+Long-running services use framework-independent cooperative cancellation from `pythonkni/core/tasks.py`; Qt worker/thread lifecycle concerns stay in the presentation/infrastructure layers.
+
+For the full dependency rules and compatibility model, see [`docs/architecture.md`](docs/architecture.md).
 
 ---
 
 ## Project Structure
 
 ```text
-.github/workflows/       CI workflow for validation
-assets/                  Static UI assets
-docs/                    Additional architecture, usage and security documentation
-scripts/                 Helper scripts
-tests/                   Automated tests
-tools/                   Application tools and shared services
-.env.example             Example environment configuration
-CHANGELOG.md             Project changelog
-LICENSE                  MIT license
-PythonKni.spec           PyInstaller build specification
-main.py                  Application entry point
-pyproject.toml           Project metadata and tool configuration
-requirements.txt         Runtime dependencies
+PythonKni/
+├─ .github/workflows/
+│  └─ ci.yml                    Windows CI: tests, Ruff, PyInstaller, smoke test
+├─ assets/                      Runtime UI assets packaged with the application
+├─ docs/
+│  ├─ architecture.md           Layering and dependency boundaries
+│  ├─ security.md               Security and secret-handling notes
+│  └─ usage.md                  Runtime/build usage notes
+├─ pythonkni/
+│  ├─ core/
+│  │  └─ tasks.py               Framework-independent cancellation primitives
+│  ├─ archive/
+│  ├─ config/
+│  ├─ converter/
+│  ├─ disk_analyzer/
+│  ├─ duplicate/
+│  ├─ event_viewer/
+│  ├─ network/
+│  ├─ pdf/
+│  ├─ process_manager/
+│  ├─ startup/
+│  ├─ system_report/
+│  ├─ temp_cleaner/
+│  └─ wifi/
+│     └─ each domain: models.py, service.py, window.py
+├─ tests/                       Unit, integration, Qt and architecture tests
+├─ tools/
+│  ├─ *_tool.py                 Thin loader/legacy adapters
+│  ├─ base_tool.py              Shared tool-window lifecycle contract
+│  ├─ worker.py                 Reusable Qt worker adapter
+│  ├─ app_paths.py              User/runtime filesystem paths
+│  ├─ csv_utils.py              Spreadsheet-safe CSV helpers
+│  └─ shared theme/language/logging infrastructure
+├─ main.py                      Application entry point and dynamic discovery
+├─ PythonKni.spec               PyInstaller Windows bundle specification
+├─ pyproject.toml               Project metadata, pytest and Ruff configuration
+├─ requirements.txt             Runtime dependencies
+├─ CHANGELOG.md
+└─ LICENSE
 ```
 
 ---
 
-## Main Tools
+## Technical Highlights
 
-| Tool | Description |
-|---|---|
-| Archive Manager | Create and extract ZIP/7Z files |
-| File Converter | Convert images, PDF, DOCX, TXT and KML files |
-| PDF Toolkit | Merge, split, reorder, extract pages and extract text from PDFs |
-| Duplicate Finder | Detect duplicate files and move repeated copies |
-| Network Explorer | Scan local network devices and port ranges |
-| Process Manager | Inspect and manage local processes |
-| Temporary Cleaner | Clean temporary files |
-| WiFi Tool | List saved local WiFi profiles |
-| Configuration | Manage local application settings |
+### Layered first-party domains
+
+All current user-facing domains use the same `models -> service -> window -> adapter` boundary. Domain logic can therefore be exercised without constructing a `QApplication`, and the legacy dynamic-loader contract remains stable.
+
+### Managed background work
+
+Long-running and blocking operations have progressively moved away from the GUI thread. The project includes reusable worker/lifecycle infrastructure, cooperative cancellation and explicit cleanup for threads/subprocesses where applicable.
+
+### Safer destructive operations
+
+Several workflows include explicit safety guarantees rather than relying on generic recursive filesystem calls:
+
+- archive extraction validates member destinations and traversal boundaries;
+- duplicate handling uses staged identity checks and restoration manifests;
+- converter outputs are published transactionally;
+- startup changes preserve recoverable state;
+- CSV exports neutralize spreadsheet-formula injection;
+- temporary cleanup only accepts authorized roots, uses `lstat`, rejects symlink/reparse path chains and revalidates directory identity around destructive operations.
+
+### Dynamic plugin contract
+
+`main.py` discovers modules ending in `tools/*_tool.py`. A loader-compatible module must expose a valid `Tool` class inheriting `BaseTool`, implement `setup_ui()` and define non-empty `name`, `description` and `category` metadata.
+
+First-party tools additionally use the layered `pythonkni/<domain>/` structure; the `tools/*_tool.py` files are retained as adapters so loader behavior and legacy imports remain compatible.
+
+### Local runtime data
+
+Configuration, history and logs are stored under the user profile rather than in the repository:
+
+```text
+%LOCALAPPDATA%\PythonKni\
+```
+
+### Windows packaging validated in CI
+
+The PyInstaller specification is built on `windows-latest`. CI then launches the frozen executable with `--smoke-test`, which validates dynamic tool discovery and required packaged assets without entering the normal Qt event loop.
 
 ---
 
@@ -194,21 +164,17 @@ requirements.txt         Runtime dependencies
 
 ### Python
 
-PythonKni requires:
+Project metadata currently declares:
 
 ```text
-Python 3.8+
+Python >= 3.8
 ```
 
-Recommended version:
-
-```text
-Python 3.10+
-```
+The GitHub Actions workflow currently validates the project with **Python 3.10 on Windows**. A broader Python-version support matrix is not yet part of CI, so the declared lower bound should not be interpreted as equivalent CI coverage for every supported minor version.
 
 ### Python dependencies
 
-Main dependencies include:
+Runtime dependencies are defined in `requirements.txt` and `pyproject.toml`, including:
 
 ```text
 PyQt5
@@ -230,9 +196,18 @@ Install them with:
 pip install -r requirements.txt
 ```
 
+### Optional OCR dependencies
+
+OCR-based PDF extraction additionally requires system installations of:
+
+- **Tesseract OCR**
+- **Poppler**
+
+They must be available to the application through the expected system paths/`PATH` configuration.
+
 ---
 
-## Installation
+## Installation and Development
 
 Clone the repository:
 
@@ -241,212 +216,147 @@ git clone https://github.com/DavidEgeaCalatayud/PythonKni.git
 cd PythonKni
 ```
 
-Create a virtual environment:
-
-```bash
-python -m venv .venv
-```
-
-Activate the virtual environment on Windows PowerShell:
+Create and activate a Windows virtual environment:
 
 ```powershell
-.\.venv\Scripts\Activate.ps1
-```
-
-Install dependencies:
-
-```bash
-pip install -r requirements.txt
-```
-
-Run the application:
-
-```bash
-python main.py
-```
-
----
-
-## Configuration
-
-PythonKni stores configuration, history and logs outside the repository in a user-specific local folder:
-
-```text
-%LOCALAPPDATA%\PythonKni\
-```
-
-This avoids committing personal configuration, scan history, logs or runtime data to the repository.
-
----
-
-## VirusTotal Configuration
-
-If VirusTotal analysis is enabled in your local setup, configure the API key through an environment variable.
-
-PowerShell example:
-
-```powershell
-$env:VIRUSTOTAL_API_KEY="your_api_key_here"
-```
-
-Never commit real API keys to the repository.
-
-Do not upload:
-
-```text
-.env
-.env.local
-real API keys
-personal logs
-scan history
-private reports
-```
-
-If a key was ever committed accidentally:
-
-1. Revoke it from the provider dashboard.
-2. Generate a new key.
-3. Configure the new key through an environment variable.
-4. Remove the old key from Git history if necessary.
-
----
-
-## OCR Setup
-
-Some PDF text extraction features can use OCR when the PDF is scanned or does not contain selectable text.
-
-OCR requires external system dependencies in addition to Python packages:
-
-- Tesseract OCR;
-- Poppler.
-
-Both executables must be installed and available in the system `PATH`.
-
-If OCR is not available, PythonKni can still perform normal PDF text extraction, but scanned documents may return little or no text.
-
----
-
-## Build
-
-PythonKni includes a PyInstaller specification file:
-
-```bash
-pyinstaller PythonKni.spec
-```
-
-The `PythonKni.spec` file is versioned to document the build process.
-
-Generated build artifacts should not be committed:
-
-```text
-build/
-dist/
-*.spec temporary changes
-```
-
-The final executable will normally be generated under:
-
-```text
-dist/
-```
-
----
-
-## Development
-
-Create and activate a virtual environment:
-
-```bash
 python -m venv .venv
 .\.venv\Scripts\Activate.ps1
 ```
 
 Install runtime dependencies:
 
-```bash
+```powershell
 pip install -r requirements.txt
 ```
 
-Install development dependencies:
+For development/CI-equivalent tooling:
 
-```bash
-pip install pytest ruff
+```powershell
+pip install pytest pytest-qt ruff pyinstaller
 ```
 
 Run the application:
 
-```bash
+```powershell
 python main.py
 ```
 
 ---
 
-## Quality Checks
+## Configuration and Privacy
 
-Compile all Python files:
+PythonKni is designed to perform its normal file/system operations locally. No application account or backend service is required.
 
-```bash
+Runtime configuration and local data are kept outside the repository under `%LOCALAPPDATA%\PythonKni\`.
+
+If VirusTotal integration is used, configure the API key through the environment rather than source code:
+
+```powershell
+$env:VIRUSTOTAL_API_KEY="your_api_key_here"
+```
+
+Never commit real API keys, personal logs, scan histories or private diagnostic reports. Optional external integrations can transmit data to their provider; review the relevant workflow before using sensitive material.
+
+See [`docs/security.md`](docs/security.md) for the repository's security notes.
+
+---
+
+## Testing and Quality Gates
+
+Run the same core validation commands used by CI:
+
+```powershell
 python -m compileall .
-```
-
-Run tests:
-
-```bash
 python -m pytest
-```
-
-Run Ruff linting:
-
-```bash
 python -m ruff check .
-```
-
-Check formatting:
-
-```bash
 python -m ruff format --check .
 ```
 
-The CI workflow runs these checks on each `push` and `pull_request`.
+Ruff currently enforces:
 
----
-
-## Testing
-
-The test suite focuses on logic that can be validated independently from the graphical interface.
-
-Covered areas include:
-
-- configuration handling;
-- file conversion service logic;
-- duplicate detection;
-- network input validation;
-- PDF page parsing;
-- temporary-file cleanup behavior.
-
-Run all tests with:
-
-```bash
-python -m pytest
+```toml
+select = ["F", "I"]
 ```
 
+That means the repository now checks full **Pyflakes** diagnostics plus **import ordering**, rather than only the previous minimal set of critical syntax/name errors.
+
+The test suite covers substantially more than isolated service helpers. Current coverage includes, among other areas:
+
+- architecture boundaries and plugin contracts;
+- configuration/runtime persistence;
+- background worker lifecycle and cancellation;
+- archive creation/extraction and security regressions;
+- converter service behavior and transactional outputs;
+- duplicate detection/movement behavior;
+- network discovery, validation, port scanning and cancellation;
+- process-manager protection and worker lifecycle;
+- PDF page operations;
+- startup-manager transactions;
+- Event Viewer services;
+- Disk Analyzer/System Report Qt behavior;
+- Temp Cleaner symlink, junction/reparse and path-race regressions;
+- WiFi command behavior;
+- packaged-application discovery smoke tests.
+
+### CI pipeline
+
+Every `push` and `pull_request` runs on Windows and executes:
+
+```text
+compileall
+   ↓
+pytest
+   ↓
+Ruff check (F + I)
+   ↓
+Ruff format --check
+   ↓
+PyInstaller build
+   ↓
+frozen PythonKni.exe --smoke-test
+```
+
+A green source-level test suite is therefore not enough on its own: CI also verifies that the Windows bundle can actually be produced and that its dynamic tool discovery still works after freezing.
+
 ---
 
-## Adding a New Tool
+## Packaging
 
-PythonKni uses a dynamic tool-loading approach. The loader validates every discovered `tools/*_tool.py` module before adding it to the menu.
+Build the Windows bundle with the committed specification:
 
-A plugin is accepted only when all of the following are true:
+```powershell
+pyinstaller --noconfirm --clean PythonKni.spec
+```
 
-1. The file is inside `tools/` and its name ends in `_tool.py`.
-2. The module exposes a class named `Tool`.
-3. `Tool` inherits from `tools.base_tool.BaseTool`.
-4. `Tool` overrides `setup_ui()`; inheriting the empty `BaseTool.setup_ui()` implementation is not enough.
-5. `Tool` defines non-empty string values for `name`, `description` and `category`.
+The executable is expected at:
 
-A class inheriting directly from `QMainWindow`, even if it has a `name`, does **not** satisfy the loader contract and will be rejected.
+```text
+dist\PythonKni\PythonKni.exe
+```
 
-Minimal valid example:
+You can run the non-interactive packaging validation directly with:
+
+```powershell
+dist\PythonKni\PythonKni.exe --smoke-test
+```
+
+The normal CI currently **builds and validates** this bundle but does not publish it as a release artifact. Automated tagged releases/signing remain future release-engineering work.
+
+Generated `build/` and `dist/` directories should not be committed.
+
+---
+
+## Adding a Tool
+
+The loader contract is deliberately small and is validated by tests. A discovered module is accepted only when:
+
+1. it is under `tools/` and ends in `_tool.py`;
+2. it exposes a class named `Tool`;
+3. `Tool` inherits from `tools.base_tool.BaseTool`;
+4. `Tool` overrides `setup_ui()`;
+5. `Tool.name`, `Tool.description` and `Tool.category` are non-empty strings.
+
+A minimal loader-compatible tool looks like this:
 
 ```python
 from PyQt5.QtWidgets import QLabel
@@ -456,7 +366,7 @@ from tools.base_tool import BaseTool
 
 class Tool(BaseTool):
     name = "My New Tool"
-    description = "Example tool that demonstrates the PythonKni plugin contract."
+    description = "Example PythonKni tool."
     category = "Examples"
 
     def setup_ui(self):
@@ -464,117 +374,87 @@ class Tool(BaseTool):
         self.setCentralWidget(QLabel("Hello from my new tool"))
 ```
 
-`BaseTool` performs the common window initialization and calls `setup_ui()` when the tool instance is created, so plugin-specific UI setup belongs in `setup_ui()` rather than in a replacement `__init__()` unless there is a specific reason to extend the base initialization carefully.
+For a **first-party PythonKni domain**, follow the repository architecture rather than placing business logic in that adapter: implement the domain under `pythonkni/<domain>/models.py`, `service.py` and `window.py`, and keep the `tools/*_tool.py` module thin.
 
-After creating the module, run the same contract checks used by CI:
+Validate the contract with:
 
-```bash
-python -m pytest tests/test_tool_contract.py
+```powershell
+python -m pytest tests/test_tool_contract.py tests/test_architecture_boundaries.py
 ```
 
-After restarting the application, a valid tool will be loaded into the main menu automatically. Invalid tools are skipped and reported by the loader instead of being added to the menu.
+---
+
+## Security Model
+
+PythonKni interacts with local files, archives, processes, temporary directories, Windows startup configuration, event logs, network devices and saved WiFi information. Those surfaces are intentionally subject to operating-system permissions and application-level validation.
+
+The application does not attempt to bypass authentication, encryption, DRM, access controls or operating-system authorization boundaries.
+
+Some operations are inherently destructive or privileged. Back up important data before cleanup, archive extraction, PDF modification, duplicate movement or startup changes, and use network/process tools only where you have authorization.
 
 ---
 
-## Security Notes
+## Current Limitations
 
-PythonKni includes tools that interact with:
-
-- local files;
-- compressed archives;
-- PDF documents;
-- running processes;
-- temporary folders;
-- local network devices;
-- port ranges;
-- saved WiFi profiles;
-- optional external analysis services.
-
-Use these features only on systems you own or have permission to manage.
-
-This project does not attempt to bypass operating system permissions, authentication, encryption, DRM, paywalls or access controls.
-
----
-
-## Privacy
-
-PythonKni is designed as a local desktop application.
-
-By default:
-
-- files are processed locally;
-- logs are stored locally;
-- configuration is stored locally;
-- scan history is stored locally;
-- no user account is required;
-- no backend server is required.
-
-If optional integrations such as VirusTotal are used, the selected files or hashes may be sent to the external provider depending on the implementation. Review the integration before using it with private or sensitive files.
-
----
-
-## Limitations
-
-- The application is currently focused on Windows workflows.
-- Some features depend on external executables such as Tesseract OCR and Poppler.
-- OCR quality depends on image quality, language configuration and installed OCR data.
-- DOCX to PDF conversion is simplified and may not preserve complex formatting.
-- Network scanning depends on local firewall rules, permissions and network configuration.
-- Process and WiFi tools may require elevated permissions depending on the system.
-- The current architecture still mixes some UI and business logic in tool modules.
-- Future refactoring could move the core logic into a dedicated `src/pythonkni/` package.
+- The application is primarily designed and tested for **Windows** workflows.
+- CI currently validates one Python runtime (**3.10**) rather than a full version matrix.
+- Some capabilities depend on optional external executables such as Tesseract OCR and Poppler.
+- OCR accuracy depends on document quality, language data and local OCR configuration.
+- DOCX -> PDF conversion is intentionally simplified and does not preserve all Word layout, images, tables, headers/footers or advanced formatting.
+- Network discovery results depend on firewall rules, host behavior, permissions and local topology.
+- Windows Event Viewer, process, startup and WiFi operations can be limited by the current user's privileges.
+- The PDF stack still includes the deprecated `PyPDF2` package and should migrate to `pypdf`.
+- Dependency installation currently uses version lower bounds rather than a fully reproducible lock/constraints workflow.
+- CI builds the Windows executable but does not yet publish signed/tagged releases.
+- Localization infrastructure exists, but user-visible strings are not yet comprehensively extracted/translated across every domain.
 
 ---
 
 ## Roadmap
 
-Possible future improvements:
+The previous roadmap contained several items that are now complete: layered service/UI separation, the plugin contract, substantial archive tests, managed background work/cancellation, progress feedback and CI executable builds are no longer listed as future work.
 
-- [ ] Move source code to `src/pythonkni/`.
-- [ ] Split each tool into service logic and UI windows.
-- [ ] Add more tests for PDF operations.
-- [ ] Add more tests for archive operations.
-- [ ] Add screenshots of each tool.
-- [ ] Add a demo GIF of the main menu.
-- [ ] Add release builds through GitHub Actions.
-- [ ] Publish signed Windows executable releases.
-- [ ] Improve DOCX to PDF conversion fidelity.
-- [ ] Add progress bars for long-running operations.
-- [ ] Add cancellation support to more tools.
-- [ ] Improve error reporting in the UI.
-- [ ] Add multilingual UI support.
-- [ ] Add a plugin-style tool registry.
-- [ ] Add user documentation for each tool in `docs/usage.md`.
+The active roadmap is intentionally limited to work that remains open:
+
+### Code and reliability
+
+- [ ] Migrate the PDF backend from `PyPDF2` to `pypdf`.
+- [ ] Expand PDF regression coverage, especially cancellation, rollback and encrypted/error cases.
+- [ ] Decide and enforce the Python-version support contract in CI.
+- [ ] Add reproducible dependency constraints/locking and dependency-security checks.
+- [ ] Continue improving structured UI error reporting where operations still return raw exception text.
+
+### Product quality
+
+- [ ] Improve DOCX -> PDF formatting fidelity.
+- [ ] Complete localization of user-visible strings across domains.
+- [ ] Audit remaining long-running operations for consistent progress/cancellation behavior.
+
+### Documentation and releases
+
+- [ ] Expand per-tool instructions in `docs/usage.md`.
+- [ ] Expand `docs/security.md` with guarantees and risks for destructive/sensitive tools.
+- [ ] Update `CHANGELOG.md` for the recent architecture, safety and CI work.
+- [ ] Add screenshots/demo media for the main application and key tools.
+- [ ] Add tagged GitHub release automation and publish validated build artifacts.
+- [ ] Add Windows executable signing/installer work when a release process is established.
 
 ---
 
-## Suggested Screenshots
+## Documentation
 
-Recommended screenshots for the repository:
-
-```text
-docs/assets/main-menu.png
-docs/assets/pdf-toolkit.png
-docs/assets/network-scanner.png
-docs/assets/converter-tool.png
-docs/assets/duplicate-finder.png
-```
-
-You can then include them in this README:
-
-```md
-![PythonKni main menu](docs/assets/main-menu.png)
-```
+- [`docs/architecture.md`](docs/architecture.md) — dependency rules, domains and compatibility adapters
+- [`docs/usage.md`](docs/usage.md) — current execution/build notes
+- [`docs/security.md`](docs/security.md) — authorization and secret-handling notes
+- [`CHANGELOG.md`](CHANGELOG.md) — project change history
 
 ---
 
 ## Disclaimer
 
-PythonKni is an educational and personal productivity project.
+PythonKni is an educational and personal productivity project provided as-is, without warranty.
 
-It is provided as-is, without warranty. Always make backups before running file operations, cleanup tools, archive extraction, PDF modification or duplicate-file movement on important data.
-
-Use network, process and WiFi-related tools only on systems and networks where you have explicit authorization.
+Always keep backups before running destructive file or system operations. Use network, process, Event Viewer, startup and WiFi-related tools only on systems and networks where you have explicit authorization.
 
 ---
 
