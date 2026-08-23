@@ -148,7 +148,7 @@ PyQt5 windows and widgets
 Local file system, network, process and PDF operations
 ```
 
-The current design uses a dynamic loader: each module ending in `_tool.py` exposes a `Tool` class with a visible name and its own PyQt interface.
+The current design uses a dynamic loader: each module ending in `_tool.py` exposes a `Tool` class that satisfies the `BaseTool` contract and provides its own PyQt interface.
 
 This makes it easy to add new tools without modifying the main application menu.
 
@@ -434,32 +434,45 @@ python -m pytest
 
 ## Adding a New Tool
 
-PythonKni uses a dynamic tool-loading approach.
+PythonKni uses a dynamic tool-loading approach. The loader validates every discovered `tools/*_tool.py` module before adding it to the menu.
 
-To add a new tool:
+A plugin is accepted only when all of the following are true:
 
-1. Create a new file inside `tools/`.
-2. Name it using the `_tool.py` suffix.
-3. Expose a class named `Tool`.
-4. Add a readable `name` attribute.
-5. Implement the PyQt window or widget logic.
+1. The file is inside `tools/` and its name ends in `_tool.py`.
+2. The module exposes a class named `Tool`.
+3. `Tool` inherits from `tools.base_tool.BaseTool`.
+4. `Tool` overrides `setup_ui()`; inheriting the empty `BaseTool.setup_ui()` implementation is not enough.
+5. `Tool` defines non-empty string values for `name`, `description` and `category`.
 
-Example:
+A class inheriting directly from `QMainWindow`, even if it has a `name`, does **not** satisfy the loader contract and will be rejected.
+
+Minimal valid example:
 
 ```python
-from PyQt5.QtWidgets import QMainWindow, QLabel
+from PyQt5.QtWidgets import QLabel
+
+from tools.base_tool import BaseTool
 
 
-class Tool(QMainWindow):
+class Tool(BaseTool):
     name = "My New Tool"
+    description = "Example tool that demonstrates the PythonKni plugin contract."
+    category = "Examples"
 
-    def __init__(self):
-        super().__init__()
+    def setup_ui(self):
         self.setWindowTitle(self.name)
         self.setCentralWidget(QLabel("Hello from my new tool"))
 ```
 
-After restarting the application, the tool will be loaded into the main menu automatically.
+`BaseTool` performs the common window initialization and calls `setup_ui()` when the tool instance is created, so plugin-specific UI setup belongs in `setup_ui()` rather than in a replacement `__init__()` unless there is a specific reason to extend the base initialization carefully.
+
+After creating the module, run the same contract checks used by CI:
+
+```bash
+python -m pytest tests/test_tool_contract.py
+```
+
+After restarting the application, a valid tool will be loaded into the main menu automatically. Invalid tools are skipped and reported by the loader instead of being added to the menu.
 
 ---
 
