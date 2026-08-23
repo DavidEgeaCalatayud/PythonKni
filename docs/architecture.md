@@ -58,3 +58,20 @@ adapter. Remaining tools can be migrated incrementally with the same pattern.
 A `models.py` module is used when a domain has stable data structures. Domains
 without a useful model should not create placeholder classes merely to satisfy a
 folder convention.
+## Domain architecture
+
+All user-facing domains now follow the same dependency direction:
+
+```text
+models.py  <-  service.py  <-  window.py  <-  tools/*_tool.py adapter
+```
+
+`models.py` contains framework-independent value objects. `service.py` owns domain,
+OS and persistence logic and must not import Qt, workers or window modules.
+`window.py` owns PyQt presentation and background-thread orchestration. The modules
+under `tools/` are compatibility/discovery adapters only.
+
+Migrated domains: archive, config, converter, disk_analyzer, duplicate, network, process_manager, temp_cleaner, wifi.
+
+The architecture boundary tests enumerate this full set so a new domain cannot
+silently regress to a monolithic `tools/*_tool.py` implementation.
