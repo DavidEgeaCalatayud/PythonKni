@@ -1,5 +1,4 @@
 import main
-
 from tools.language_manager import LanguageManager
 from tools.theme_manager import ThemeManager
 

@@ -6,7 +6,6 @@ import pytest
 
 from tools.base_tool import BaseTool
 
-
 ROOT = Path(__file__).resolve().parents[1]
 DOMAINS = {
     "archive": "archive_tool.py",

@@ -1,4 +1,5 @@
 from __future__ import annotations
+
 import hashlib
 import json
 import logging
@@ -8,7 +9,6 @@ import threading
 from collections import defaultdict
 from datetime import datetime, timezone
 from pathlib import Path
-from pythonkni.core.tasks import WorkerCancelled
 
 logger = logging.getLogger(__name__)
 DUPLICATES_DIR_NAME = "DuplicadosEncontrados"

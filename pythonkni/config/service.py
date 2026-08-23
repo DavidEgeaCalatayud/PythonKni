@@ -1,13 +1,15 @@
 from __future__ import annotations
+
 import json
+import logging
 import os
 import tempfile
 from pathlib import Path
 from typing import Any
+
 from tools.language_manager import LanguageManager
 from tools.theme_manager import ThemeManager
-import logging
-from tools.app_paths import CONFIG_FILE
+
 from .models import (
     DEFAULT_CONFIG,
     LEGACY_LANGUAGES,

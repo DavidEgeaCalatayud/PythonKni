@@ -13,7 +13,6 @@ from pathlib import Path, PureWindowsPath
 import py7zr
 from PyQt5.QtWidgets import QFileDialog, QMessageBox
 
-
 logger = logging.getLogger(__name__)
 
 

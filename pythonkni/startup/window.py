@@ -22,17 +22,33 @@ from tools.base_tool import BaseTool
 from tools.csv_utils import safe_csv_row
 from tools.theme_manager import ThemeManager
 
-from .models import StartupItem
+from .models import StartupItem as StartupItem
 from .service import (
-    collect_startup_items,
-    disable_folder_item,
-    disable_registry_item,
-    enable_folder_item,
-    enable_registry_item,
-    extract_executable_path,
-    is_windows,
-    open_folder,
-    run_regedit_at_key,
+    collect_startup_items as collect_startup_items,
+)
+from .service import (
+    disable_folder_item as disable_folder_item,
+)
+from .service import (
+    disable_registry_item as disable_registry_item,
+)
+from .service import (
+    enable_folder_item as enable_folder_item,
+)
+from .service import (
+    enable_registry_item as enable_registry_item,
+)
+from .service import (
+    extract_executable_path as extract_executable_path,
+)
+from .service import (
+    is_windows as is_windows,
+)
+from .service import (
+    open_folder as open_folder,
+)
+from .service import (
+    run_regedit_at_key as run_regedit_at_key,
 )
 
 

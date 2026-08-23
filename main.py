@@ -4,7 +4,7 @@ import logging
 import os
 import sys
 
-from PyQt5.QtCore import QThread, Qt, pyqtSignal
+from PyQt5.QtCore import Qt, QThread, pyqtSignal
 from PyQt5.QtWidgets import (
     QApplication,
     QLabel,
@@ -21,7 +21,6 @@ from tools.config_service import DEFAULT_CONFIG
 from tools.logging_config import setup_logging
 from tools.runtime_config import apply_runtime_config, load_runtime_config
 from tools.theme_manager import ThemeManager
-
 
 logger = logging.getLogger(__name__)
 

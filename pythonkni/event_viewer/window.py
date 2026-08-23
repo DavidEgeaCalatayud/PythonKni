@@ -7,7 +7,7 @@ from collections import Counter
 from datetime import datetime
 from pathlib import Path
 
-from PyQt5.QtCore import QThread, Qt, pyqtSignal
+from PyQt5.QtCore import Qt, QThread, pyqtSignal
 from PyQt5.QtGui import QColor
 from PyQt5.QtWidgets import (
     QApplication,
@@ -21,8 +21,8 @@ from PyQt5.QtWidgets import (
     QLabel,
     QLineEdit,
     QMessageBox,
-    QPushButton,
     QPlainTextEdit,
+    QPushButton,
     QSpinBox,
     QTableWidget,
     QTableWidgetItem,
@@ -36,15 +36,26 @@ from tools.theme_manager import ThemeManager
 
 from .models import EventItem, EventResult
 from .service import (
-    RISK_ORDER,
-    _REPORTLAB_AVAILABLE,
-    clean_text,
-    collect_events,
-    events_to_html,
-    events_to_pdf,
-    save_events_snapshot,
+    _REPORTLAB_AVAILABLE as _REPORTLAB_AVAILABLE,
 )
-
+from .service import (
+    RISK_ORDER as RISK_ORDER,
+)
+from .service import (
+    clean_text as clean_text,
+)
+from .service import (
+    collect_events as collect_events,
+)
+from .service import (
+    events_to_html as events_to_html,
+)
+from .service import (
+    events_to_pdf as events_to_pdf,
+)
+from .service import (
+    save_events_snapshot as save_events_snapshot,
+)
 
 RISK_COLORS = {
     "Alto": QColor("#ffcccc"),

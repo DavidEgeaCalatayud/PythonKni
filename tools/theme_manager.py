@@ -1,6 +1,3 @@
-from PyQt5.QtCore import Qt
-
-
 class ThemeManager:
     current_theme = "Claro"
 

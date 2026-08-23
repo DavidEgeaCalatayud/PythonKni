@@ -1,13 +1,8 @@
 from __future__ import annotations
-import json
-import os
-import tempfile
-from pathlib import Path
-from typing import Any
-from tools.language_manager import LanguageManager
-from tools.theme_manager import ThemeManager
-from tools.base_tool import BaseTool
-import logging
+
+import sys as _sys
+import types as _types
+
 from PyQt5.QtWidgets import (
     QApplication,
     QComboBox,
@@ -17,25 +12,46 @@ from PyQt5.QtWidgets import (
     QVBoxLayout,
     QWidget,
 )
+
 from tools.app_paths import CONFIG_FILE
+from tools.base_tool import BaseTool
+from tools.language_manager import LanguageManager
+from tools.theme_manager import ThemeManager
+
+from . import service as _service
 from .models import (
-    DEFAULT_CONFIG,
-    LEGACY_LANGUAGES,
-    VALID_LANGUAGES,
-    VALID_THEMES,
+    DEFAULT_CONFIG as DEFAULT_CONFIG,
+)
+from .models import (
+    LEGACY_LANGUAGES as LEGACY_LANGUAGES,
+)
+from .models import (
+    VALID_LANGUAGES as VALID_LANGUAGES,
+)
+from .models import (
+    VALID_THEMES as VALID_THEMES,
 )
 from .service import (
-    apply_runtime_config,
-    load_config,
-    load_runtime_config,
-    logger,
-    normalize_config,
-    save_config,
-    save_runtime_config,
+    apply_runtime_config as apply_runtime_config,
 )
-from . import service as _service
-import sys as _sys
-import types as _types
+from .service import (
+    load_config as load_config,
+)
+from .service import (
+    load_runtime_config as load_runtime_config,
+)
+from .service import (
+    logger as logger,
+)
+from .service import (
+    normalize_config as normalize_config,
+)
+from .service import (
+    save_config as save_config,
+)
+from .service import (
+    save_runtime_config as save_runtime_config,
+)
 
 
 class Tool(BaseTool):
