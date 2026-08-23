@@ -6,7 +6,7 @@ import os
 from dataclasses import dataclass
 import psutil
 import requests
-from PyQt5.QtCore import QTimer, Qt
+from PyQt5.QtCore import Qt
 from PyQt5.QtGui import QMovie
 from PyQt5.QtWidgets import (
     QHBoxLayout,
@@ -55,7 +55,6 @@ class Tool(BaseTool):
         self.setGeometry(250, 250, 1000, 600)
         self._process_worker = None
         self._analysis_worker = None
-        self._close_when_workers_finish = False
 
         ThemeManager.apply_theme(self)
 
@@ -140,11 +139,13 @@ class Tool(BaseTool):
         self.load_processes()
 
     def load_processes(self):
-        """Carga la lista mediante el Worker reutilizable."""
-        if self._process_worker is not None and self._process_worker.isRunning():
-            self._process_worker.cancel()
+        """Carga la lista mediante workers administrados por BaseTool."""
+        previous_worker = self._process_worker
+        if previous_worker is not None and previous_worker.isRunning():
+            previous_worker.cancel()
 
         self.table.setRowCount(0)
+        self.loading_text.setText("Cargando procesos...")
         self.loading_widget.show()
         self.loading_movie.start()
 
@@ -155,18 +156,27 @@ class Tool(BaseTool):
             parent=self,
         )
         self._process_worker = worker
-        worker.result.connect(self.populate_table)
-        worker.error.connect(self._process_load_error)
-        worker.cancelled.connect(self._process_load_cancelled)
+        worker.result.connect(
+            lambda processes, worker=worker: self._process_load_result(worker, processes)
+        )
+        worker.error.connect(lambda error, worker=worker: self._process_load_error(worker, error))
+        worker.cancelled.connect(lambda worker=worker: self._process_load_cancelled(worker))
         worker.finished.connect(lambda: self._process_load_finished(worker))
-        worker.start()
+        self.start_managed_worker(worker, cancel=worker.cancel)
 
-    def _process_load_error(self, error):
+    def _process_load_result(self, worker, processes):
+        if self._process_worker is worker:
+            self.populate_table(processes)
+
+    def _process_load_error(self, worker, error):
+        if self._process_worker is not worker:
+            return
         logger.error("Could not load process list: %s", error)
         QMessageBox.critical(self, "Error", f"No se pudo cargar la lista de procesos:\n{error}")
 
-    def _process_load_cancelled(self):
-        self.loading_text.setText("Actualización cancelada")
+    def _process_load_cancelled(self, worker):
+        if self._process_worker is worker:
+            self.loading_text.setText("Actualización cancelada")
 
     def _process_load_finished(self, worker):
         if self._process_worker is worker:
@@ -174,7 +184,6 @@ class Tool(BaseTool):
             self.loading_movie.stop()
             self.loading_widget.hide()
         worker.deleteLater()
-        self._maybe_close_after_workers()
 
     def populate_table(self, processes):
         """Rellena la tabla con los procesos obtenidos."""
@@ -297,7 +306,7 @@ class Tool(BaseTool):
         worker.error.connect(self._analysis_error)
         worker.cancelled.connect(self._analysis_cancelled)
         worker.finished.connect(lambda: self._analysis_finished(worker))
-        worker.start()
+        self.start_managed_worker(worker, cancel=worker.cancel)
 
     def cancel_analysis(self):
         worker = self._analysis_worker
@@ -356,28 +365,6 @@ class Tool(BaseTool):
             if self.analysis_status.text() != "Análisis cancelado":
                 self.analysis_status.setText("")
         worker.deleteLater()
-        self._maybe_close_after_workers()
-
-    def _maybe_close_after_workers(self):
-        if not self._close_when_workers_finish:
-            return
-        process_running = self._process_worker is not None and self._process_worker.isRunning()
-        analysis_running = self._analysis_worker is not None and self._analysis_worker.isRunning()
-        if not process_running and not analysis_running:
-            self._close_when_workers_finish = False
-            QTimer.singleShot(0, self.close)
-
-    def closeEvent(self, event):
-        running = False
-        for worker in (self._process_worker, self._analysis_worker):
-            if worker is not None and worker.isRunning():
-                worker.cancel()
-                running = True
-        if running:
-            self._close_when_workers_finish = True
-            event.ignore()
-            return
-        super().closeEvent(event)
 
 
 class _CompatibilityModule(_types.ModuleType):

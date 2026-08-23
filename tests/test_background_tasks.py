@@ -167,8 +167,17 @@ def test_virustotal_gui_callback_only_starts_worker():
         def start(self):
             self.started = True
 
+        def cancel(self):
+            pass
+
     status = Mock()
     cancel_button = Mock()
+
+    def start_managed_worker(worker, *, cancel=None):
+        worker.start()
+        return worker
+
+    managed_start = Mock(side_effect=start_managed_worker)
     window = SimpleNamespace(
         _analysis_worker=None,
         analysis_status=status,
@@ -178,6 +187,7 @@ def test_virustotal_gui_callback_only_starts_worker():
         _analysis_error=Mock(),
         _analysis_cancelled=Mock(),
         _analysis_finished=Mock(),
+        start_managed_worker=managed_start,
     )
 
     with ExitStack() as stack:
@@ -194,3 +204,6 @@ def test_virustotal_gui_callback_only_starts_worker():
     assert worker.task is analyze_process_task
     assert worker.args == (99, "key")
     assert worker.started
+    managed_start.assert_called_once()
+    assert managed_start.call_args.args == (worker,)
+    assert managed_start.call_args.kwargs["cancel"] == worker.cancel
