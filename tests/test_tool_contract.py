@@ -65,3 +65,19 @@ def test_contract_rejects_empty_metadata(attribute):
     setattr(InvalidTool, attribute, "   ")
     with pytest.raises(ToolContractError, match=attribute):
         validate_tool_class(InvalidTool, "tests.invalid")
+
+
+def test_readme_documents_the_real_plugin_contract():
+    readme = (Path(__file__).resolve().parents[1] / "README.md").read_text(encoding="utf-8")
+
+    for required_snippet in (
+        "from tools.base_tool import BaseTool",
+        "class Tool(BaseTool):",
+        'name = "My New Tool"',
+        'description = "',
+        'category = "',
+        "def setup_ui(self):",
+    ):
+        assert required_snippet in readme
+
+    assert "class Tool(QMainWindow):" not in readme
