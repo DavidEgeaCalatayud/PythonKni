@@ -57,10 +57,11 @@ def save_config(config_file: Path, config: dict[str, str]) -> None:
         dir=config_file.parent,
         text=True,
     )
+    os.close(fd)
     temp_file = Path(temp_name)
 
     try:
-        with os.fdopen(fd, "w", encoding="utf-8", newline="\n") as file:
+        with temp_file.open("w", encoding="utf-8", newline="\n") as file:
             json.dump(normalized_config, file, indent=2, ensure_ascii=False)
             file.write("\n")
             file.flush()
