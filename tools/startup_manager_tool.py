@@ -3,5 +3,5 @@
 New code should import from :mod:`pythonkni.startup`.
 """
 
-from pythonkni.startup.models import *
-from pythonkni.startup.service import *
+from pythonkni.startup.models import *  # noqa: F403
+from pythonkni.startup.service import *  # noqa: F403
