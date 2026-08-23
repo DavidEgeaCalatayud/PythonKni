@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import json
+import os
+import tempfile
 from pathlib import Path
 from typing import Any
 
@@ -45,7 +47,30 @@ def load_config(config_file: Path) -> dict[str, str]:
 
 
 def save_config(config_file: Path, config: dict[str, str]) -> None:
+    """Persist config atomically so the previous valid file survives failures."""
     config_file.parent.mkdir(parents=True, exist_ok=True)
     normalized_config = normalize_config(config)
-    with config_file.open("w", encoding="utf-8") as file:
-        json.dump(normalized_config, file, indent=2, ensure_ascii=False)
+
+    fd, temp_name = tempfile.mkstemp(
+        prefix=f".{config_file.name}.",
+        suffix=".tmp",
+        dir=config_file.parent,
+        text=True,
+    )
+    os.close(fd)
+    temp_file = Path(temp_name)
+
+    try:
+        with temp_file.open("w", encoding="utf-8", newline="\n") as file:
+            json.dump(normalized_config, file, indent=2, ensure_ascii=False)
+            file.write("\n")
+            file.flush()
+            os.fsync(file.fileno())
+
+        os.replace(temp_file, config_file)
+    except Exception:
+        try:
+            temp_file.unlink(missing_ok=True)
+        except OSError:
+            pass
+        raise
