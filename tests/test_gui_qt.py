@@ -47,6 +47,46 @@ def test_loader_emits_import_errors(qtbot, monkeypatch):
     assert "plugin roto" in errors[0]
 
 
+def test_loader_emits_fatal_error_when_tool_directory_cannot_be_listed(qtbot, monkeypatch):
+    def fail_listdir(_path):
+        raise PermissionError("sin permisos")
+
+    monkeypatch.setattr(main.os, "listdir", fail_listdir)
+    loader = main.LoaderThread()
+
+    with qtbot.waitSignal(loader.fatal_error, timeout=3000) as blocker:
+        loader.start()
+
+    loader.wait()
+    assert blocker.args == ["PermissionError: sin permisos"]
+
+
+def test_menu_leaves_loading_state_after_fatal_loader_error(qtbot, monkeypatch):
+    def fail_discovery():
+        raise FileNotFoundError("directorio tools ausente")
+
+    critical_messages = []
+    monkeypatch.setattr(main, "discover_tool_classes", fail_discovery)
+    monkeypatch.setattr(
+        QMessageBox,
+        "critical",
+        lambda _parent, _title, message: critical_messages.append(message),
+    )
+
+    window = main.MenuWindow()
+    qtbot.addWidget(window)
+    window.show()
+
+    qtbot.waitUntil(lambda: not window.loader_thread.isRunning(), timeout=3000)
+    qtbot.waitUntil(
+        lambda: window.label_loading.text() == "No se pudieron cargar las herramientas.",
+        timeout=3000,
+    )
+
+    assert critical_messages
+    assert "FileNotFoundError: directorio tools ausente" in critical_messages[0]
+
+
 def test_worker_can_be_started_and_cancelled(qtbot):
     def slow_task(worker):
         while True:
