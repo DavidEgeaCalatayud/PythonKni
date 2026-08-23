@@ -1,36 +1,41 @@
 from __future__ import annotations
-from tools.base_tool import BaseTool
-from tools.csv_utils import safe_csv_row
+
 import csv
-import os
-from dataclasses import dataclass
+import sys as _sys
+import types as _types
 from pathlib import Path
+
 from PyQt5.QtCore import QThread, pyqtSignal
 from PyQt5.QtWidgets import (
     QFileDialog,
     QHBoxLayout,
     QLabel,
     QMessageBox,
-    QPushButton,
     QProgressBar,
+    QPushButton,
     QTableWidget,
     QTableWidgetItem,
     QVBoxLayout,
     QWidget,
-    QMainWindow,
 )
+
+from tools.base_tool import BaseTool
+from tools.csv_utils import safe_csv_row
 from tools.theme_manager import ThemeManager
+
+from . import service as _service
 from .models import (
-    DiskItem,
+    DiskItem as DiskItem,
 )
 from .service import (
-    analyze_directory,
-    directory_size,
-    format_bytes,
+    analyze_directory as analyze_directory,
 )
-from . import service as _service
-import sys as _sys
-import types as _types
+from .service import (
+    directory_size as directory_size,
+)
+from .service import (
+    format_bytes as format_bytes,
+)
 
 
 class DiskAnalyzerWorker(QThread):

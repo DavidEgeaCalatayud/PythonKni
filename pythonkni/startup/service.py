@@ -20,7 +20,6 @@ except ImportError:  # pragma: no cover - only available on Windows
 
 from .models import StartupItem
 
-
 RUN_KEY = r"Software\Microsoft\Windows\CurrentVersion\Run"
 DISABLED_REGISTRY_KEY = r"Software\PythonKni\DisabledStartup\Registry"
 

@@ -6,7 +6,6 @@ from collections.abc import Callable
 from PyQt5.QtCore import QThread, QTimer
 from PyQt5.QtWidgets import QMainWindow
 
-
 WORKER_SHUTDOWN_WAIT_MS = 3000
 DEFERRED_CLOSE_POLL_MS = 50
 

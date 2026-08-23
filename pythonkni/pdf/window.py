@@ -1,7 +1,5 @@
 from __future__ import annotations
 
-from tools.base_tool import BaseTool
-
 import os
 
 from PyQt5.QtCore import QTimer
@@ -11,7 +9,6 @@ from PyQt5.QtWidgets import (
     QLabel,
     QLineEdit,
     QListWidget,
-    QMainWindow,
     QMessageBox,
     QPlainTextEdit,
     QPushButton,
@@ -33,6 +30,7 @@ from pythonkni.pdf.service import (
     require_pypdf_available,
     split_pdf_task,
 )
+from tools.base_tool import BaseTool
 from tools.worker import Worker
 
 

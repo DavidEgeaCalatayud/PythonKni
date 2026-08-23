@@ -1,7 +1,6 @@
 import random
 import threading
 import zipfile
-from pathlib import Path
 
 import py7zr
 import pytest

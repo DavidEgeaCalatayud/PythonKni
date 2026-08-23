@@ -1,17 +1,14 @@
 from __future__ import annotations
-from tools.base_tool import BaseTool
-import hashlib
-import logging
-import os
-from dataclasses import dataclass
+
+import sys as _sys
+import types as _types
+
 import psutil
-import requests
 from PyQt5.QtCore import Qt
 from PyQt5.QtGui import QMovie
 from PyQt5.QtWidgets import (
     QHBoxLayout,
     QLabel,
-    QMainWindow,
     QMessageBox,
     QPushButton,
     QSizePolicy,
@@ -21,28 +18,55 @@ from PyQt5.QtWidgets import (
     QVBoxLayout,
     QWidget,
 )
+
 from tools.app_paths import ASSETS_DIR
+from tools.base_tool import BaseTool
 from tools.theme_manager import ThemeManager
 from tools.worker import Worker
-from .service import (
-    CPU_SAMPLE_SECONDS,
-    ProcessDetails,
-    SYSTEM_PROCESS_NAMES,
-    SYSTEM_USERNAMES,
-    VirusTotalResult,
-    _safe_process_value,
-    analyze_process_task,
-    format_process_identity,
-    get_process_details,
-    get_vt_api_key,
-    is_own_process,
-    is_system_process,
-    load_processes_task,
-    logger,
-)
+
 from . import service as _service
-import sys as _sys
-import types as _types
+from .service import (
+    CPU_SAMPLE_SECONDS as CPU_SAMPLE_SECONDS,
+)
+from .service import (
+    SYSTEM_PROCESS_NAMES as SYSTEM_PROCESS_NAMES,
+)
+from .service import (
+    SYSTEM_USERNAMES as SYSTEM_USERNAMES,
+)
+from .service import (
+    ProcessDetails as ProcessDetails,
+)
+from .service import (
+    VirusTotalResult as VirusTotalResult,
+)
+from .service import (
+    _safe_process_value as _safe_process_value,
+)
+from .service import (
+    analyze_process_task as analyze_process_task,
+)
+from .service import (
+    format_process_identity as format_process_identity,
+)
+from .service import (
+    get_process_details as get_process_details,
+)
+from .service import (
+    get_vt_api_key as get_vt_api_key,
+)
+from .service import (
+    is_own_process as is_own_process,
+)
+from .service import (
+    is_system_process as is_system_process,
+)
+from .service import (
+    load_processes_task as load_processes_task,
+)
+from .service import (
+    logger as logger,
+)
 
 
 class Tool(BaseTool):
