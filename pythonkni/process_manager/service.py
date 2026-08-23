@@ -1,16 +1,16 @@
 from __future__ import annotations
+
+import hashlib
+import logging
+import os
+
+import psutil
+import requests
+
 from .models import (
     ProcessDetails,
     VirusTotalResult,
 )
-import hashlib
-import logging
-import os
-from dataclasses import dataclass
-import psutil
-import requests
-from tools.app_paths import ASSETS_DIR
-from tools.theme_manager import ThemeManager
 
 logger = logging.getLogger(__name__)
 SYSTEM_PROCESS_NAMES = {

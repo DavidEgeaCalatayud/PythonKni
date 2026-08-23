@@ -1,14 +1,9 @@
 from __future__ import annotations
+
 import os
-import shutil
-import tempfile
-from dataclasses import dataclass
-from pathlib import Path
-import logging
-from xml.dom.minidom import Document as XMLDocument
-import fitz
-from docx import Document
-from PIL import Image
+import sys as _sys
+import types as _types
+
 from PyQt5.QtCore import QTimer
 from PyQt5.QtWidgets import (
     QFileDialog,
@@ -19,32 +14,59 @@ from PyQt5.QtWidgets import (
     QVBoxLayout,
     QWidget,
 )
-from reportlab.lib.pagesizes import A4
-from reportlab.pdfgen import canvas
-from pythonkni.core.tasks import WorkerCancelled
+
 from tools.base_tool import BaseTool
 from tools.worker import Worker
-from .service import (
-    ConversionResult,
-    OutputTransaction,
-    _check_worker,
-    _report,
-    _single_output_transaction,
-    batch_conversion_task,
-    conversion_task,
-    docx_to_pdf,
-    docx_to_text,
-    images_to_pdf,
-    kml_to_text,
-    logger,
-    pdf_to_images,
-    text_to_docx,
-    text_to_kml,
-    validate_extension,
-)
+
 from . import service as _service
-import sys as _sys
-import types as _types
+from .service import (
+    ConversionResult as ConversionResult,
+)
+from .service import (
+    OutputTransaction as OutputTransaction,
+)
+from .service import (
+    _check_worker as _check_worker,
+)
+from .service import (
+    _report as _report,
+)
+from .service import (
+    _single_output_transaction as _single_output_transaction,
+)
+from .service import (
+    batch_conversion_task as batch_conversion_task,
+)
+from .service import (
+    conversion_task as conversion_task,
+)
+from .service import (
+    docx_to_pdf as docx_to_pdf,
+)
+from .service import (
+    docx_to_text as docx_to_text,
+)
+from .service import (
+    images_to_pdf as images_to_pdf,
+)
+from .service import (
+    kml_to_text as kml_to_text,
+)
+from .service import (
+    logger as logger,
+)
+from .service import (
+    pdf_to_images as pdf_to_images,
+)
+from .service import (
+    text_to_docx as text_to_docx,
+)
+from .service import (
+    text_to_kml as text_to_kml,
+)
+from .service import (
+    validate_extension as validate_extension,
+)
 
 
 class Tool(BaseTool):

@@ -3,7 +3,6 @@ from __future__ import annotations
 from collections.abc import Iterable
 from typing import Any
 
-
 CSV_FORMULA_PREFIXES = ("=", "+", "-", "@")
 CSV_LEADING_WHITESPACE = " \t\r\n"
 

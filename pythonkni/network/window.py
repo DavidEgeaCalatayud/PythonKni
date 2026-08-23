@@ -1,19 +1,12 @@
 from __future__ import annotations
-from tools.base_tool import BaseTool
-from tools.csv_utils import safe_csv_cell
+
 import csv
-import ipaddress
 import json
-import logging
-import platform
-import re
-import socket
-import subprocess
+import sys as _sys
 import threading
 import time
-from concurrent.futures import FIRST_COMPLETED, ThreadPoolExecutor, wait
-from dataclasses import dataclass
-import psutil
+import types as _types
+
 from PyQt5.QtCore import QThread, pyqtSignal
 from PyQt5.QtWidgets import (
     QComboBox,
@@ -27,43 +20,105 @@ from PyQt5.QtWidgets import (
     QVBoxLayout,
     QWidget,
 )
+
 from tools.app_paths import SCAN_HISTORY_FILE, ensure_app_dirs
-from .service import (
-    COMMON_TCP_SERVICES,
-    DEFAULT_ROUTE_PROBE,
-    DiscoveredHost,
-    MAC_PATTERN,
-    MAX_NETWORK_HOSTS,
-    NETWORK_SCAN_WORKERS,
-    NetworkInterface,
-    OpenPort,
-    PENDING_TASK_FACTOR,
-    PORT_SCAN_WORKERS,
-    PORT_TIMEOUT_SECONDS,
-    REVERSE_DNS_TIMEOUT_SECONDS,
-    THREAD_SHUTDOWN_WAIT_MS,
-    _bounded_future_results,
-    _parse_arp_mac,
-    _ping_command,
-    _ping_succeeded,
-    _probe_host,
-    _probe_port,
-    _usable_host_count,
-    detect_default_network,
-    get_default_route_address,
-    get_ipv4_interfaces,
-    get_mac_address,
-    known_service_name,
-    logger,
-    parse_network_cidr,
-    reverse_dns_name,
-    scan_network_hosts,
-    scan_open_ports,
-    validate_port_range,
-)
+from tools.base_tool import BaseTool
+from tools.csv_utils import safe_csv_cell
+
 from . import service as _service
-import sys as _sys
-import types as _types
+from .service import (
+    COMMON_TCP_SERVICES as COMMON_TCP_SERVICES,
+)
+from .service import (
+    DEFAULT_ROUTE_PROBE as DEFAULT_ROUTE_PROBE,
+)
+from .service import (
+    MAC_PATTERN as MAC_PATTERN,
+)
+from .service import (
+    MAX_NETWORK_HOSTS as MAX_NETWORK_HOSTS,
+)
+from .service import (
+    NETWORK_SCAN_WORKERS as NETWORK_SCAN_WORKERS,
+)
+from .service import (
+    PENDING_TASK_FACTOR as PENDING_TASK_FACTOR,
+)
+from .service import (
+    PORT_SCAN_WORKERS as PORT_SCAN_WORKERS,
+)
+from .service import (
+    PORT_TIMEOUT_SECONDS as PORT_TIMEOUT_SECONDS,
+)
+from .service import (
+    REVERSE_DNS_TIMEOUT_SECONDS as REVERSE_DNS_TIMEOUT_SECONDS,
+)
+from .service import (
+    THREAD_SHUTDOWN_WAIT_MS as THREAD_SHUTDOWN_WAIT_MS,
+)
+from .service import (
+    DiscoveredHost as DiscoveredHost,
+)
+from .service import (
+    NetworkInterface as NetworkInterface,
+)
+from .service import (
+    OpenPort as OpenPort,
+)
+from .service import (
+    _bounded_future_results as _bounded_future_results,
+)
+from .service import (
+    _parse_arp_mac as _parse_arp_mac,
+)
+from .service import (
+    _ping_command as _ping_command,
+)
+from .service import (
+    _ping_succeeded as _ping_succeeded,
+)
+from .service import (
+    _probe_host as _probe_host,
+)
+from .service import (
+    _probe_port as _probe_port,
+)
+from .service import (
+    _usable_host_count as _usable_host_count,
+)
+from .service import (
+    detect_default_network as detect_default_network,
+)
+from .service import (
+    get_default_route_address as get_default_route_address,
+)
+from .service import (
+    get_ipv4_interfaces as get_ipv4_interfaces,
+)
+from .service import (
+    get_mac_address as get_mac_address,
+)
+from .service import (
+    known_service_name as known_service_name,
+)
+from .service import (
+    logger as logger,
+)
+from .service import (
+    parse_network_cidr as parse_network_cidr,
+)
+from .service import (
+    reverse_dns_name as reverse_dns_name,
+)
+from .service import (
+    scan_network_hosts as scan_network_hosts,
+)
+from .service import (
+    scan_open_ports as scan_open_ports,
+)
+from .service import (
+    validate_port_range as validate_port_range,
+)
 
 
 class NetworkScanWorker(QThread):

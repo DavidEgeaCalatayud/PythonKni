@@ -1,13 +1,8 @@
 from __future__ import annotations
-import hashlib
-import json
-import logging
-import os
-import shutil
-import threading
-from collections import defaultdict
-from datetime import datetime, timezone
-from pathlib import Path
+
+import sys as _sys
+import types as _types
+
 from PyQt5.QtWidgets import (
     QFileDialog,
     QMessageBox,
@@ -16,36 +11,78 @@ from PyQt5.QtWidgets import (
     QVBoxLayout,
     QWidget,
 )
+
 from pythonkni.core.tasks import WorkerCancelled
 from tools.base_tool import BaseTool
 from tools.worker import Worker
-from .service import (
-    DUPLICATES_DIR_NAME,
-    DuplicateOperationCancelled,
-    HASH_CHUNK_SIZE,
-    QUICK_SAMPLE_SIZE,
-    RESTORE_MANIFEST_PREFIX,
-    _check_cancel,
-    _finish_cancelled_manifest,
-    _group_readable_files_by_size,
-    _is_inside,
-    _iter_scan_files,
-    _new_manifest_path,
-    _physical_identity,
-    _same_physical_file,
-    _unique_destination,
-    _verified_byte_groups,
-    _write_manifest_atomic,
-    files_equal,
-    find_duplicates,
-    hash_file,
-    logger,
-    move_duplicates,
-    quick_hash_file,
-)
+
 from . import service as _service
-import sys as _sys
-import types as _types
+from .service import (
+    DUPLICATES_DIR_NAME as DUPLICATES_DIR_NAME,
+)
+from .service import (
+    HASH_CHUNK_SIZE as HASH_CHUNK_SIZE,
+)
+from .service import (
+    QUICK_SAMPLE_SIZE as QUICK_SAMPLE_SIZE,
+)
+from .service import (
+    RESTORE_MANIFEST_PREFIX as RESTORE_MANIFEST_PREFIX,
+)
+from .service import (
+    DuplicateOperationCancelled as DuplicateOperationCancelled,
+)
+from .service import (
+    _check_cancel as _check_cancel,
+)
+from .service import (
+    _finish_cancelled_manifest as _finish_cancelled_manifest,
+)
+from .service import (
+    _group_readable_files_by_size as _group_readable_files_by_size,
+)
+from .service import (
+    _is_inside as _is_inside,
+)
+from .service import (
+    _iter_scan_files as _iter_scan_files,
+)
+from .service import (
+    _new_manifest_path as _new_manifest_path,
+)
+from .service import (
+    _physical_identity as _physical_identity,
+)
+from .service import (
+    _same_physical_file as _same_physical_file,
+)
+from .service import (
+    _unique_destination as _unique_destination,
+)
+from .service import (
+    _verified_byte_groups as _verified_byte_groups,
+)
+from .service import (
+    _write_manifest_atomic as _write_manifest_atomic,
+)
+from .service import (
+    files_equal as files_equal,
+)
+from .service import (
+    find_duplicates as find_duplicates,
+)
+from .service import (
+    hash_file as hash_file,
+)
+from .service import (
+    logger as logger,
+)
+from .service import (
+    move_duplicates as move_duplicates,
+)
+from .service import (
+    quick_hash_file as quick_hash_file,
+)
 
 
 def _scan_duplicates_task(worker: Worker, folder_path: str):

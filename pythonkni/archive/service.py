@@ -1,13 +1,17 @@
 from __future__ import annotations
+
 import io
+import logging
 import os
 import shutil
 import tempfile
 import threading
 import zipfile
 from pathlib import Path
+
 import py7zr
 from py7zr import Py7zIO, WriterFactory
+
 from tools.zip_7zip_utils import (
     COPY_CHUNK_SIZE,
     DEFAULT_LIMITS,
@@ -23,9 +27,6 @@ from tools.zip_7zip_utils import (
     _zip_member,
     validate_archive_members,
 )
-import logging
-from tools.theme_manager import ThemeManager
-from tools.zip_7zip_utils import _default_extract_path
 
 
 def _report(worker, message: str, current: int | None = None, total: int | None = None) -> None:
