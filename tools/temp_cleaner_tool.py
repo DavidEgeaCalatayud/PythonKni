@@ -110,9 +110,7 @@ def _browser_cache_candidates() -> list[CleanTarget]:
 def _log_candidates() -> list[CleanTarget]:
     if platform.system() != "Windows":
         return []
-    return [
-        CleanTarget("Windows Temp", Path(os.environ.get("SystemRoot", "C:/Windows")) / "Temp")
-    ]
+    return [CleanTarget("Windows Temp", Path(os.environ.get("SystemRoot", "C:/Windows")) / "Temp")]
 
 
 def _allowed_clean_containers() -> set[Path]:
@@ -147,7 +145,9 @@ def _allowed_clean_containers() -> set[Path]:
             if cache_home:
                 containers.add(cache_home)
     else:
-        cache_home = _resolved_path(Path(os.environ.get("XDG_CACHE_HOME", home / ".cache" if home else "")))
+        cache_home = _resolved_path(
+            Path(os.environ.get("XDG_CACHE_HOME", home / ".cache" if home else ""))
+        )
         if cache_home:
             containers.add(cache_home)
 
