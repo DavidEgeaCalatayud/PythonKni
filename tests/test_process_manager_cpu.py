@@ -1,4 +1,3 @@
-
 import pytest
 
 from pythonkni.core.tasks import WorkerCancelled
