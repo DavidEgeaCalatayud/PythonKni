@@ -1,4 +1,7 @@
 from __future__ import annotations
+from .models import (
+    ConversionResult,
+)
 import os
 import shutil
 import tempfile
@@ -13,30 +16,6 @@ from reportlab.lib.pagesizes import A4
 from reportlab.pdfgen import canvas
 from pythonkni.core.tasks import WorkerCancelled
 
-class ConversionResult:
-    """Structured result for converter operations."""
-
-    success: bool
-    outputs: tuple[str, ...] = ()
-    warnings: tuple[str, ...] = ()
-    failures: tuple[str, ...] = ()
-
-    @classmethod
-    def completed(
-        cls,
-        outputs: list[str] | tuple[str, ...],
-        *,
-        warnings: list[str] | tuple[str, ...] = (),
-    ) -> "ConversionResult":
-        return cls(True, tuple(outputs), tuple(warnings), ())
-
-    @classmethod
-    def failed(
-        cls,
-        *failures: str,
-        warnings: list[str] | tuple[str, ...] = (),
-    ) -> "ConversionResult":
-        return cls(False, (), tuple(warnings), tuple(failures))
 class OutputTransaction:
     """Stage one or more outputs and publish them atomically as a logical batch.
 

@@ -1,4 +1,8 @@
 from __future__ import annotations
+from .models import (
+    ProcessDetails,
+    VirusTotalResult,
+)
 import hashlib
 import logging
 import os
@@ -30,20 +34,6 @@ SYSTEM_USERNAMES = {
     "nt authority\\system",
     "system",
 }
-class ProcessDetails:
-    pid: int
-    name: str
-    exe_path: str
-    username: str
-    create_time: float
-class VirusTotalResult:
-    status: str
-    exe_path: str
-    file_hash: str
-    positives: int = 0
-    total: int = 0
-    detections: tuple[str, ...] = ()
-    response_text: str = ""
 def get_vt_api_key():
     return os.getenv("VIRUSTOTAL_API_KEY")
 def is_own_process(pid, app_pid=None):

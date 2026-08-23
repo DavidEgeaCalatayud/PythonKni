@@ -1,4 +1,9 @@
 from __future__ import annotations
+from .models import (
+    CleanPreview,
+    CleanResult,
+    CleanTarget,
+)
 import logging
 import os
 import platform
@@ -11,9 +16,6 @@ from .models import (
 )
 
 logger = logging.getLogger(__name__)
-class CleanTarget:
-    label: str
-    path: Path
 def _resolve_existing(path: Path) -> Path | None:
     try:
         resolved = path.expanduser().resolve()

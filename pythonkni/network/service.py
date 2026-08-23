@@ -1,4 +1,9 @@
 from __future__ import annotations
+from .models import (
+    DiscoveredHost,
+    NetworkInterface,
+    OpenPort,
+)
 from tools.csv_utils import safe_csv_cell
 import csv
 import ipaddress
@@ -50,18 +55,6 @@ COMMON_TCP_SERVICES = {
     6379: "redis",
     8080: "http-alt",
 }
-class NetworkInterface:
-    name: str
-    address: str
-    netmask: str
-    cidr: str
-class DiscoveredHost:
-    ip: str
-    hostname: str
-    mac: str
-class OpenPort:
-    port: int
-    service: str
 def validate_port_range(port_range: str) -> tuple[int, int]:
     try:
         start_text, end_text = port_range.split("-", 1)

@@ -13,6 +13,18 @@ from concurrent.futures import FIRST_COMPLETED, ThreadPoolExecutor, wait
 from dataclasses import dataclass
 import psutil
 
-"""Domain has no dedicated value objects yet."""
-
-__all__: list[str] = []
+@dataclass(frozen=True)
+class NetworkInterface:
+    name: str
+    address: str
+    netmask: str
+    cidr: str
+@dataclass(frozen=True)
+class DiscoveredHost:
+    ip: str
+    hostname: str
+    mac: str
+@dataclass(frozen=True)
+class OpenPort:
+    port: int
+    service: str
