@@ -109,9 +109,16 @@ def run_packaging_smoke_test() -> int:
 
 class LoaderThread(QThread):
     tools_loaded = pyqtSignal(list, object, list)  # (normal_tools, config_tool, load_errors)
+    fatal_error = pyqtSignal(str)
 
     def run(self):
-        normal_tools, config_tool, load_errors = discover_tool_classes()
+        try:
+            normal_tools, config_tool, load_errors = discover_tool_classes()
+        except Exception as error:
+            logger.exception("Fatal error discovering tool plugins")
+            self.fatal_error.emit(f"{type(error).__name__}: {error}")
+            return
+
         self.tools_loaded.emit(normal_tools, config_tool, load_errors)
 
 
@@ -132,6 +139,7 @@ class MenuWindow(QMainWindow):
 
         self.loader_thread = LoaderThread()
         self.loader_thread.tools_loaded.connect(self.on_tools_loaded)
+        self.loader_thread.fatal_error.connect(self.on_loader_fatal_error)
         self.loader_thread.start()
 
     def on_tools_loaded(self, normal_tools, config_tool, load_errors):
@@ -155,6 +163,15 @@ class MenuWindow(QMainWindow):
                 "Herramientas no cargadas",
                 "Algunas herramientas no se han podido cargar:\n\n" + "\n".join(load_errors),
             )
+
+    def on_loader_fatal_error(self, error: str) -> None:
+        """Abandona el estado de carga si la discovery global no puede completarse."""
+        self.label_loading.setText("No se pudieron cargar las herramientas.")
+        QMessageBox.critical(
+            self,
+            "Error al cargar herramientas",
+            "No se pudo completar la carga de herramientas.\n\n" + error,
+        )
 
     def open_tool(self, tool_class):
         self.window = tool_class()
