@@ -1,5 +1,3 @@
-
-
 class ThemeManager:
     current_theme = "Claro"
 
