@@ -159,12 +159,8 @@ class Tool(BaseTool):
         worker.result.connect(
             lambda processes, worker=worker: self._process_load_result(worker, processes)
         )
-        worker.error.connect(
-            lambda error, worker=worker: self._process_load_error(worker, error)
-        )
-        worker.cancelled.connect(
-            lambda worker=worker: self._process_load_cancelled(worker)
-        )
+        worker.error.connect(lambda error, worker=worker: self._process_load_error(worker, error))
+        worker.cancelled.connect(lambda worker=worker: self._process_load_cancelled(worker))
         worker.finished.connect(lambda: self._process_load_finished(worker))
         self.start_managed_worker(worker, cancel=worker.cancel)
 
