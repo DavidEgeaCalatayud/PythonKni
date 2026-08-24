@@ -11,17 +11,6 @@ from pathlib import Path
 
 import py7zr
 
-try:
-    from py7zr import Py7zIO as _Py7zIO
-    from py7zr import WriterFactory as _WriterFactory
-except ImportError:
-    try:
-        from py7zr.io import Py7zIO as _Py7zIO
-        from py7zr.io import WriterFactory as _WriterFactory
-    except ImportError:
-        _Py7zIO = None
-        _WriterFactory = None
-
 from tools.zip_7zip_utils import (
     COPY_CHUNK_SIZE,
     DEFAULT_LIMITS,
@@ -37,6 +26,17 @@ from tools.zip_7zip_utils import (
     _zip_member,
     validate_archive_members,
 )
+
+try:
+    from py7zr import Py7zIO as _Py7zIO
+    from py7zr import WriterFactory as _WriterFactory
+except ImportError:
+    try:
+        from py7zr.io import Py7zIO as _Py7zIO
+        from py7zr.io import WriterFactory as _WriterFactory
+    except ImportError:
+        _Py7zIO = None
+        _WriterFactory = None
 
 
 HAS_STREAMING_7Z_FACTORY = _Py7zIO is not None and _WriterFactory is not None
