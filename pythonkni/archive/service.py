@@ -10,7 +10,17 @@ import zipfile
 from pathlib import Path
 
 import py7zr
-from py7zr import Py7zIO, WriterFactory
+
+try:
+    from py7zr import Py7zIO as _Py7zIO
+    from py7zr import WriterFactory as _WriterFactory
+except ImportError:
+    try:
+        from py7zr.io import Py7zIO as _Py7zIO
+        from py7zr.io import WriterFactory as _WriterFactory
+    except ImportError:
+        _Py7zIO = None
+        _WriterFactory = None
 
 from tools.zip_7zip_utils import (
     COPY_CHUNK_SIZE,
@@ -27,6 +37,22 @@ from tools.zip_7zip_utils import (
     _zip_member,
     validate_archive_members,
 )
+
+
+HAS_STREAMING_7Z_FACTORY = _Py7zIO is not None and _WriterFactory is not None
+_Py7zIOBase = _Py7zIO if _Py7zIO is not None else object
+_WriterFactoryBase = _WriterFactory if _WriterFactory is not None else object
+
+
+def _require_streaming_7z_factory() -> None:
+    if HAS_STREAMING_7Z_FACTORY:
+        return
+    version = getattr(py7zr, "__version__", "desconocida")
+    raise RuntimeError(
+        "La extracción 7Z segura requiere py7zr >= 1.0.0 y Python >= 3.9. "
+        f"La instalación actual usa py7zr {version} sin Py7zIO/WriterFactory. "
+        "Actualiza Python y reinstala requirements.txt para habilitar esta operación."
+    )
 
 
 def _report(worker, message: str, current: int | None = None, total: int | None = None) -> None:
@@ -229,7 +255,7 @@ def extract_zip_task(
     return destination_path
 
 
-class _SevenZipWriter(Py7zIO):
+class _SevenZipWriter(_Py7zIOBase):
     def __init__(self, output: Path, expected_size: int, factory: "_SevenZipFactory") -> None:
         self._output = output
         self._expected_size = expected_size
@@ -265,7 +291,7 @@ class _SevenZipWriter(Py7zIO):
             self._file.close()
 
 
-class _SevenZipFactory(WriterFactory):
+class _SevenZipFactory(_WriterFactoryBase):
     def __init__(
         self,
         staging: Path,
@@ -289,7 +315,7 @@ class _SevenZipFactory(WriterFactory):
         self._lock = threading.Lock()
         self._writers: list[_SevenZipWriter] = []
 
-    def create(self, filename: str) -> Py7zIO:
+    def create(self, filename: str):
         self.worker.check_cancelled()
         key = _safe_relative_path(filename, self.limits).as_posix().casefold()
         relative = self.validated.get(key)
@@ -328,6 +354,7 @@ def extract_7z_task(
     limits: ArchiveLimits = DEFAULT_LIMITS,
 ) -> Path:
     """Safely extract 7Z data through a cancellable streaming writer factory."""
+    _require_streaming_7z_factory()
     source = Path(file_path)
     destination_path = Path(destination)
 
