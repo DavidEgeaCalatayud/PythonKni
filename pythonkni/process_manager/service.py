@@ -36,6 +36,22 @@ SYSTEM_USERNAMES = {
 }
 
 
+class ProcessOperationError(RuntimeError):
+    """Base error for process operations that should be presented safely by the UI."""
+
+
+class OwnProcessTerminationError(ProcessOperationError):
+    """Raised when PythonKni is asked to terminate its own process."""
+
+
+class ProcessUnavailableError(ProcessOperationError):
+    """Raised when a process disappeared or cannot be inspected/managed."""
+
+
+class ProcessIdentityChangedError(ProcessOperationError):
+    """Raised when a PID was recycled between inspection and termination."""
+
+
 def get_vt_api_key():
     return os.getenv("VIRUSTOTAL_API_KEY")
 
@@ -81,6 +97,48 @@ def get_process_details(proc):
         username=_safe_process_value(proc.username),
         create_time=proc.create_time(),
     )
+
+
+def get_termination_target(pid: int, app_pid: int | None = None) -> ProcessDetails:
+    """Inspect and validate a process before the UI asks the user for confirmation."""
+    if is_own_process(pid, app_pid=app_pid):
+        raise OwnProcessTerminationError(
+            "PythonKni no puede terminar su propio proceso desde el Gestor de Procesos."
+        )
+
+    try:
+        proc = psutil.Process(pid)
+        return get_process_details(proc)
+    except (psutil.NoSuchProcess, psutil.AccessDenied, psutil.ZombieProcess) as error:
+        raise ProcessUnavailableError(
+            "El proceso ya no existe o no se puede consultar con los permisos actuales."
+        ) from error
+
+
+def terminate_process(details: ProcessDetails) -> None:
+    """Terminate the previously inspected process after revalidating its identity.
+
+    PID reuse is explicitly checked through ``create_time`` so a process that
+    disappeared and was replaced after the confirmation dialog is never targeted.
+    """
+    if is_own_process(details.pid):
+        raise OwnProcessTerminationError(
+            "PythonKni no puede terminar su propio proceso desde el Gestor de Procesos."
+        )
+
+    try:
+        proc = psutil.Process(details.pid)
+        if not proc.is_running() or proc.create_time() != details.create_time:
+            raise ProcessIdentityChangedError(
+                "El proceso seleccionado ya no es el mismo. Se ha cancelado la operación por seguridad."
+            )
+        proc.terminate()
+    except ProcessIdentityChangedError:
+        raise
+    except (psutil.NoSuchProcess, psutil.AccessDenied, psutil.ZombieProcess) as error:
+        raise ProcessUnavailableError(
+            "El proceso ya no existe o no se puede administrar con los permisos actuales."
+        ) from error
 
 
 CPU_SAMPLE_SECONDS = 0.1

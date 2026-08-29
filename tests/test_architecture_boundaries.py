@@ -25,6 +25,10 @@ DOMAINS = {
 SERVICE_MODULES = [ROOT / "pythonkni" / domain / "service.py" for domain in DOMAINS]
 MODEL_MODULES = [ROOT / "pythonkni" / domain / "models.py" for domain in DOMAINS]
 TOOL_WRAPPERS = [ROOT / "tools" / filename for filename in DOMAINS.values()]
+INFRASTRUCTURE_MODULES = [
+    ROOT / "pythonkni" / "infrastructure" / "archives.py",
+    ROOT / "pythonkni" / "infrastructure" / "paths.py",
+]
 
 
 def imported_modules(path):
@@ -53,6 +57,37 @@ def test_models_are_framework_independent(path):
     modules = imported_modules(path)
     assert not any(name == "PyQt5" or name.startswith("PyQt5.") for name in modules)
     assert not any(name == "tools" or name.startswith("tools.") for name in modules)
+
+
+@pytest.mark.parametrize("path", INFRASTRUCTURE_MODULES)
+def test_shared_infrastructure_is_framework_independent(path):
+    assert path.is_file(), path
+    modules = imported_modules(path)
+    assert not any(name == "PyQt5" or name.startswith("PyQt5.") for name in modules)
+    assert not any(name == "tools" or name.startswith("tools.") for name in modules)
+
+
+def test_archive_service_depends_on_infrastructure_not_legacy_tools():
+    modules = imported_modules(ROOT / "pythonkni" / "archive" / "service.py")
+    assert "pythonkni.infrastructure.archives" in modules
+    assert "tools.zip_7zip_utils" not in modules
+
+
+def test_config_persistence_service_is_ui_framework_independent():
+    modules = imported_modules(ROOT / "pythonkni" / "config" / "service.py")
+    assert not any(name == "tools" or name.startswith("tools.") for name in modules)
+    assert not any(name == "PyQt5" or name.startswith("PyQt5.") for name in modules)
+
+
+def test_process_manager_window_does_not_own_psutil_integration():
+    modules = imported_modules(ROOT / "pythonkni" / "process_manager" / "window.py")
+    assert "psutil" not in modules
+
+
+def test_legacy_app_paths_is_only_an_infrastructure_alias():
+    content = (ROOT / "tools" / "app_paths.py").read_text(encoding="utf-8")
+    assert "pythonkni.infrastructure" in content
+    assert len(content.splitlines()) <= 10
 
 
 @pytest.mark.parametrize("path", TOOL_WRAPPERS)

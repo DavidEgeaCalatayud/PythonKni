@@ -1,15 +1,23 @@
 # Architecture
 
-PythonKni is a PyQt5 desktop application with a dynamic tool loader. Every
-user-facing domain follows the same layered structure so domain and operating
-system logic are separated from Qt presentation code.
+PythonKni is a PyQt5 desktop application with a dynamic tool loader. User-facing
+domains follow a layered structure so domain rules and operating-system integration
+remain testable without constructing Qt widgets.
 
 ## Dependency rule
 
-The dependency direction is:
+The main dependency direction is:
 
 ```text
-models.py  <-  service.py  <-  window.py  <-  tools/*_tool.py adapter
+pythonkni/core + pythonkni/infrastructure
+                 ↑
+              models.py
+                 ↑
+              service.py
+                 ↑
+              window.py
+                 ↑
+         tools/*_tool.py adapter
 ```
 
 - `models.py` contains framework-independent value objects. It must not import
@@ -17,14 +25,14 @@ models.py  <-  service.py  <-  window.py  <-  tools/*_tool.py adapter
 - `service.py` owns domain rules, operating-system integration, persistence,
   parsing and transformations. It must not import PyQt, `tools.worker` or a
   window module.
-- `window.py` owns PyQt widgets, dialogs and background-thread orchestration.
-- `tools/*_tool.py` remains only as the loader/legacy compatibility adapter.
+- `window.py` owns PyQt widgets, dialogs, user confirmation and background-thread
+  orchestration. It delegates state-changing OS operations to services.
+- `pythonkni/infrastructure/` contains framework-independent technical building
+  blocks shared by multiple domains.
+- `tools/*_tool.py` remains only as the dynamic-loader/legacy compatibility edge.
 
-This lets business rules run in unit tests without constructing a QApplication
-and prevents UI modules from becoming the owner of persistence, parsing,
-operating-system calls or document transformations. Cooperative task cancellation
-uses `pythonkni/core/tasks.py`, so long-running services do not depend on the Qt
-`Worker` implementation.
+This keeps business and operating-system behavior independently testable and
+prevents presentation modules from becoming alternate service layers.
 
 ## Domain layout
 
@@ -44,53 +52,109 @@ The layered domains are:
 - `pythonkni/temp_cleaner/`
 - `pythonkni/wifi/`
 
-Each directory exposes `models.py`, `service.py` and `window.py`. A domain that
+Each domain exposes `models.py`, `service.py` and `window.py`. A domain that
 currently has no custom value object still keeps an explicit framework-independent
-`models.py` boundary rather than putting future data structures back into a
-service or window module.
+`models.py` boundary rather than moving future data structures into its UI.
 
-## Shared infrastructure
+## Core and infrastructure
 
-Shared application infrastructure remains outside the domain packages where it is
-intentionally cross-cutting:
+Framework-independent shared code lives below the domain/UI boundary:
 
-- `main.py`: application entry point and dynamic tool menu.
-- `pythonkni/core/tasks.py`: framework-independent cooperative cancellation.
+```text
+pythonkni/
+├─ core/
+│  └─ tasks.py
+└─ infrastructure/
+   ├─ archives.py
+   └─ paths.py
+```
+
+`pythonkni/core/tasks.py` contains cooperative cancellation primitives.
+
+`pythonkni/infrastructure/archives.py` owns archive path validation, extraction
+limits, staging/publication and ZIP/7Z extraction safety. It deliberately has no
+Qt dependency. The Archive service consumes this module directly instead of
+reaching back into `tools/`.
+
+`pythonkni/infrastructure/paths.py` owns application runtime/data paths. The old
+`tools.app_paths` path remains as a very small compatibility alias so legacy imports
+continue to resolve while first-party code can migrate to the infrastructure path.
+
+Cross-cutting Qt/runtime infrastructure remains at the application edge:
+
 - `tools/base_tool.py`: common Qt tool-window lifecycle contract.
 - `tools/worker.py`: reusable Qt worker and signal adapter.
-- `tools/app_paths.py`: application-specific filesystem paths.
-- `tools/csv_utils.py`: shared spreadsheet-safe CSV helpers.
-- `tools/theme_manager.py`, `tools/language_manager.py` and logging helpers:
-  application-wide UI/runtime infrastructure.
+- `tools/theme_manager.py` and `tools/language_manager.py`: UI runtime managers.
+- `tools/csv_utils.py`: spreadsheet-safe CSV helper used by presentation/export paths.
 - `assets/`: static UI assets.
 
-These modules are infrastructure rather than user-facing domains; they are not
-allowed to become alternate homes for domain business logic.
+## Configuration boundary
+
+Configuration persistence is split from UI runtime application:
+
+```text
+config/models.py
+      ↑
+config/service.py      # normalization + atomic persistence, no Qt/tools
+      ↑
+config/runtime.py      # applies values to ThemeManager/LanguageManager
+      ↑
+config/window.py
+```
+
+This keeps file-format and persistence rules testable without the UI while retaining
+the current global theme/language manager behavior.
+
+## Process Manager boundary
+
+Process inspection and termination are owned by `process_manager/service.py`.
+The window obtains a validated `ProcessDetails` snapshot, presents the required
+confirmation dialogs and then delegates termination back to the service.
+
+The service revalidates both PID liveness and process `create_time` immediately
+before calling `terminate()`. This prevents PID reuse between user confirmation and
+the destructive operation from targeting a different process.
+
+The window is explicitly prevented by architecture tests from importing `psutil`.
 
 ## Compatibility adapters
 
-The dynamic loader still discovers `tools/*_tool.py`, so the migration does not
-change the plugin contract or menu behavior. Migrated tool modules are thin
-adapters that expose the corresponding `pythonkni.<domain>.window` module. Legacy
-imports and existing tests therefore continue to resolve while the implementation
-lives under `pythonkni/`.
+The dynamic loader still discovers `tools/*_tool.py`, so the architecture changes do
+not alter the plugin contract or menu behavior. Migrated tool modules are thin
+adapters that expose the corresponding `pythonkni.<domain>.window` module.
 
-Some older tests and integrations also access service dependencies or monkeypatch
-symbols through the legacy tool/window module. The compatibility layer therefore
-forwards both relevant attribute reads and assignments to the separated service
-module. Public legacy exports that are intentionally retained are made explicit
-and covered by regression tests so lint cleanup cannot silently remove them.
+Legacy compatibility modules that must continue to exist, such as
+`tools.app_paths` and `tools.zip_7zip_utils`, delegate to the new implementation.
+`tools.zip_7zip_utils` keeps only its old dialog-oriented helpers and forwards the
+archive security API to `pythonkni.infrastructure.archives`, including legacy
+monkeypatch behavior used by regression tests.
 
 ## Architecture enforcement
 
-`tests/test_architecture_boundaries.py` enumerates the complete domain set and
-checks that:
+`tests/test_architecture_boundaries.py` turns these rules into CI-enforced checks.
+It verifies that:
 
-- every domain has `models.py`, `service.py` and `window.py`;
+- every declared domain has `models.py`, `service.py` and `window.py`;
 - models do not depend on Qt or `tools`;
-- services do not depend on Qt, `tools.worker` or windows;
-- loader-facing tool modules stay thin compatibility adapters;
+- services do not depend on Qt, `tools.worker` or window modules;
+- shared `pythonkni.infrastructure` modules do not depend on PyQt or `tools`;
+- Archive consumes the framework-independent archive infrastructure;
+- configuration persistence stays framework-independent;
+- Process Manager presentation does not import `psutil`;
+- loader-facing tool modules remain thin compatibility adapters;
 - every domain window still implements the `BaseTool` contract.
 
-This turns the layered architecture into a CI-enforced boundary rather than a
-convention that can silently regress.
+## Coverage gates
+
+CI measures branch coverage across both `pythonkni` and the compatibility/runtime
+`tools` package. The quality gates are intentionally asymmetric:
+
+```text
+overall repository coverage       >= 80%
+pythonkni/*/service.py coverage    >= 85%
+```
+
+The higher service threshold reflects the fact that services contain filesystem,
+network, process and other state-changing rules where regressions carry the most
+risk. Coverage is a guardrail rather than a substitute for behavioral assertions;
+security and rollback behavior continue to have dedicated regression tests.
