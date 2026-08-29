@@ -31,6 +31,29 @@ from pythonkni.infrastructure.archives import (
 
 logger = logging.getLogger(__name__)
 
+__all__ = [
+    "COPY_CHUNK_SIZE",
+    "DEFAULT_LIMITS",
+    "ArchiveLimits",
+    "ArchiveMember",
+    "ArchiveSecurityError",
+    "_default_extract_path",
+    "_open_7z_for_read",
+    "_publish_staging",
+    "_safe_relative_path",
+    "_seven_zip_member",
+    "_staging_directory",
+    "_verify_extracted_tree",
+    "_zip_member",
+    "create_7z",
+    "create_zip",
+    "extract_7z",
+    "extract_zip",
+    "safe_extract_7z",
+    "safe_extract_zip",
+    "validate_archive_members",
+]
+
 
 def _show_extraction_error(kind: str, error: Exception) -> None:
     logger.warning("No se pudo extraer %s", kind, exc_info=True)
