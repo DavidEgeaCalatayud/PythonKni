@@ -336,6 +336,24 @@ A discovered module is accepted only when:
 4. `Tool` overrides `setup_ui()`;
 5. `Tool.name`, `Tool.description` and `Tool.category` are non-empty strings.
 
+A minimal loader-compatible adapter looks like this:
+
+```python
+from PyQt5.QtWidgets import QLabel
+
+from tools.base_tool import BaseTool
+
+
+class Tool(BaseTool):
+    name = "My New Tool"
+    description = "Example PythonKni tool."
+    category = "Examples"
+
+    def setup_ui(self):
+        self.setWindowTitle(self.name)
+        self.setCentralWidget(QLabel("Hello from my new tool"))
+```
+
 For a first-party domain, put business/OS logic under `pythonkni/<domain>/service.py`, data objects under `models.py`, presentation under `window.py`, and keep the loader adapter thin. Cross-domain framework-independent technical code belongs under `pythonkni/infrastructure`.
 
 ```powershell
