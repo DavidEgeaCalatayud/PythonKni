@@ -158,9 +158,10 @@ def test_preview_text_task_returns_text_and_empty_fallback(monkeypatch):
     monkeypatch.setattr(
         pdf,
         "_open_reader",
-        lambda _src: SimpleNamespace(pages=[TextPage(""), TextPage(None)]),
+        lambda _src: SimpleNamespace(pages=[]),
     )
     empty = pdf.preview_text_task(RecordingWorker(), "source.pdf", limit=2)
+    assert empty["pages"] == 0
     assert "No se ha detectado texto" in empty["preview"]
 
 
