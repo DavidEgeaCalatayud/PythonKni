@@ -22,6 +22,7 @@ from PyQt5.QtWidgets import (
 from tools.base_tool import BaseTool
 from tools.csv_utils import safe_csv_row
 from tools.theme_manager import ThemeManager
+from tools.ui_feedback import show_error
 
 from . import service as _service
 from .models import (
@@ -40,7 +41,7 @@ from .service import (
 
 class DiskAnalyzerWorker(QThread):
     finished = pyqtSignal(list)
-    failed = pyqtSignal(str)
+    failed = pyqtSignal(object)
 
     def __init__(self, folder: str, limit: int = 100):
         super().__init__()
@@ -51,7 +52,7 @@ class DiskAnalyzerWorker(QThread):
         try:
             self.finished.emit(analyze_directory(Path(self.folder), self.limit))
         except Exception as error:
-            self.failed.emit(str(error))
+            self.failed.emit(error)
 
 
 class Tool(BaseTool):
@@ -145,10 +146,23 @@ class Tool(BaseTool):
         )
         self.fill_table(items)
 
-    def on_analysis_failed(self, message: str) -> None:
+    def on_analysis_failed(self, error) -> None:
         self.progress.hide()
         self.btn_analyze.setEnabled(True)
-        QMessageBox.critical(self, "Error", f"No se pudo analizar la carpeta:\n{message}")
+        if isinstance(error, BaseException):
+            show_error(
+                self,
+                "Análisis de disco",
+                "No se pudo analizar la carpeta seleccionada.",
+                error=error,
+            )
+        else:
+            show_error(
+                self,
+                "Análisis de disco",
+                "No se pudo analizar la carpeta seleccionada.",
+                details=str(error),
+            )
 
     def fill_table(self, items: list[DiskItem]) -> None:
         self.table.setSortingEnabled(False)
@@ -177,15 +191,30 @@ class Tool(BaseTool):
         if not file_path:
             return
 
-        with open(file_path, "w", newline="", encoding="utf-8-sig") as csv_file:
-            writer = csv.writer(csv_file, delimiter=";")
-            writer.writerow(["Nombre", "Tipo", "Tamaño", "Bytes", "Ruta"])
-            for item in self.items:
-                writer.writerow(
-                    safe_csv_row(
-                        [item.name, item.item_type, format_bytes(item.size), item.size, item.path]
+        try:
+            with open(file_path, "w", newline="", encoding="utf-8-sig") as csv_file:
+                writer = csv.writer(csv_file, delimiter=";")
+                writer.writerow(["Nombre", "Tipo", "Tamaño", "Bytes", "Ruta"])
+                for item in self.items:
+                    writer.writerow(
+                        safe_csv_row(
+                            [
+                                item.name,
+                                item.item_type,
+                                format_bytes(item.size),
+                                item.size,
+                                item.path,
+                            ]
+                        )
                     )
-                )
+        except Exception as error:
+            show_error(
+                self,
+                "Exportación CSV",
+                "No se pudo exportar el análisis de disco.",
+                error=error,
+            )
+            return
 
         QMessageBox.information(self, "Exportado", "CSV generado correctamente.")
 

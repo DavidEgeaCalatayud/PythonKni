@@ -5,6 +5,14 @@ from PyQt5.QtCore import QThread
 from tools import duplicate_tool as duplicate
 
 
+class FeedbackCapture:
+    def __init__(self):
+        self.calls = []
+
+    def __call__(self, *args, **kwargs):
+        self.calls.append((args, kwargs))
+
+
 def silence_message_boxes(monkeypatch):
     monkeypatch.setattr(duplicate.QMessageBox, "information", lambda *args, **kwargs: None)
     monkeypatch.setattr(duplicate.QMessageBox, "critical", lambda *args, **kwargs: None)
@@ -118,3 +126,33 @@ def test_move_can_be_cancelled_without_blocking_gui(monkeypatch, qtbot, tmp_path
     assert "manifiesto" in text
     assert tool.btn_select_folder.isEnabled()
     assert not tool.btn_move.isEnabled()
+
+
+def test_scan_failure_uses_structured_feedback_without_leaking_exception(
+    monkeypatch, qtbot, tmp_path
+):
+    error = RuntimeError("duplicate exploded")
+    feedback = FeedbackCapture()
+
+    def fail_scan(_folder_path, cancel_event=None):
+        del cancel_event
+        raise error
+
+    monkeypatch.setattr(duplicate, "find_duplicates", fail_scan)
+    monkeypatch.setattr(duplicate, "show_error", feedback)
+    silence_message_boxes(monkeypatch)
+
+    tool = duplicate.Tool()
+    qtbot.addWidget(tool)
+    tool.show()
+
+    assert tool._start_scan(str(tmp_path)) is True
+    qtbot.waitUntil(lambda: tool.worker is None, timeout=1000)
+
+    assert feedback.calls
+    args, kwargs = feedback.calls[-1]
+    assert args[1] == "Operación de duplicados fallida"
+    assert "duplicate exploded" not in args[2]
+    assert kwargs["error"] is error
+    assert "duplicate exploded" not in tool.result_box.toPlainText()
+    assert "detalles técnicos" in tool.result_box.toPlainText()

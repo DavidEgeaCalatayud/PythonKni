@@ -24,6 +24,7 @@ from PyQt5.QtWidgets import (
 from tools.app_paths import SCAN_HISTORY_FILE, ensure_app_dirs
 from tools.base_tool import BaseTool
 from tools.csv_utils import safe_csv_cell
+from tools.ui_feedback import show_error
 
 from . import service as _service
 from .service import (
@@ -121,10 +122,18 @@ from .service import (
 )
 
 
+def _show_exception(parent, title: str, message: str, error) -> None:
+    if isinstance(error, BaseException):
+        show_error(parent, title, message, error=error)
+    else:
+        show_error(parent, title, message, details=str(error))
+
+
 class NetworkScanWorker(QThread):
     message = pyqtSignal(str)
     finished_summary = pyqtSignal(str)
     cancelled = pyqtSignal(str)
+    failed = pyqtSignal(object)
 
     def __init__(self, cidr: str):
         super().__init__()
@@ -158,8 +167,9 @@ class NetworkScanWorker(QThread):
                 on_checked=report_checked,
             )
         except Exception as error:
-            self.message.emit(f"Error: {error}\n")
-            self.finished_summary.emit(f"Escaneo de red fallido: {error}")
+            self.message.emit("No se pudo completar el escaneo de red.\n")
+            self.failed.emit(error)
+            self.finished_summary.emit("Escaneo de red fallido.")
             return
 
         rows = [
@@ -190,6 +200,7 @@ class PortScanWorker(QThread):
     message = pyqtSignal(str)
     finished_summary = pyqtSignal(str)
     cancelled = pyqtSignal(str)
+    failed = pyqtSignal(object)
 
     def __init__(self, target: str, start_port: int, end_port: int):
         super().__init__()
@@ -224,9 +235,10 @@ class PortScanWorker(QThread):
                 on_open=report_open,
                 on_checked=report_checked,
             )
-        except OSError as error:
-            self.message.emit(f"Error resolviendo o escaneando {self.target}: {error}")
-            self.finished_summary.emit(f"Escaneo de puertos fallido para {self.target}: {error}")
+        except Exception as error:
+            self.message.emit(f"No se pudo completar el escaneo de puertos de {self.target}.")
+            self.failed.emit(error)
+            self.finished_summary.emit(f"Escaneo de puertos fallido para {self.target}.")
             return
 
         rows = [f"{result.port}/tcp abierto ({result.service})" for result in results]
@@ -333,6 +345,14 @@ class NetworkScanner(QWidget):
     def _worker_finished(self):
         self._set_running(False)
 
+    def _scan_failed(self, error):
+        _show_exception(
+            self,
+            "Escaneo de red",
+            "No se pudo completar el escaneo de red.",
+            error,
+        )
+
     def scan_network(self):
         if self.worker and self.worker.isRunning():
             return
@@ -348,6 +368,7 @@ class NetworkScanner(QWidget):
         self.result_area.append(f"Escaneando {network.with_prefixlen}...\n")
         self.worker = NetworkScanWorker(network.with_prefixlen)
         self.worker.message.connect(self.result_area.append)
+        self.worker.failed.connect(self._scan_failed)
         self.worker.finished_summary.connect(self.history_tab.append_to_history)
         self.worker.finished.connect(self._worker_finished)
         self._set_running(True)
@@ -414,6 +435,14 @@ class PortScanner(QWidget):
     def _worker_finished(self):
         self._set_running(False)
 
+    def _scan_failed(self, error):
+        _show_exception(
+            self,
+            "Escaneo de puertos",
+            "No se pudo completar el escaneo de puertos.",
+            error,
+        )
+
     def scan_ports(self):
         if self.worker and self.worker.isRunning():
             return
@@ -438,6 +467,7 @@ class PortScanner(QWidget):
         self.result_area.append(f"Escaneando {target} ({start_port}-{end_port})...\n")
         self.worker = PortScanWorker(target, start_port, end_port)
         self.worker.message.connect(self.result_area.append)
+        self.worker.failed.connect(self._scan_failed)
         self.worker.finished_summary.connect(self.history_tab.append_to_history)
         self.worker.finished.connect(self._worker_finished)
         self._set_running(True)
@@ -487,21 +517,40 @@ class HistoryTab(QWidget):
         self.setLayout(layout)
         self.load_history()
 
+    def _history_error(self, action: str, error) -> None:
+        _show_exception(
+            self,
+            "Historial de red",
+            f"No se pudo {action} el historial de red.",
+            error,
+        )
+
     def load_history(self):
-        if self.history_file.exists():
+        if not self.history_file.exists():
+            self.history_area.setText("No hay historial disponible.\n")
+            return
+        try:
             with self.history_file.open("r", encoding="utf-8") as file:
                 self.history_area.setText(file.read())
-        else:
-            self.history_area.setText("No hay historial disponible.\n")
+        except Exception as error:
+            self.history_area.setText("No se pudo cargar el historial.\n")
+            self._history_error("cargar", error)
 
     def clear_history(self):
-        self.history_file.write_text("", encoding="utf-8")
+        try:
+            self.history_file.write_text("", encoding="utf-8")
+        except Exception as error:
+            self._history_error("limpiar", error)
+            return
         self.history_area.setText("Historial limpiado.\n")
 
     def append_to_history(self, entry):
         self.history_area.append(entry)
-        with self.history_file.open("a", encoding="utf-8") as file:
-            file.write(entry + "\n")
+        try:
+            with self.history_file.open("a", encoding="utf-8") as file:
+                file.write(entry + "\n")
+        except Exception as error:
+            self._history_error("guardar", error)
 
     def export_history(self):
         file_path, _ = QFileDialog.getSaveFileName(
@@ -514,17 +563,22 @@ class HistoryTab(QWidget):
             return
 
         data = self.history_area.toPlainText().splitlines()
-        if file_path.endswith(".txt"):
-            with open(file_path, "w", encoding="utf-8") as file:
-                file.write("\n".join(data))
-        elif file_path.endswith(".json"):
-            with open(file_path, "w", encoding="utf-8") as file:
-                json.dump(data, file, indent=4)
-        elif file_path.endswith(".csv"):
-            with open(file_path, "w", newline="", encoding="utf-8") as file:
-                writer = csv.writer(file)
-                for line in data:
-                    writer.writerow([safe_csv_cell(line)])
+        try:
+            if file_path.endswith(".txt"):
+                with open(file_path, "w", encoding="utf-8") as file:
+                    file.write("\n".join(data))
+            elif file_path.endswith(".json"):
+                with open(file_path, "w", encoding="utf-8") as file:
+                    json.dump(data, file, indent=4)
+            elif file_path.endswith(".csv"):
+                with open(file_path, "w", newline="", encoding="utf-8") as file:
+                    writer = csv.writer(file)
+                    for line in data:
+                        writer.writerow([safe_csv_cell(line)])
+            else:
+                raise ValueError("Formato de exportación no compatible.")
+        except Exception as error:
+            self._history_error("exportar", error)
 
     def import_history(self):
         file_path, _ = QFileDialog.getOpenFileName(
@@ -536,20 +590,29 @@ class HistoryTab(QWidget):
         if not file_path:
             return
 
-        data = []
-        if file_path.endswith(".txt"):
-            with open(file_path, "r", encoding="utf-8") as file:
-                data = file.read().splitlines()
-        elif file_path.endswith(".json"):
-            with open(file_path, "r", encoding="utf-8") as file:
-                data = json.load(file)
-        elif file_path.endswith(".csv"):
-            with open(file_path, "r", encoding="utf-8") as file:
-                data = [",".join(row) for row in csv.reader(file)]
+        try:
+            if file_path.endswith(".txt"):
+                with open(file_path, "r", encoding="utf-8") as file:
+                    data = file.read().splitlines()
+            elif file_path.endswith(".json"):
+                with open(file_path, "r", encoding="utf-8") as file:
+                    data = json.load(file)
+                if not isinstance(data, list) or not all(isinstance(line, str) for line in data):
+                    raise ValueError("El historial JSON debe ser una lista de cadenas de texto.")
+            elif file_path.endswith(".csv"):
+                with open(file_path, "r", encoding="utf-8") as file:
+                    data = [",".join(row) for row in csv.reader(file)]
+            else:
+                raise ValueError("Formato de importación no compatible.")
 
-        self.history_area.setText("\n".join(data))
-        with self.history_file.open("w", encoding="utf-8") as file:
-            file.write("\n".join(data))
+            text = "\n".join(data)
+            with self.history_file.open("w", encoding="utf-8") as file:
+                file.write(text)
+        except Exception as error:
+            self._history_error("importar", error)
+            return
+
+        self.history_area.setText(text)
 
 
 class Tool(BaseTool):
