@@ -91,6 +91,7 @@ def test_start_task_busy_and_signal_wiring(qtbot, monkeypatch):
     tool._worker = FakeWorker(running=True)
     assert not tool._start_task("Busy", lambda: None, lambda _result: None)
     assert info
+    tool._worker = None
 
     created = []
 
