@@ -1,7 +1,3 @@
-from pathlib import Path
-
-from PyQt5.QtWidgets import QMessageBox
-
 from pythonkni.pdf import window as pdf_window
 
 
