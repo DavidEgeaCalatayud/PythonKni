@@ -9,7 +9,6 @@ from PyQt5.QtWidgets import (
     QApplication,
     QLabel,
     QMainWindow,
-    QMessageBox,
     QPushButton,
     QVBoxLayout,
     QWidget,
@@ -21,6 +20,7 @@ from pythonkni.infrastructure.paths import ASSETS_DIR, CONFIG_FILE
 from tools.base_tool import BaseTool
 from tools.logging_config import setup_logging
 from tools.theme_manager import ThemeManager
+from tools.ui_feedback import show_error, show_warning
 
 logger = logging.getLogger(__name__)
 
@@ -157,19 +157,21 @@ class MenuWindow(QMainWindow):
             self.layout.addWidget(btn)
 
         if load_errors:
-            QMessageBox.warning(
+            show_warning(
                 self,
                 "Herramientas no cargadas",
-                "Algunas herramientas no se han podido cargar:\n\n" + "\n".join(load_errors),
+                "Algunas herramientas no se han podido cargar.",
+                details="\n".join(load_errors),
             )
 
     def on_loader_fatal_error(self, error: str) -> None:
         """Abandona el estado de carga si la discovery global no puede completarse."""
         self.label_loading.setText("No se pudieron cargar las herramientas.")
-        QMessageBox.critical(
+        show_error(
             self,
             "Error al cargar herramientas",
-            "No se pudo completar la carga de herramientas.\n\n" + error,
+            "No se pudo completar la carga de herramientas.",
+            details=error,
         )
 
     def open_tool(self, tool_class):
