@@ -1,12 +1,10 @@
 # Architecture
 
-PythonKni is a PyQt5 desktop application with a dynamic tool loader. User-facing
-domains follow a layered structure so domain rules and operating-system integration
-remain testable without constructing Qt widgets.
+PythonKni is a PyQt5 desktop application with a dynamic tool loader. User-facing domains follow a layered structure so domain rules and operating-system integration remain testable without constructing Qt widgets. Build and dependency integrity are treated as part of the architecture rather than as external release chores.
 
 ## Dependency rule
 
-The main dependency direction is:
+The main application dependency direction is:
 
 ```text
 pythonkni/core + pythonkni/infrastructure
@@ -20,19 +18,13 @@ pythonkni/core + pythonkni/infrastructure
          tools/*_tool.py adapter
 ```
 
-- `models.py` contains framework-independent value objects. It must not import
-  PyQt or `tools` modules.
-- `service.py` owns domain rules, operating-system integration, persistence,
-  parsing and transformations. It must not import PyQt, `tools.worker` or a
-  window module.
-- `window.py` owns PyQt widgets, dialogs, user confirmation and background-thread
-  orchestration. It delegates state-changing OS operations to services.
-- `pythonkni/infrastructure/` contains framework-independent technical building
-  blocks shared by multiple domains.
+- `models.py` contains framework-independent value objects. It must not import PyQt or `tools` modules.
+- `service.py` owns domain rules, operating-system integration, persistence, parsing and transformations. It must not import PyQt, `tools.worker` or a window module.
+- `window.py` owns PyQt widgets, dialogs, user confirmation and background-thread orchestration. It delegates state-changing OS operations to services.
+- `pythonkni/infrastructure/` contains framework-independent technical building blocks shared by multiple domains.
 - `tools/*_tool.py` remains only as the dynamic-loader/legacy compatibility edge.
 
-This keeps business and operating-system behavior independently testable and
-prevents presentation modules from becoming alternate service layers.
+This keeps business and operating-system behavior independently testable and prevents presentation modules from becoming alternate service layers.
 
 ## Domain layout
 
@@ -52,9 +44,7 @@ The layered domains are:
 - `pythonkni/temp_cleaner/`
 - `pythonkni/wifi/`
 
-Each domain exposes `models.py`, `service.py` and `window.py`. A domain that
-currently has no custom value object still keeps an explicit framework-independent
-`models.py` boundary rather than moving future data structures into its UI.
+Each domain exposes `models.py`, `service.py` and `window.py`. A domain that currently has no custom value object still keeps an explicit framework-independent `models.py` boundary rather than moving future data structures into its UI.
 
 ## Core and infrastructure
 
@@ -71,14 +61,9 @@ pythonkni/
 
 `pythonkni/core/tasks.py` contains cooperative cancellation primitives.
 
-`pythonkni/infrastructure/archives.py` owns archive path validation, extraction
-limits, staging/publication and ZIP/7Z extraction safety. It deliberately has no
-Qt dependency. The Archive service consumes this module directly instead of
-reaching back into `tools/`.
+`pythonkni/infrastructure/archives.py` owns archive path validation, extraction limits, staging/publication and ZIP/7Z extraction safety. It deliberately has no Qt dependency. The Archive service consumes this module directly instead of reaching back into `tools/`.
 
-`pythonkni/infrastructure/paths.py` owns application runtime/data paths. The old
-`tools.app_paths` path remains as a very small compatibility alias so legacy imports
-continue to resolve while first-party code can migrate to the infrastructure path.
+`pythonkni/infrastructure/paths.py` owns application runtime/data paths. The old `tools.app_paths` path remains as a small compatibility alias so legacy imports continue to resolve while first-party code uses the infrastructure path.
 
 Cross-cutting Qt/runtime infrastructure remains at the application edge:
 
@@ -102,37 +87,86 @@ config/runtime.py      # applies values to ThemeManager/LanguageManager
 config/window.py
 ```
 
-This keeps file-format and persistence rules testable without the UI while retaining
-the current global theme/language manager behavior.
+This keeps file-format and persistence rules testable without the UI while retaining the current global theme/language manager behavior.
 
 ## Process Manager boundary
 
-Process inspection and termination are owned by `process_manager/service.py`.
-The window obtains a validated `ProcessDetails` snapshot, presents the required
-confirmation dialogs and then delegates termination back to the service.
+Process inspection and termination are owned by `process_manager/service.py`. The window obtains a validated `ProcessDetails` snapshot, presents the required confirmation dialogs and then delegates termination back to the service.
 
-The service revalidates both PID liveness and process `create_time` immediately
-before calling `terminate()`. This prevents PID reuse between user confirmation and
-the destructive operation from targeting a different process.
+The service revalidates both PID liveness and process `create_time` immediately before calling `terminate()`. This prevents PID reuse between user confirmation and the destructive operation from targeting a different process.
 
 The window is explicitly prevented by architecture tests from importing `psutil`.
 
+## PDF boundary
+
+PDF document reading/writing is based on the maintained `pypdf` backend. `pythonkni/pdf/service.py` owns the PDF business operations and keeps the UI independent from backend implementation details.
+
+Other libraries retain narrower roles where needed: PyMuPDF supports rendering/text-oriented operations, ReportLab supports generated PDF output, and `pdf2image`/Tesseract participate in optional OCR flows. `PythonKni.spec` collects `pypdf`, not the retired `PyPDF2` package, so source and frozen-package dependency graphs remain aligned.
+
 ## Compatibility adapters
 
-The dynamic loader still discovers `tools/*_tool.py`, so the architecture changes do
-not alter the plugin contract or menu behavior. Migrated tool modules are thin
-adapters that expose the corresponding `pythonkni.<domain>.window` module.
+The dynamic loader still discovers `tools/*_tool.py`, so the architecture changes do not alter the plugin contract or menu behavior. Migrated tool modules are thin adapters that expose the corresponding `pythonkni.<domain>.window` module.
 
-Legacy compatibility modules that must continue to exist, such as
-`tools.app_paths` and `tools.zip_7zip_utils`, delegate to the new implementation.
-`tools.zip_7zip_utils` keeps only its old dialog-oriented helpers and forwards the
-archive security API to `pythonkni.infrastructure.archives`, including legacy
-monkeypatch behavior used by regression tests.
+Legacy compatibility modules that must continue to exist, such as `tools.app_paths` and `tools.zip_7zip_utils`, delegate to the new implementation. `tools.zip_7zip_utils` keeps only its old dialog-oriented helpers and forwards the archive security API to `pythonkni.infrastructure.archives`, including legacy monkeypatch behavior used by regression tests.
+
+## Dependency and supply-chain architecture
+
+PythonKni separates **dependency policy** from the exact dependency graph used for Windows builds:
+
+```text
+requirements.in      ──pip-tools──► requirements.txt
+requirements-dev.in  ──pip-tools──► requirements-dev.txt
+       ranges                    exact versions + SHA-256 hashes
+```
+
+The canonical resolver/build environment is Windows with CPython 3.10.11. `pyproject.toml` declares Python `>=3.10` and the package-level dependency ranges; the `.in` files are the operational source of truth for direct runtime/development ranges, while the `.txt` files are committed reproducible locks.
+
+The lock contract is deliberately strict:
+
+- every resolved package uses an exact `==` version;
+- every package entry carries one or more valid SHA-256 hashes;
+- runtime/development duplicates must resolve to compatible identical versions;
+- every direct dependency declared by an `.in` file must appear in its lock and satisfy the requested range;
+- installation in CI/release uses `pip --require-hashes` rather than accepting arbitrary artifacts for a pinned version;
+- `scripts/check_dependency_locks.py` and dedicated regressions enforce the structure.
+
+CI then performs `pip check`, audits both locks with `pip-audit`, and generates a CycloneDX JSON SBOM. A dependency advisory therefore fails the build instead of being silently recorded. During this hardening phase the development audit exposed `PYSEC-2026-3447` in `setuptools 80.10.2`; the policy and lock were moved to patched `setuptools 84.0.0` rather than suppressing the finding.
+
+GitHub Actions references are pinned to immutable commit SHAs. Dependabot checks Python dependencies and Actions weekly, but dependency changes still pass through the same lock, audit, test, build and smoke-test gates.
+
+These controls protect repeatability and artifact integrity, but they do not prove that an upstream package is benign and do not cover external executables such as Tesseract or Poppler.
+
+## CI and release path
+
+The canonical validation path is:
+
+```text
+CPython 3.10.11 / Windows
+          ↓
+hash-locked runtime + dev install
+          ↓
+lock validation + pip check
+          ↓
+runtime/dev pip-audit + CycloneDX SBOM
+          ↓
+compileall + pytest + branch coverage
+          ↓
+coverage ratchets
+          ↓
+Ruff check + format
+          ↓
+PyInstaller build
+          ↓
+frozen PythonKni.exe --smoke-test
+          ↓
+ZIP + SHA-256 + coverage.xml + SBOM + locks
+```
+
+The release workflow repeats the same integrity gates before publishing a tag-driven GitHub Release. This avoids treating a source-only test pass as sufficient evidence that the shipped Windows bundle is valid.
 
 ## Architecture enforcement
 
-`tests/test_architecture_boundaries.py` turns these rules into CI-enforced checks.
-It verifies that:
+`tests/test_architecture_boundaries.py` turns application-layer rules into CI-enforced checks. It verifies that:
 
 - every declared domain has `models.py`, `service.py` and `window.py`;
 - models do not depend on Qt or `tools`;
@@ -144,23 +178,13 @@ It verifies that:
 - loader-facing tool modules remain thin compatibility adapters;
 - every domain window still implements the `BaseTool` contract.
 
+Dependency-lock behavior has its own focused regressions covering valid locks, missing hashes, malformed SHA-256 values and direct-version policy violations.
+
 ## Coverage ratchet
 
-The first full branch-coverage measurement of `pythonkni` + `tools` established an
-initial repository baseline of **58.85%** with 289 tests passing, while aggregated
-`pythonkni/*/service.py` coverage measured **64.7%**.
+The first full branch-coverage measurement of `pythonkni` + `tools` established an initial repository baseline of **58.85%** with 289 tests passing, while aggregated `pythonkni/*/service.py` coverage measured **64.7%**.
 
-Coverage hardening then progressed in two behavior-driven tranches. The first
-exercised Startup Manager, Event Viewer and System Report. The second expanded
-Archive, Converter, Network, PDF and Temp Cleaner service coverage and then tested
-previously under-covered Qt orchestration in Startup, Event Viewer and PDF.
-Operating-system boundaries are mocked or simulated where appropriate rather than
-mutating the CI runner.
-
-The validated suite now contains **530 passing tests**, reaches **84.6%
-repository-wide branch coverage** and **91.5% aggregated service-layer coverage**.
-The original long-term goals of 80% repository-wide and 85% across services have
-therefore been achieved.
+Behavior-driven coverage hardening then raised the repository to **84.6% branch coverage** and the aggregated service layer to **91.5%**. The current suite contains **535 tests** after the PDF/dependency hardening regressions added in this phase. The new lock-validator tests do not artificially inflate application coverage because coverage collection remains scoped to `pythonkni` + `tools`.
 
 Key measured service coverage:
 
@@ -175,7 +199,7 @@ pythonkni/system_report/service.py  97.2%
 pythonkni/temp_cleaner/service.py   86.4%
 ```
 
-Priority Qt windows now measure:
+Priority Qt windows:
 
 ```text
 pythonkni/startup/window.py         95.8%
@@ -183,10 +207,7 @@ pythonkni/event_viewer/window.py    98.9%
 pythonkni/pdf/window.py             93.4%
 ```
 
-PythonKni uses a ratchet: CI must not fall below measured floors, while focused
-services/windows keep their own gates so a regression cannot be hidden by gains in
-another module. Floors intentionally leave a small margin below the measured
-results.
+PythonKni uses a ratchet: CI must not fall below measured floors, while focused services/windows keep their own gates so a regression cannot be hidden by gains in another module. Floors intentionally leave a small margin below the measured results.
 
 ```text
 repository-wide branch coverage                   >= 84.0%
@@ -205,10 +226,6 @@ PDF window coverage                                >= 93.0%
 refactored process/config/infrastructure coverage  >= 84.0%
 ```
 
-Future coverage work is selective rather than target-chasing. Lower-coverage
-presentation modules such as Converter, Temp Cleaner, Network and System Report
-remain useful candidates when additional tests can validate meaningful behavior.
+Future coverage work is selective rather than target-chasing. Lower-coverage presentation modules such as Converter, Temp Cleaner, Network and System Report remain useful candidates when additional tests validate meaningful behavior.
 
-Coverage is a guardrail rather than a substitute for behavioral assertions. Security,
-rollback, cancellation, process identity and destructive-operation behavior continue
-to have dedicated regression tests.
+Coverage is a guardrail rather than a substitute for behavioral assertions. Security, rollback, cancellation, process identity, dependency integrity and destructive-operation behavior continue to have dedicated regressions.
