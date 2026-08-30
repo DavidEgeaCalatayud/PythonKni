@@ -147,23 +147,67 @@ It verifies that:
 ## Coverage ratchet
 
 The first full branch-coverage measurement of `pythonkni` + `tools` established an
-existing repository baseline of **58.85%** with all 289 tests passing. The aggregated
-service layer measures **64.7%**. Enforcing an 80% repository-wide threshold
-immediately would therefore make CI permanently red without distinguishing new
-regressions from historical untested UI/OS paths.
+initial repository baseline of **58.85%** with 289 tests passing, while aggregated
+`pythonkni/*/service.py` coverage measured **64.7%**.
 
-PythonKni uses a ratchet instead: CI must not fall below the measured baseline floors,
-while new/refactored critical code is held to a stronger standard.
+Coverage hardening then progressed in two behavior-driven tranches. The first
+exercised Startup Manager, Event Viewer and System Report. The second expanded
+Archive, Converter, Network, PDF and Temp Cleaner service coverage and then tested
+previously under-covered Qt orchestration in Startup, Event Viewer and PDF.
+Operating-system boundaries are mocked or simulated where appropriate rather than
+mutating the CI runner.
+
+The validated suite now contains **530 passing tests**, reaches **84.6%
+repository-wide branch coverage** and **91.5% aggregated service-layer coverage**.
+The original long-term goals of 80% repository-wide and 85% across services have
+therefore been achieved.
+
+Key measured service coverage:
 
 ```text
-repository-wide branch coverage                   >= 58.8%
-all pythonkni/*/service.py coverage                >= 64.7%
-refactored process/config/infrastructure coverage  >= 80%
+pythonkni/archive/service.py        95.7%
+pythonkni/converter/service.py      94.5%
+pythonkni/network/service.py        96.7%
+pythonkni/pdf/service.py            95.3%
+pythonkni/startup/service.py        87.7%
+pythonkni/event_viewer/service.py   95.4%
+pythonkni/system_report/service.py  97.2%
+pythonkni/temp_cleaner/service.py   86.4%
 ```
 
-The long-term targets remain **80% repository-wide** and **85% for services**. The
-ratchet floors should only move upward as additional tests are added; they should not
-be reduced to make a failing change pass.
+Priority Qt windows now measure:
+
+```text
+pythonkni/startup/window.py         95.8%
+pythonkni/event_viewer/window.py    98.9%
+pythonkni/pdf/window.py             93.4%
+```
+
+PythonKni uses a ratchet: CI must not fall below measured floors, while focused
+services/windows keep their own gates so a regression cannot be hidden by gains in
+another module. Floors intentionally leave a small margin below the measured
+results.
+
+```text
+repository-wide branch coverage                   >= 84.0%
+all pythonkni/*/service.py coverage                >= 91.0%
+Archive service coverage                           >= 95.0%
+Converter service coverage                         >= 94.0%
+Network service coverage                           >= 96.0%
+PDF service coverage                               >= 95.0%
+Startup service coverage                           >= 87.5%
+Event Viewer service coverage                      >= 95.0%
+System Report service coverage                     >= 97.0%
+Temp Cleaner service coverage                      >= 86.0%
+Startup window coverage                            >= 95.0%
+Event Viewer window coverage                       >= 98.0%
+PDF window coverage                                >= 93.0%
+refactored process/config/infrastructure coverage  >= 84.0%
+```
+
+Future coverage work is selective rather than target-chasing. Lower-coverage
+presentation modules such as Converter, Temp Cleaner, Network and System Report
+remain useful candidates when additional tests can validate meaningful behavior.
 
 Coverage is a guardrail rather than a substitute for behavioral assertions. Security,
 rollback, cancellation, process identity and destructive-operation behavior continue
