@@ -1,7 +1,6 @@
 import errno
 import json
 from pathlib import Path
-from types import SimpleNamespace
 
 import pytest
 
@@ -13,7 +12,7 @@ def make_registry_item(**overrides):
         "active": True,
         "name": "Example",
         "source": "Registro usuario",
-        "command": r'C:\Program Files\Example\app.exe --start',
+        "command": r"C:\Program Files\Example\app.exe --start",
         "item_type": "Registro",
         "exists": "Sí",
         "risk": "Normal",
@@ -46,7 +45,7 @@ def make_folder_item(path: Path, **overrides):
 @pytest.mark.parametrize(
     ("command", "expected_suffix"),
     [
-        (r'"C:\Program Files\App\app.exe" --silent', r"App\app.exe"),
+        (r'"C:\Program Files\App\app.exe" --silent'.replace(r'\"', '"'), r"App\app.exe"),
         (r"C:\Tools\worker.cmd /background", r"Tools\worker.cmd"),
         ("", ""),
     ],
@@ -73,7 +72,7 @@ def test_path_exists_from_command(monkeypatch, tmp_path):
     assert startup.path_exists_from_command("anything") == "Sí"
 
     monkeypatch.setattr(startup, "extract_executable_path", lambda _command: "")
-    assert startup.path_exists_from_command("anything") == "Desconocido"
+    assert startup.path_exists_from_command("anything") == "No detectable"
 
     monkeypatch.setattr(startup, "extract_executable_path", lambda _command: str(tmp_path / "missing.exe"))
     assert startup.path_exists_from_command("anything") == "No"
@@ -124,18 +123,20 @@ def test_startup_folder_helpers_read_environment(monkeypatch, tmp_path):
         appdata / "Microsoft" / "Windows" / "Start Menu" / "Programs" / "Startup"
     )
     assert startup.startup_common_folder() == (
-        programdata / "Microsoft" / "Windows" / "Start Menu" / "Programs" / "StartUp"
+        programdata / "Microsoft" / "Windows" / "Start Menu" / "Programs" / "Startup"
     )
 
     monkeypatch.delenv("APPDATA")
     monkeypatch.delenv("PROGRAMDATA")
     assert startup.startup_user_folder() is None
-    assert startup.startup_common_folder() is None
+    assert startup.startup_common_folder() == (
+        Path(r"C:\ProgramData") / "Microsoft" / "Windows" / "Start Menu" / "Programs" / "Startup"
+    )
 
 
 def test_disabled_folder_root_is_created_under_local_appdata(monkeypatch, tmp_path):
     monkeypatch.setenv("LOCALAPPDATA", str(tmp_path))
-    assert startup.disabled_folder_root() == tmp_path / "PythonKni" / "startup_disabled"
+    assert startup.disabled_folder_root() == tmp_path / "PythonKni" / "DisabledStartup" / "Folders"
 
 
 def test_open_folder_rejects_missing_path(tmp_path):
@@ -156,7 +157,7 @@ def test_open_folder_uses_parent_for_file(monkeypatch, tmp_path):
 
 
 def test_run_regedit_is_noop_off_windows(monkeypatch):
-    monkeypatch.setattr(startup, "is_windows", lambda: False)
+    monkeypatch.setattr(startup.platform, "system", lambda: "Linux")
     calls = []
     monkeypatch.setattr(startup.subprocess, "Popen", lambda *args, **kwargs: calls.append(args))
     startup.run_regedit_at_key("HKCU", startup.RUN_KEY)
@@ -182,8 +183,7 @@ def test_read_startup_folder_items_ignores_desktop_ini(monkeypatch, tmp_path):
 
 
 def test_read_disabled_folder_items_skips_invalid_metadata(monkeypatch, tmp_path):
-    valid = tmp_path / "valid.json"
-    valid.write_text(
+    (tmp_path / "valid.json").write_text(
         json.dumps(
             {
                 "name": "example.lnk",
