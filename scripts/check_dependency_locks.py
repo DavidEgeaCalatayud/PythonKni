@@ -54,7 +54,9 @@ def _locked_versions(path: Path) -> tuple[dict[str, Version], int]:
         if raw_line[:1].isspace():
             raise ValueError(f"{path.name}:{index + 1}: continuación huérfana en el lock")
         if stripped.startswith(("-", "--")):
-            raise ValueError(f"{path.name}:{index + 1}: no se permiten opciones globales en el lock")
+            raise ValueError(
+                f"{path.name}:{index + 1}: no se permiten opciones globales en el lock"
+            )
 
         start_line = index + 1
         block = [raw_line]
@@ -62,7 +64,11 @@ def _locked_versions(path: Path) -> tuple[dict[str, Version], int]:
         while index < len(lines):
             candidate = lines[index]
             candidate_stripped = candidate.strip()
-            if candidate_stripped and not candidate[:1].isspace() and not candidate_stripped.startswith("#"):
+            if (
+                candidate_stripped
+                and not candidate[:1].isspace()
+                and not candidate_stripped.startswith("#")
+            ):
                 break
             block.append(candidate)
             index += 1
