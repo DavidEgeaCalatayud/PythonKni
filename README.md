@@ -256,8 +256,8 @@ Run the CI-equivalent quality checks with:
 ```powershell
 python -m compileall .
 python -m pytest --cov=pythonkni --cov=tools --cov-branch --cov-report=term-missing --cov-report=xml
-python -m coverage report --fail-under=58
-python -m coverage report --include="pythonkni/*/service.py" --fail-under=64
+python -m coverage report --fail-under=58.8
+python -m coverage report --include="pythonkni/*/service.py" --fail-under=64.7
 python -m coverage report --include="pythonkni/process_manager/service.py,pythonkni/config/service.py,pythonkni/infrastructure/*.py" --fail-under=80
 python -m ruff check .
 python -m ruff format --check .
@@ -265,13 +265,13 @@ python -m ruff format --check .
 
 ### Coverage ratchet
 
-The first repository-wide branch-coverage measurement established a real baseline of **58.85%** with **289/289 tests passing**. The service layer is currently around the mid-60% range because several Windows-heavy domains still contain historical untested branches.
+The first repository-wide branch-coverage measurement established a real baseline of **58.85%** with **289/289 tests passing**. The service layer currently measures **64.7%** because several Windows-heavy domains still contain historical untested branches.
 
 CI therefore uses a **ratchet**, not an artificial green badge:
 
 ```text
-repository-wide branch coverage                   >= 58%
-all pythonkni/*/service.py coverage                >= 64%
+repository-wide branch coverage                   >= 58.8%
+all pythonkni/*/service.py coverage                >= 64.7%
 refactored process/config/infrastructure coverage  >= 80%
 ```
 
