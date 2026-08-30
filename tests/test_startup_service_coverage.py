@@ -45,7 +45,7 @@ def make_folder_item(path: Path, **overrides):
 @pytest.mark.parametrize(
     ("command", "expected_suffix"),
     [
-        (r'"C:\Program Files\App\app.exe" --silent'.replace(r'\"', '"'), r"App\app.exe"),
+        ('"C:\\Program Files\\App\\app.exe" --silent', r"App\app.exe"),
         (r"C:\Tools\worker.cmd /background", r"Tools\worker.cmd"),
         ("", ""),
     ],
@@ -94,23 +94,32 @@ def test_calculate_risk_matrix(command, exists, active, expected):
     assert startup.calculate_risk(command, exists, active) == expected
 
 
-def test_item_from_basic_calculates_exists_and_risk(tmp_path):
-    entry = tmp_path / "startup.lnk"
-    entry.write_text("shortcut", encoding="utf-8")
+def test_item_from_basic_uses_exists_and_risk_helpers(monkeypatch):
+    command = r"C:\Program Files\Vendor\app.exe"
+    captured = {}
+
+    monkeypatch.setattr(startup, "path_exists_from_command", lambda value: "Sí")
+
+    def fake_calculate_risk(value, exists, active):
+        captured["args"] = (value, exists, active)
+        return "Normal"
+
+    monkeypatch.setattr(startup, "calculate_risk", fake_calculate_risk)
 
     item = startup.item_from_basic(
         active=True,
         name="Startup",
         source="Inicio usuario",
-        command=str(entry),
+        command=command,
         item_type="Carpeta inicio",
         origin_kind="folder",
-        file_path=str(entry),
+        file_path=command,
     )
 
     assert item.exists == "Sí"
     assert item.risk == "Normal"
-    assert item.file_path == str(entry)
+    assert item.file_path == command
+    assert captured["args"] == (command, "Sí", True)
 
 
 def test_startup_folder_helpers_read_environment(monkeypatch, tmp_path):
