@@ -23,6 +23,8 @@ The project has not published a tagged release for the work below yet, so the cu
 - Added framework-independent shared infrastructure under `pythonkni/infrastructure/`, initially owning application paths plus ZIP/7Z validation, extraction safety, staging and publication primitives. (PR #34)
 - Added `pytest-cov` branch-coverage reporting and CI coverage ratchets based on the measured repository/service baselines, with an 80% floor for the critical code refactored in PR #34. (PR #34)
 - Added focused service regressions for Startup Manager registry/folder behavior, Event Viewer parsing/diagnostics/export and System Report collection/fallback paths. (PR #35)
+- Added broad behavior-driven coverage for Archive, Converter, Network, PDF and Temp Cleaner services, including transactional output, cancellation, extraction limits, network fallbacks, PDF edge cases and safe cleanup branches. (PR #35)
+- Added high-coverage Qt orchestration regressions for Startup Manager, Event Viewer and PDF Toolkit, covering workers, cancellation, validation, filters, dialogs, exports, selection state and error paths. (PR #35)
 
 ### Changed
 
@@ -46,7 +48,7 @@ The project has not published a tagged release for the work below yet, so the cu
 - Application filesystem paths now live in `pythonkni.infrastructure.paths`; `tools.app_paths` is retained as a compatibility alias. (PR #34)
 - Configuration normalization/atomic persistence remains in framework-independent `config.service`, while theme/language manager integration moved to `config.runtime`. (PR #34)
 - Process Manager presentation now delegates process lookup/termination to its service instead of importing `psutil` and performing operating-system mutations from the window. (PR #34)
-- Raised CI/release coverage ratchets from 58.8% to 66.5% repository-wide and from 64.7% to 81.0% across services; Startup, Event Viewer and System Report now also have individual non-regression gates. (PR #35)
+- Raised CI/release coverage ratchets to **84.0% repository-wide** and **91.0% across services**, with individual non-regression gates for the reinforced services and Startup/Event Viewer/PDF windows. (PR #35)
 
 ### Fixed
 
@@ -93,8 +95,10 @@ The project has not published a tagged release for the work below yet, so the cu
 - Added architecture regressions requiring shared infrastructure to remain PyQt/`tools` independent and preventing `psutil` from returning to `process_manager/window.py`. (PR #34)
 - Measured the first full `pythonkni` + `tools` branch-coverage baseline at 58.85% with 289/289 tests passing; CI established non-regression ratchets of 58.8% repository-wide, 64.7% across services and 80% across the critical code refactored in PR #34. (PR #34)
 - Coverage XML is preserved alongside validated Windows CI/release artifacts so subsequent coverage work has a machine-readable baseline. (PR #34)
-- Expanded the suite from 289 to 415 tests, raising measured branch coverage from 58.85% to 66.7% repository-wide and from 64.7% to 81.1% across all `service.py` modules. (PR #35)
-- Startup, Event Viewer and System Report service coverage now measure 87.7%, 95.4% and 97.2% respectively, protected by individual CI/release ratchets of 87.5%, 95.0% and 97.0%. (PR #35)
+- Expanded the suite from **289 to 530 tests**, raising measured branch coverage from **58.85% to 84.6% repository-wide** and from **64.7% to 91.5% across all `service.py` modules**. (PR #35)
+- Archive, Converter, Network, PDF and Temp Cleaner services now measure **95.7%**, **94.5%**, **96.7%**, **95.3%** and **86.4%** respectively; Startup, Event Viewer and System Report remain at **87.7%**, **95.4%** and **97.2%**. (PR #35)
+- Startup, Event Viewer and PDF windows now measure **95.8%**, **98.9%** and **93.4%**, with dedicated CI/release non-regression gates. (PR #35)
+- Repository/service ratchets now enforce **84.0% / 91.0%**, while priority-module gates preserve the stronger coverage reached by the reinforced services and Qt windows. (PR #35)
 
 ### Documentation
 
@@ -107,7 +111,7 @@ The project has not published a tagged release for the work below yet, so the cu
 - Documented installation, Windows build behavior, optional Tesseract/Poppler OCR dependencies and secret-handling guidance.
 - Updated architecture and README documentation for `pythonkni.infrastructure`, Process Manager service ownership and the measured coverage-ratchet strategy. (PR #34)
 - Synchronized the README with the already-implemented CI artifacts and tag-driven GitHub Release workflow, removing release automation from the future-work roadmap. (PR #34)
-- Updated README and architecture documentation with the 415-test coverage baseline, stronger ratchets and the next sub-80% service targets. (PR #35)
+- Updated README and architecture documentation with the final **530-test / 84.6% global / 91.5% service** coverage baseline and removed the now-completed 80%/85% coverage target from the active roadmap. (PR #35)
 
 ### Development cycle covered
 
