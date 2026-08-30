@@ -147,23 +147,40 @@ It verifies that:
 ## Coverage ratchet
 
 The first full branch-coverage measurement of `pythonkni` + `tools` established an
-existing repository baseline of **58.85%** with all 289 tests passing. The aggregated
-service layer measures **64.7%**. Enforcing an 80% repository-wide threshold
-immediately would therefore make CI permanently red without distinguishing new
-regressions from historical untested UI/OS paths.
+initial repository baseline of **58.85%** with 289 tests passing, while aggregated
+`pythonkni/*/service.py` coverage measured **64.7%**.
 
-PythonKni uses a ratchet instead: CI must not fall below the measured baseline floors,
-while new/refactored critical code is held to a stronger standard.
+A focused coverage-hardening tranche then exercised the previously weakest
+Windows-heavy services through deterministic unit tests that mock operating-system
+boundaries instead of mutating the runner. The measured suite now contains **415
+passing tests**, reaches **66.7% repository-wide branch coverage** and **81.1%
+aggregated service-layer coverage**.
+
+The targeted services now measure:
 
 ```text
-repository-wide branch coverage                   >= 58.8%
-all pythonkni/*/service.py coverage                >= 64.7%
+pythonkni/startup/service.py        87.7%
+pythonkni/event_viewer/service.py   95.4%
+pythonkni/system_report/service.py  97.2%
+```
+
+PythonKni uses a ratchet: CI must not fall below measured floors, while focused
+services keep their own gates so a regression cannot be hidden by improvements in
+another module.
+
+```text
+repository-wide branch coverage                   >= 66.5%
+all pythonkni/*/service.py coverage                >= 81.0%
+Startup service coverage                           >= 87.5%
+Event Viewer service coverage                      >= 95.0%
+System Report service coverage                     >= 97.0%
 refactored process/config/infrastructure coverage  >= 80%
 ```
 
-The long-term targets remain **80% repository-wide** and **85% for services**. The
-ratchet floors should only move upward as additional tests are added; they should not
-be reduced to make a failing change pass.
+The long-term targets remain **80% repository-wide** and **85% for the aggregated
+service layer**. Remaining sub-80 service coverage is concentrated mainly in
+Converter, Archive, PDF, Network and Temp Cleaner, making those the next useful
+coverage targets.
 
 Coverage is a guardrail rather than a substitute for behavioral assertions. Security,
 rollback, cancellation, process identity and destructive-operation behavior continue
