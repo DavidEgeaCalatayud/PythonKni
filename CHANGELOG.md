@@ -22,6 +22,7 @@ The project has not published a tagged release for the work below yet, so the cu
 - Added regression coverage for legacy adapter exports and monkeypatch forwarding after the layered architecture migration and stricter Ruff cleanup. (PR #27)
 - Added framework-independent shared infrastructure under `pythonkni/infrastructure/`, initially owning application paths plus ZIP/7Z validation, extraction safety, staging and publication primitives. (PR #34)
 - Added `pytest-cov` branch-coverage reporting and CI coverage ratchets based on the measured repository/service baselines, with an 80% floor for the critical code refactored in PR #34. (PR #34)
+- Added focused service regressions for Startup Manager registry/folder behavior, Event Viewer parsing/diagnostics/export and System Report collection/fallback paths. (PR #35)
 
 ### Changed
 
@@ -45,6 +46,7 @@ The project has not published a tagged release for the work below yet, so the cu
 - Application filesystem paths now live in `pythonkni.infrastructure.paths`; `tools.app_paths` is retained as a compatibility alias. (PR #34)
 - Configuration normalization/atomic persistence remains in framework-independent `config.service`, while theme/language manager integration moved to `config.runtime`. (PR #34)
 - Process Manager presentation now delegates process lookup/termination to its service instead of importing `psutil` and performing operating-system mutations from the window. (PR #34)
+- Raised CI/release coverage ratchets from 58.8% to 66.5% repository-wide and from 64.7% to 81.0% across services; Startup, Event Viewer and System Report now also have individual non-regression gates. (PR #35)
 
 ### Fixed
 
@@ -89,8 +91,10 @@ The project has not published a tagged release for the work below yet, so the cu
 - CI now validates `compileall`, the full pytest suite, Ruff `F + I`, Ruff formatting, the Windows PyInstaller bundle and the frozen-application smoke test before changes are merged. (PRs #13, #27)
 - Added service-level Process Manager regressions for own-process rejection, unavailable processes, process identity reuse and delegated termination, while UI tests now focus on confirmation/orchestration. (PR #34)
 - Added architecture regressions requiring shared infrastructure to remain PyQt/`tools` independent and preventing `psutil` from returning to `process_manager/window.py`. (PR #34)
-- Measured the first full `pythonkni` + `tools` branch-coverage baseline at 58.85% with 289/289 tests passing; CI now enforces non-regression ratchets of 58% repository-wide, 64% across services and 80% across the critical code refactored in PR #34. (PR #34)
+- Measured the first full `pythonkni` + `tools` branch-coverage baseline at 58.85% with 289/289 tests passing; CI established non-regression ratchets of 58.8% repository-wide, 64.7% across services and 80% across the critical code refactored in PR #34. (PR #34)
 - Coverage XML is preserved alongside validated Windows CI/release artifacts so subsequent coverage work has a machine-readable baseline. (PR #34)
+- Expanded the suite from 289 to 415 tests, raising measured branch coverage from 58.85% to 66.7% repository-wide and from 64.7% to 81.1% across all `service.py` modules. (PR #35)
+- Startup, Event Viewer and System Report service coverage now measure 87.7%, 95.4% and 97.2% respectively, protected by individual CI/release ratchets of 87.5%, 95.0% and 97.0%. (PR #35)
 
 ### Documentation
 
@@ -103,7 +107,8 @@ The project has not published a tagged release for the work below yet, so the cu
 - Documented installation, Windows build behavior, optional Tesseract/Poppler OCR dependencies and secret-handling guidance.
 - Updated architecture and README documentation for `pythonkni.infrastructure`, Process Manager service ownership and the measured coverage-ratchet strategy. (PR #34)
 - Synchronized the README with the already-implemented CI artifacts and tag-driven GitHub Release workflow, removing release automation from the future-work roadmap. (PR #34)
+- Updated README and architecture documentation with the 415-test coverage baseline, stronger ratchets and the next sub-80% service targets. (PR #35)
 
 ### Development cycle covered
 
-This Unreleased section consolidates the major merged and pending hardening/refactoring work from **PR #2 through PR #34** during the August 2026 development cycle. PR #1 was intentionally not merged and was superseded by the later Temp Cleaner work in PRs #21 and #26.
+This Unreleased section consolidates the major merged and pending hardening/refactoring work from **PR #2 through PR #35** during the August 2026 development cycle. PR #1 was intentionally not merged and was superseded by the later Temp Cleaner work in PRs #21 and #26.
