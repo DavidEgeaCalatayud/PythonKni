@@ -7,7 +7,7 @@ on:
   pull_request:
 
 permissions:
-  contents: read
+  contents: write
 
 jobs:
   validate:
@@ -30,20 +30,24 @@ jobs:
           python -m pip install -r requirements.txt
           python -m pip install -r requirements-dev.txt
 
-      - name: Generate hashed lock candidates
+      - name: Generate canonical hashed locks
         run: |
-          python -m piptools compile requirements.in --generate-hashes --allow-unsafe --strip-extras --output-file requirements-hashed.generated.txt
-          python -m piptools compile requirements-dev.in --generate-hashes --allow-unsafe --strip-extras --output-file requirements-dev-hashed.generated.txt
+          python -m piptools compile requirements.in --generate-hashes --allow-unsafe --strip-extras --no-header --output-file requirements.txt
+          python -m piptools compile requirements-dev.in --generate-hashes --allow-unsafe --strip-extras --no-header --output-file requirements-dev.txt
 
-      - name: Upload hashed lock candidates
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
-        with:
-          name: dependency-lock-candidates-${{ github.sha }}
-          path: |
-            requirements-hashed.generated.txt
-            requirements-dev-hashed.generated.txt
-          if-no-files-found: error
-          retention-days: 1
+      - name: Commit canonical hashed locks
+        shell: powershell
+        run: |
+          git diff --quiet -- requirements.txt requirements-dev.txt
+          if ($LASTEXITCODE -eq 0) {
+            Write-Host "Dependency locks already match the canonical resolver output."
+            exit 0
+          }
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add requirements.txt requirements-dev.txt
+          git commit -m "Lock Python dependencies with SHA-256 hashes"
+          git push origin "HEAD:${{ github.ref_name }}"
 
       - name: Validate dependency locks
         run: python scripts/check_dependency_locks.py
@@ -128,5 +132,6 @@ jobs:
             coverage.xml
             dependency-sbom.cdx.json
             requirements.txt
+            requirements-dev.txt
           if-no-files-found: error
           retention-days: 14
