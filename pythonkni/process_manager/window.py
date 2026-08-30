@@ -21,6 +21,7 @@ from PyQt5.QtWidgets import (
 from pythonkni.infrastructure.paths import ASSETS_DIR
 from tools.base_tool import BaseTool
 from tools.theme_manager import ThemeManager
+from tools.ui_feedback import show_error
 from tools.worker import Worker
 
 from . import service as _service
@@ -210,7 +211,12 @@ class Tool(BaseTool):
         if self._process_worker is not worker:
             return
         logger.error("Could not load process list: %s", error)
-        QMessageBox.critical(self, "Error", f"No se pudo cargar la lista de procesos:\n{error}")
+        show_error(
+            self,
+            "No se pudieron cargar los procesos",
+            "La lista de procesos no se pudo actualizar.",
+            error=error,
+        )
 
     def _process_load_cancelled(self, worker):
         if self._process_worker is worker:
@@ -376,7 +382,12 @@ class Tool(BaseTool):
 
     def _analysis_error(self, error):
         logger.error("Could not analyze process with VirusTotal: %s", error)
-        QMessageBox.critical(self, "Error", f"No se pudo analizar el proceso:\n{error}")
+        show_error(
+            self,
+            "No se pudo analizar el proceso",
+            "El análisis de VirusTotal no se pudo completar.",
+            error=error,
+        )
 
     def _analysis_cancelled(self):
         self.analysis_status.setText("Análisis cancelado")
