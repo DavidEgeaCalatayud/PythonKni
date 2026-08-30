@@ -21,6 +21,7 @@ from PyQt5.QtWidgets import (
 
 from tools.base_tool import BaseTool
 from tools.theme_manager import ThemeManager
+from tools.ui_feedback import show_error
 
 from .models import ReportData as ReportData
 from .service import collect_report, report_to_html, report_to_pdf, report_to_text
@@ -28,13 +29,13 @@ from .service import collect_report, report_to_html, report_to_pdf, report_to_te
 
 class ReportWorker(QThread):
     result_ready = pyqtSignal(object)
-    failed = pyqtSignal(str)
+    failed = pyqtSignal(object)
 
     def run(self) -> None:
         try:
             self.result_ready.emit(collect_report())
         except Exception as error:
-            self.failed.emit(str(error))
+            self.failed.emit(error)
 
 
 class Tool(BaseTool):
@@ -134,10 +135,23 @@ class Tool(BaseTool):
         self.btn_pdf.setEnabled(True)
         self.btn_txt.setEnabled(True)
 
-    def on_report_failed(self, message: str) -> None:
+    def on_report_failed(self, error) -> None:
         self.progress.hide()
         self.btn_generate.setEnabled(True)
-        QMessageBox.critical(self, "Error", f"No se pudo generar el informe:\n{message}")
+        if isinstance(error, BaseException):
+            show_error(
+                self,
+                "Informe técnico",
+                "No se pudo generar el informe técnico.",
+                error=error,
+            )
+        else:
+            show_error(
+                self,
+                "Informe técnico",
+                "No se pudo generar el informe técnico.",
+                details=str(error),
+            )
 
     def fill_table(self, table: QTableWidget, headers: list[str], rows: list[tuple]) -> None:
         table.clear()
@@ -163,6 +177,19 @@ class Tool(BaseTool):
         )
         return f"informe_tecnico_{suffix}.{extension}"
 
+    def _export_text_file(self, file_path: str, content: str, label: str) -> bool:
+        try:
+            Path(file_path).write_text(content, encoding="utf-8")
+        except Exception as error:
+            show_error(
+                self,
+                f"Exportación {label}",
+                f"No se pudo exportar el informe {label}.",
+                error=error,
+            )
+            return False
+        return True
+
     def export_html(self) -> None:
         data = self.require_report()
         if not data:
@@ -172,7 +199,18 @@ class Tool(BaseTool):
         )
         if not file_path:
             return
-        Path(file_path).write_text(report_to_html(data), encoding="utf-8")
+        try:
+            content = report_to_html(data)
+        except Exception as error:
+            show_error(
+                self,
+                "Exportación HTML",
+                "No se pudo preparar el informe HTML.",
+                error=error,
+            )
+            return
+        if not self._export_text_file(file_path, content, "HTML"):
+            return
         QMessageBox.information(self, "Exportado", "Informe HTML generado correctamente.")
 
     def export_txt(self) -> None:
@@ -184,7 +222,18 @@ class Tool(BaseTool):
         )
         if not file_path:
             return
-        Path(file_path).write_text(report_to_text(data), encoding="utf-8")
+        try:
+            content = report_to_text(data)
+        except Exception as error:
+            show_error(
+                self,
+                "Exportación TXT",
+                "No se pudo preparar el informe TXT.",
+                error=error,
+            )
+            return
+        if not self._export_text_file(file_path, content, "TXT"):
+            return
         QMessageBox.information(self, "Exportado", "Informe TXT generado correctamente.")
 
     def export_pdf(self) -> None:
@@ -200,7 +249,12 @@ class Tool(BaseTool):
         try:
             report_to_pdf(data, file_path)
         except Exception as error:
-            QMessageBox.critical(self, "Error", f"No se pudo exportar el PDF:\n{error}")
+            show_error(
+                self,
+                "Exportación PDF",
+                "No se pudo exportar el informe PDF.",
+                error=error,
+            )
             return
 
         QMessageBox.information(self, "Exportado", "Informe PDF generado correctamente.")
