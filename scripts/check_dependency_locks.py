@@ -1,13 +1,12 @@
 from __future__ import annotations
 
-from pathlib import Path
 import re
 import sys
+from pathlib import Path
 
 from packaging.requirements import Requirement
 from packaging.utils import canonicalize_name
 from packaging.version import Version
-
 
 ROOT = Path(__file__).resolve().parents[1]
 HASH_RE = re.compile(r"--hash=sha256:([0-9a-f]{64})(?=\s|\\|$)", re.IGNORECASE)
