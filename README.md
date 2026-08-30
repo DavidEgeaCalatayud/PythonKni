@@ -256,12 +256,20 @@ Run the CI-equivalent quality checks with:
 ```powershell
 python -m compileall .
 python -m pytest --cov=pythonkni --cov=tools --cov-branch --cov-report=term-missing --cov-report=xml
-python -m coverage report --fail-under=66.5
-python -m coverage report --include="pythonkni/*/service.py" --fail-under=81.0
+python -m coverage report --fail-under=84.0
+python -m coverage report --include="pythonkni/*/service.py" --fail-under=91.0
+python -m coverage report --include="pythonkni/archive/service.py" --fail-under=95.0
+python -m coverage report --include="pythonkni/converter/service.py" --fail-under=94.0
+python -m coverage report --include="pythonkni/network/service.py" --fail-under=96.0
+python -m coverage report --include="pythonkni/pdf/service.py" --fail-under=95.0
 python -m coverage report --include="pythonkni/startup/service.py" --fail-under=87.5
 python -m coverage report --include="pythonkni/event_viewer/service.py" --fail-under=95.0
 python -m coverage report --include="pythonkni/system_report/service.py" --fail-under=97.0
-python -m coverage report --include="pythonkni/process_manager/service.py,pythonkni/config/service.py,pythonkni/infrastructure/*.py" --fail-under=80
+python -m coverage report --include="pythonkni/temp_cleaner/service.py" --fail-under=86.0
+python -m coverage report --include="pythonkni/startup/window.py" --fail-under=95.0
+python -m coverage report --include="pythonkni/event_viewer/window.py" --fail-under=98.0
+python -m coverage report --include="pythonkni/pdf/window.py" --fail-under=93.0
+python -m coverage report --include="pythonkni/process_manager/service.py,pythonkni/config/service.py,pythonkni/infrastructure/*.py" --fail-under=84.0
 python -m ruff check .
 python -m ruff format --check .
 ```
@@ -270,28 +278,51 @@ python -m ruff format --check .
 
 The first repository-wide branch-coverage measurement established an initial baseline of **58.85%** with **289/289 tests passing**, while the aggregated service layer measured **64.7%**.
 
-The first focused coverage-hardening tranche expanded behavior-driven tests around Startup Manager, System Report and Event Viewer. The measured result is now **66.7% repository-wide** and **81.1% across all `service.py` modules**, with **415/415 tests passing**.
+Coverage hardening was then performed in two behavior-driven tranches. The first focused on Startup Manager, System Report and Event Viewer services. The second expanded service coverage across Archive, Converter, Network, PDF and Temp Cleaner and then targeted previously under-tested Qt orchestration in Startup, Event Viewer and PDF.
 
-The three previously weakest Windows-heavy services now measure:
+The validated suite now contains **530/530 passing tests**, reaches **84.6% repository-wide branch coverage** and **91.5% aggregated coverage across all `pythonkni/*/service.py` modules**. The original 80% repository-wide / 85% service-layer targets are therefore achieved.
+
+Key measured service coverage:
 
 ```text
+Archive service        95.7%
+Converter service      94.5%
+Network service        96.7%
+PDF service            95.3%
 Startup service        87.7%
 Event Viewer service   95.4%
 System Report service  97.2%
+Temp Cleaner service   86.4%
 ```
 
-CI uses a **ratchet**, not an artificial green badge. Current enforced floors are:
+The Qt presentation layer also gained behavior-oriented coverage around worker lifecycle, cancellation, validation, filtering, dialogs and exports:
 
 ```text
-repository-wide branch coverage                   >= 66.5%
-all pythonkni/*/service.py coverage                >= 81.0%
+Startup window         95.8%
+Event Viewer window    98.9%
+PDF window             93.4%
+```
+
+CI uses a **ratchet**, not an artificial green badge. Current enforced floors intentionally sit slightly below the measured values to leave a small stability margin while preventing meaningful regression:
+
+```text
+repository-wide branch coverage                   >= 84.0%
+all pythonkni/*/service.py coverage                >= 91.0%
+Archive service coverage                           >= 95.0%
+Converter service coverage                         >= 94.0%
+Network service coverage                           >= 96.0%
+PDF service coverage                               >= 95.0%
 Startup service coverage                           >= 87.5%
 Event Viewer service coverage                      >= 95.0%
 System Report service coverage                     >= 97.0%
-refactored process/config/infrastructure coverage  >= 80%
+Temp Cleaner service coverage                      >= 86.0%
+Startup window coverage                            >= 95.0%
+Event Viewer window coverage                       >= 98.0%
+PDF window coverage                                >= 93.0%
+refactored process/config/infrastructure coverage  >= 84.0%
 ```
 
-The long-term targets remain **80% repository-wide** and **85% for the aggregated service layer**. Ratchet floors should only be increased as meaningful tests are added; they should not be lowered to make a regression pass.
+Future coverage work should be selective and behavior-driven rather than pursuing percentages for their own sake. Ratchet floors should only be increased as meaningful tests are added; they should not be lowered to make a regression pass.
 
 Ruff currently enforces full Pyflakes diagnostics plus import ordering:
 
@@ -308,9 +339,9 @@ Every push and pull request runs:
 ```text
 compileall
    ↓
-415+ pytest tests + branch coverage
+530+ pytest tests + branch coverage
    ↓
-coverage ratchets
+repository, service and priority-module coverage ratchets
    ↓
 Ruff check + format check
    ↓
@@ -387,7 +418,7 @@ python -m pytest tests/test_tool_contract.py tests/test_architecture_boundaries.
 - Network/system capabilities depend on firewall rules, topology and operating-system privileges.
 - The PDF stack still uses deprecated `PyPDF2` and should migrate to `pypdf`.
 - Dependency installation uses version lower bounds rather than a fully reproducible lock/constraints workflow.
-- Repository-wide branch coverage is still below the long-term 80% target, although the aggregated service layer is now above 80%.
+- Coverage is above the original repository/service targets, but several presentation modules still have materially lower coverage than the strongest Qt windows; future additions should prioritize meaningful behavior in those areas rather than percentage-only tests.
 - GitHub Releases are automated, but executable signing and installer generation are not yet implemented.
 - Localization infrastructure exists, but not every user-visible string is extracted/translated.
 
@@ -397,8 +428,7 @@ python -m pytest tests/test_tool_contract.py tests/test_architecture_boundaries.
 
 ### Code and reliability
 
-- [ ] Raise the coverage ratchet progressively toward 80% overall / 85% services.
-- [ ] Expand tests in the remaining sub-80% services, especially Converter, Archive, PDF, Network and Temp Cleaner.
+- [ ] Continue behavior-driven coverage work in lower-coverage UI modules, especially Converter, Temp Cleaner, Network and System Report, without adding assertion-only tests solely to raise percentages.
 - [ ] Migrate the PDF backend from `PyPDF2` to `pypdf`.
 - [ ] Decide and enforce the full Python-version support matrix in CI.
 - [ ] Add reproducible dependency constraints/locking and dependency-security checks.
