@@ -28,6 +28,7 @@ The project has not published a tagged release for the work below yet, so the cu
 - Added separate direct-dependency policy files (`requirements.in`, `requirements-dev.in`) and exact transitive runtime/development locks containing SHA-256 hashes for every resolved package distribution. (PR #36)
 - Added `scripts/check_dependency_locks.py` plus regressions that reject missing hashes, malformed SHA-256 values, non-exact pins, missing direct dependencies and direct versions outside the declared policy range. (PR #36)
 - Added CycloneDX runtime SBOM generation and retention alongside Windows CI/release artifacts, plus weekly Dependabot checks for Python dependencies and GitHub Actions. (PR #36)
+- Added `tools/ui_feedback.py`, a reusable Qt feedback renderer that keeps concise user-facing summaries separate from optional expandable technical diagnostics. (PR #39)
 
 ### Changed
 
@@ -56,6 +57,7 @@ The project has not published a tagged release for the work below yet, so the cu
 - Aligned the supported Python contract to **Python >=3.10** with Windows / CPython **3.10.11** as the canonical CI and release environment instead of retaining a partial legacy Python 3.8 claim. (PR #36)
 - CI and release now install the committed dependency graphs with `pip --require-hashes`, validate the resulting graph with `pip check`, and publish both dependency locks with validated build/release artifacts. (PR #36)
 - GitHub Actions used by CI/release are pinned to immutable commit SHAs rather than mutable version tags. (PR #36)
+- Tool-loader failures, configuration persistence failures, Archive worker failures and Process Manager refresh/VirusTotal worker failures now show actionable primary text while preserving exception/diagnostic data in expandable details. Domain confirmations and business-specific warnings remain unchanged. (PR #39)
 
 ### Fixed
 
@@ -112,6 +114,7 @@ The project has not published a tagged release for the work below yet, so the cu
 - Repository/service ratchets now enforce **84.0% / 91.0%**, while priority-module gates preserve the stronger coverage reached by the reinforced services and Qt windows. (PR #35)
 - Expanded the suite to **535 tests** with PDF migration/dependency-lock regressions while preserving the established **84.6% repository-wide / 91.5% service-layer** application coverage baseline. (PR #36)
 - The canonical Windows pipeline now validates hash-locked installation, lock structure, `pip check`, runtime/development vulnerability audits and SBOM generation before compile/test/lint/build/smoke/package stages. (PR #36)
+- Expanded the suite to **545 tests** for structured feedback behavior, raising repository-wide branch coverage to **84.7%** while preserving **91.5%** service-layer coverage. Archive, Config and Process Manager windows now measure **70.2%**, **85.0%** and **74.6%** respectively, and the shared feedback helper measures **80.0%**. (PR #39)
 
 ### Documentation
 
@@ -126,7 +129,8 @@ The project has not published a tagged release for the work below yet, so the cu
 - Synchronized the README with the already-implemented CI artifacts and tag-driven GitHub Release workflow, removing release automation from the future-work roadmap. (PR #34)
 - Updated README and architecture documentation with the final **530-test / 84.6% global / 91.5% service** coverage baseline and removed the now-completed 80%/85% coverage target from the active roadmap. (PR #35)
 - Synchronized README, architecture, usage and security documentation with the `pypdf` backend, Python 3.10+ support contract, hashed dependency locks, vulnerability audits, SBOM artifacts and the 535-test CI path; removed the completed PDF/dependency-hardening items from the active roadmap. (PR #36)
+- Documented the first structured-feedback tranche, its presentation-layer boundary, troubleshooting flow, exact coverage/test metrics and the remaining incremental migration roadmap. (PR #39)
 
 ### Development cycle covered
 
-This Unreleased section consolidates the major merged and pending hardening/refactoring work from **PR #2 through PR #36** during the August 2026 development cycle. PR #1 was intentionally not merged and was superseded by the later Temp Cleaner work in PRs #21 and #26.
+This Unreleased section consolidates the major merged hardening/refactoring work from **PR #2 through PR #36** and the current structured-feedback work in **PR #39** during the August 2026 development cycle. PR #1 was intentionally not merged and was superseded by the later Temp Cleaner work in PRs #21 and #26.

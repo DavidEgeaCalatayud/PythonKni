@@ -61,16 +61,43 @@ def test_loader_emits_fatal_error_when_tool_directory_cannot_be_listed(qtbot, mo
     assert blocker.args == ["PermissionError: sin permisos"]
 
 
+def test_menu_reports_nonfatal_loader_errors_as_expandable_details(qtbot, monkeypatch):
+    warning_messages = []
+    monkeypatch.setattr(
+        main,
+        "discover_tool_classes",
+        lambda: ([], None, ["tools.broken_tool: plugin roto"]),
+    )
+    monkeypatch.setattr(
+        main,
+        "show_warning",
+        lambda *args, **kwargs: warning_messages.append((args, kwargs)),
+    )
+
+    window = main.MenuWindow()
+    qtbot.addWidget(window)
+    window.show()
+
+    qtbot.waitUntil(lambda: not window.loader_thread.isRunning(), timeout=3000)
+    qtbot.waitUntil(lambda: bool(warning_messages), timeout=3000)
+
+    args, kwargs = warning_messages[0]
+    assert args[1] == "Herramientas no cargadas"
+    assert args[2] == "Algunas herramientas no se han podido cargar."
+    assert "plugin roto" not in args[2]
+    assert kwargs["details"] == "tools.broken_tool: plugin roto"
+
+
 def test_menu_leaves_loading_state_after_fatal_loader_error(qtbot, monkeypatch):
     def fail_discovery():
         raise FileNotFoundError("directorio tools ausente")
 
-    critical_messages = []
+    error_messages = []
     monkeypatch.setattr(main, "discover_tool_classes", fail_discovery)
     monkeypatch.setattr(
-        QMessageBox,
-        "critical",
-        lambda _parent, _title, message: critical_messages.append(message),
+        main,
+        "show_error",
+        lambda *args, **kwargs: error_messages.append((args, kwargs)),
     )
 
     window = main.MenuWindow()
@@ -83,8 +110,12 @@ def test_menu_leaves_loading_state_after_fatal_loader_error(qtbot, monkeypatch):
         timeout=3000,
     )
 
-    assert critical_messages
-    assert "FileNotFoundError: directorio tools ausente" in critical_messages[0]
+    assert error_messages
+    args, kwargs = error_messages[0]
+    assert args[1] == "Error al cargar herramientas"
+    assert args[2] == "No se pudo completar la carga de herramientas."
+    assert "directorio tools ausente" not in args[2]
+    assert kwargs["details"] == "FileNotFoundError: directorio tools ausente"
 
 
 def test_worker_can_be_started_and_cancelled(qtbot):

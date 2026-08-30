@@ -51,6 +51,29 @@ def test_archive_tool_runs_extraction_in_background_and_can_cancel(monkeypatch, 
     assert all(button.isEnabled() for button in tool._action_buttons)
 
 
+def test_archive_tool_reports_worker_error_with_structured_feedback(monkeypatch, qtbot):
+    feedback = []
+    monkeypatch.setattr(
+        archive_tool,
+        "show_error",
+        lambda *args, **kwargs: feedback.append((args, kwargs)),
+    )
+
+    tool = ArchiveTool()
+    qtbot.addWidget(tool)
+    error = OSError("archivo corrupto")
+
+    tool._on_error(error)
+
+    assert tool.status.text() == "Operación fallida"
+    assert feedback
+    args, kwargs = feedback[0]
+    assert args[1] == "Operación de archivo fallida"
+    assert args[2] == "No se pudo completar la operación."
+    assert "archivo corrupto" not in args[2]
+    assert kwargs["error"] is error
+
+
 def test_create_and_extract_zip_round_trip(monkeypatch, tmp_path):
     source_a = tmp_path / "a.txt"
     source_b = tmp_path / "b.txt"

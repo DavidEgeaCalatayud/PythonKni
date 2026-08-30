@@ -95,6 +95,8 @@ Archive creation and extraction run in a background worker, expose progress and 
 
 Extraction is deliberately stricter than a generic archive utility. The destination directory must not already exist, unsafe archive members are rejected, and extraction is staged before the completed directory is published. See `security.md` for the enforced archive limits and path rules.
 
+Technical archive failures now use structured feedback: the main dialog explains that the operation could not be completed, while the underlying exception remains available through the expandable details area for troubleshooting.
+
 ## File Converter
 
 **Menu name:** `Convertidor de Archivos`
@@ -207,6 +209,8 @@ Available actions include:
 
 PythonKni refuses to terminate its own process. Termination always requires confirmation with the selected process identity. Processes classified conservatively as Windows/system processes receive a second warning because terminating them may cause instability, logoff or restart.
 
+Failures while refreshing the process list or running the VirusTotal worker use the structured technical-error dialog: the primary message remains actionable and the exception details are available separately. Process-protection warnings and termination confirmations remain explicit domain dialogs.
+
 ### VirusTotal process analysis
 
 If `VIRUSTOTAL_API_KEY` is configured, PythonKni can:
@@ -305,7 +309,7 @@ Diagnostic reports can contain hostnames, addresses, process information and oth
 
 The configuration tool manages the settings currently implemented by PythonKni, including theme and language selection.
 
-Configuration is normalized before saving and published atomically to `config.json`, so an interrupted write does not intentionally replace the previous valid configuration with a partial file.
+Configuration is normalized before saving and published atomically to `config.json`, so an interrupted write does not intentionally replace the previous valid configuration with a partial file. If persistence fails, PythonKni does not apply the unsaved theme/language state; the main dialog gives a concise explanation and keeps the technical exception in expandable details.
 
 Localization infrastructure exists, but not every user-visible string is fully translated yet.
 
@@ -331,6 +335,17 @@ The canonical commands are documented in the README. Dependabot checks Python de
 
 ## Troubleshooting
 
+### Technical error details
+
+Some technical failures now show two levels of information:
+
+- the primary dialog text is a concise description of what failed and what state was preserved;
+- **Show Details** exposes the exception type/message or diagnostic text useful for troubleshooting.
+
+This structured feedback is currently used by the main tool loader, configuration persistence, Archive background operations and Process Manager refresh/VirusTotal worker failures. Other windows still have legacy error-dialog paths and will migrate incrementally.
+
+When reporting a reproducible bug, the expandable details and the relevant `%LOCALAPPDATA%\PythonKni\logs\` entry are more useful than a screenshot of only the generic summary. Review diagnostics before sharing them externally because they may include local paths or environment information.
+
 ### A tool does not appear in the main menu
 
 The loader only accepts modules that satisfy the plugin contract. Run:
@@ -339,7 +354,7 @@ The loader only accepts modules that satisfy the plugin contract. Run:
 python -m pytest tests/test_tool_contract.py tests/test_architecture_boundaries.py
 ```
 
-A discovery/import error is logged and invalid tools are skipped instead of silently being treated as valid.
+A discovery/import error is logged and invalid tools are skipped instead of silently being treated as valid. When one or more plugins fail but discovery can continue, the main window provides a concise warning and keeps the per-module diagnostics in expandable details.
 
 ### OCR returns no text
 
@@ -376,4 +391,4 @@ pyinstaller --noconfirm --clean PythonKni.spec
 .\dist\PythonKni\PythonKni.exe --smoke-test
 ```
 
-The GitHub Actions `CI / validate` job performs the complete Windows validation on CPython 3.10.11, including the individual priority-module coverage ratchets, dependency audits, CycloneDX SBOM generation and packaged artifact creation.
+The GitHub Actions `CI / validate` job performs the complete Windows validation on CPython 3.10.11, including the individual priority-module coverage ratchets, dependency audits, CycloneDX SBOM generation and packaged artifact creation. The current structured-feedback tranche is covered by the same pipeline and raises the validated suite to 545 tests.

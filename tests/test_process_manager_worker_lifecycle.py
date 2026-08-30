@@ -112,3 +112,59 @@ def test_analysis_worker_uses_base_tool_lifecycle(qtbot, monkeypatch):
     release.set()
     qtbot.waitUntil(lambda: not tool._managed_workers, timeout=3000)
     assert tool._analysis_worker is None
+
+
+def test_process_load_failure_uses_structured_feedback(qtbot, monkeypatch):
+    feedback = []
+    monkeypatch.setattr(process_manager, "load_processes_task", lambda worker, cpu, mem: [])
+    monkeypatch.setattr(
+        process_manager,
+        "show_error",
+        lambda *args, **kwargs: feedback.append((args, kwargs)),
+    )
+
+    tool = process_manager.Tool()
+    qtbot.addWidget(tool)
+    qtbot.waitUntil(
+        lambda: tool._process_worker is None or not tool._process_worker.isRunning(),
+        timeout=2000,
+    )
+
+    worker = object()
+    tool._process_worker = worker
+    error = PermissionError("acceso denegado")
+    tool._process_load_error(worker, error)
+
+    assert feedback
+    args, kwargs = feedback[0]
+    assert args[1] == "No se pudieron cargar los procesos"
+    assert args[2] == "La lista de procesos no se pudo actualizar."
+    assert "acceso denegado" not in args[2]
+    assert kwargs["error"] is error
+
+
+def test_process_analysis_failure_uses_structured_feedback(qtbot, monkeypatch):
+    feedback = []
+    monkeypatch.setattr(process_manager, "load_processes_task", lambda worker, cpu, mem: [])
+    monkeypatch.setattr(
+        process_manager,
+        "show_error",
+        lambda *args, **kwargs: feedback.append((args, kwargs)),
+    )
+
+    tool = process_manager.Tool()
+    qtbot.addWidget(tool)
+    qtbot.waitUntil(
+        lambda: tool._process_worker is None or not tool._process_worker.isRunning(),
+        timeout=2000,
+    )
+
+    error = RuntimeError("timeout remoto")
+    tool._analysis_error(error)
+
+    assert feedback
+    args, kwargs = feedback[0]
+    assert args[1] == "No se pudo analizar el proceso"
+    assert args[2] == "El análisis de VirusTotal no se pudo completar."
+    assert "timeout remoto" not in args[2]
+    assert kwargs["error"] is error
