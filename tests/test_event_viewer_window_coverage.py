@@ -147,14 +147,14 @@ def test_refresh_events_requires_log_and_starts_worker(qtbot, monkeypatch):
     assert tool.worker.args == (["System"], 24, 40, True)
     assert tool.worker.started
     assert not tool.btn_refresh.isEnabled()
-    assert tool.btn_cancel.isVisible()
+    assert not tool.btn_cancel.isHidden()
     assert tool.status.text() == "Leyendo eventos de Windows..."
     assert tool.worker.result_ready.callback == tool.on_events_loaded
     assert tool.worker.failed.callback == tool.on_events_failed
 
     tool.cancel_loading()
     assert tool.worker.cancelled
-    assert not tool.btn_cancel.isVisible()
+    assert tool.btn_cancel.isHidden()
     assert tool.status.text() == "Cancelando lectura..."
 
     tool.worker = None
