@@ -33,6 +33,7 @@ from PyQt5.QtWidgets import (
 from tools.base_tool import BaseTool
 from tools.csv_utils import safe_csv_row
 from tools.theme_manager import ThemeManager
+from tools.ui_feedback import show_error
 
 from .models import EventItem, EventResult
 from .service import (
@@ -67,7 +68,7 @@ RISK_COLORS = {
 
 class EventWorker(QThread):
     result_ready = pyqtSignal(object)
-    failed = pyqtSignal(str)
+    failed = pyqtSignal(object)
 
     def __init__(self, logs: list[str], hours: int, max_events: int, include_info: bool):
         super().__init__()
@@ -91,12 +92,7 @@ class EventWorker(QThread):
             )
             self.result_ready.emit(result)
         except Exception as error:
-            self.failed.emit(str(error))
-
-
-# ---------------------------------------------------------------------------
-# Interfaz gráfica
-# ---------------------------------------------------------------------------
+            self.failed.emit(error)
 
 
 class EventDetailDialog(QDialog):
@@ -144,7 +140,6 @@ class Tool(BaseTool):
         description.setWordWrap(True)
         main_layout.addWidget(description)
 
-        # --- Filtros de registros y periodo ---
         filters = QGridLayout()
 
         self.chk_application = QCheckBox("Application")
@@ -180,7 +175,6 @@ class Tool(BaseTool):
 
         main_layout.addLayout(filters)
 
-        # --- Filtros de nivel y riesgo ---
         filter_row = QHBoxLayout()
 
         self.cmb_filter_level = QComboBox()
@@ -206,13 +200,11 @@ class Tool(BaseTool):
         filter_row.addStretch()
         main_layout.addLayout(filter_row)
 
-        # --- Buscador ---
         self.txt_search = QLineEdit()
         self.txt_search.setPlaceholderText("Buscar por origen, ID, mensaje o interpretación...")
         self.txt_search.textChanged.connect(self.populate_table)
         main_layout.addWidget(self.txt_search)
 
-        # --- Botones fila 1 ---
         btn_layout1 = QHBoxLayout()
 
         self.btn_refresh = QPushButton("Actualizar")
@@ -242,7 +234,6 @@ class Tool(BaseTool):
 
         main_layout.addLayout(btn_layout1)
 
-        # --- Botones fila 2 ---
         btn_layout2 = QHBoxLayout()
 
         self.btn_csv = QPushButton("Exportar CSV")
@@ -267,13 +258,11 @@ class Tool(BaseTool):
 
         main_layout.addLayout(btn_layout2)
 
-        # --- Resumen ejecutivo ---
         self.lbl_summary = QLabel("Pulsa Actualizar para cargar eventos.")
         self.lbl_summary.setWordWrap(True)
         self.lbl_summary.setStyleSheet("font-weight: bold; padding: 4px;")
         main_layout.addWidget(self.lbl_summary)
 
-        # --- Tabla ---
         self.table = QTableWidget(0, 9)
         self.table.setHorizontalHeaderLabels(
             [
@@ -303,13 +292,18 @@ class Tool(BaseTool):
         header.setSectionResizeMode(8, QHeaderView.Stretch)
         main_layout.addWidget(self.table)
 
-        # --- Barra de estado ---
         self.status = QLabel("Pulsa Actualizar para leer los eventos.")
         self.status.setWordWrap(True)
         main_layout.addWidget(self.status)
 
         root.setLayout(main_layout)
         self.setCentralWidget(root)
+
+    def _technical_error(self, title: str, message: str, error) -> None:
+        if isinstance(error, BaseException):
+            show_error(self, title, message, error=error)
+        else:
+            show_error(self, title, message, details=str(error))
 
     def selected_logs(self) -> list[str]:
         logs = []
@@ -393,7 +387,7 @@ class Tool(BaseTool):
         else:
             self.status.setText(summary)
 
-    def on_events_failed(self, error: str) -> None:
+    def on_events_failed(self, error) -> None:
         self.events = []
         self.visible_events = []
         self.table.setRowCount(0)
@@ -401,7 +395,11 @@ class Tool(BaseTool):
         self.btn_cancel.setVisible(False)
         self.lbl_summary.setText("Error al cargar eventos.")
         self.status.setText("No se pudieron leer los eventos.")
-        QMessageBox.critical(self, "Error", error)
+        self._technical_error(
+            "Lectura de eventos",
+            "No se pudieron leer los eventos de Windows.",
+            error,
+        )
 
     def populate_table(self) -> None:
         search = self.txt_search.text().strip().lower()
@@ -519,41 +517,49 @@ class Tool(BaseTool):
         if not file_path:
             return
 
-        with open(file_path, "w", newline="", encoding="utf-8-sig") as handle:
-            writer = csv.writer(handle, delimiter=";")
-            writer.writerow(
-                [
-                    "Fecha",
-                    "Nivel",
-                    "Origen",
-                    "ID Evento",
-                    "Registro",
-                    "Categoría",
-                    "Mensaje",
-                    "Riesgo",
-                    "Interpretación",
-                    "Equipo",
-                    "Record ID",
-                ]
-            )
-            for item in self.events:
+        try:
+            with open(file_path, "w", newline="", encoding="utf-8-sig") as handle:
+                writer = csv.writer(handle, delimiter=";")
                 writer.writerow(
-                    safe_csv_row(
-                        [
-                            item.date,
-                            item.level,
-                            item.provider,
-                            item.event_id,
-                            item.log_name,
-                            item.category,
-                            item.message,
-                            item.risk,
-                            item.interpretation,
-                            item.computer,
-                            item.record_id,
-                        ]
-                    )
+                    [
+                        "Fecha",
+                        "Nivel",
+                        "Origen",
+                        "ID Evento",
+                        "Registro",
+                        "Categoría",
+                        "Mensaje",
+                        "Riesgo",
+                        "Interpretación",
+                        "Equipo",
+                        "Record ID",
+                    ]
                 )
+                for item in self.events:
+                    writer.writerow(
+                        safe_csv_row(
+                            [
+                                item.date,
+                                item.level,
+                                item.provider,
+                                item.event_id,
+                                item.log_name,
+                                item.category,
+                                item.message,
+                                item.risk,
+                                item.interpretation,
+                                item.computer,
+                                item.record_id,
+                            ]
+                        )
+                    )
+        except Exception as error:
+            self._technical_error(
+                "Exportación CSV",
+                "No se pudieron exportar los eventos a CSV.",
+                error,
+            )
+            return
         QMessageBox.information(self, "Exportado", "Eventos exportados correctamente en CSV.")
 
     def export_html(self) -> None:
@@ -567,7 +573,16 @@ class Tool(BaseTool):
         if not file_path:
             return
 
-        Path(file_path).write_text(events_to_html(self.events), encoding="utf-8")
+        try:
+            content = events_to_html(self.events)
+            Path(file_path).write_text(content, encoding="utf-8")
+        except Exception as error:
+            self._technical_error(
+                "Exportación HTML",
+                "No se pudieron exportar los eventos a HTML.",
+                error,
+            )
+            return
         QMessageBox.information(self, "Exportado", "Eventos exportados correctamente en HTML.")
 
     def export_pdf(self) -> None:
@@ -589,15 +604,24 @@ class Tool(BaseTool):
             return
         try:
             events_to_pdf(self.events, self.build_summary(), file_path)
-            QMessageBox.information(self, "Exportado", "Eventos exportados correctamente en PDF.")
         except Exception as error:
-            QMessageBox.critical(self, "Error al exportar PDF", str(error))
+            self._technical_error(
+                "Exportación PDF",
+                "No se pudieron exportar los eventos a PDF.",
+                error,
+            )
+            return
+        QMessageBox.information(self, "Exportado", "Eventos exportados correctamente en PDF.")
 
     def open_windows_event_viewer(self) -> None:
         try:
             subprocess.Popen(["eventvwr.msc"], shell=True)
         except Exception as error:
-            QMessageBox.critical(self, "Error", f"No se pudo abrir el Visor de eventos:\n{error}")
+            self._technical_error(
+                "Visor de eventos",
+                "No se pudo abrir el Visor de eventos de Windows.",
+                error,
+            )
 
     def add_to_technical_report(self) -> None:
         if not self.events:
@@ -625,7 +649,16 @@ class Tool(BaseTool):
             "top_providers": top_providers,
         }
 
-        snapshot_path = save_events_snapshot(selected_events, summary_data)
+        try:
+            snapshot_path = save_events_snapshot(selected_events, summary_data)
+        except Exception as error:
+            self._technical_error(
+                "Informe técnico",
+                "No se pudo guardar el resumen de eventos para el informe técnico.",
+                error,
+            )
+            return
+
         QMessageBox.information(
             self,
             "Añadido al informe técnico",
