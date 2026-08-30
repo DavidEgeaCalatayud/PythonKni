@@ -147,17 +147,17 @@ It verifies that:
 ## Coverage ratchet
 
 The first full branch-coverage measurement of `pythonkni` + `tools` established an
-existing repository baseline of **58.85%** with all 289 tests passing. Enforcing an
-80% repository-wide threshold immediately would therefore make CI permanently red
-without distinguishing new regressions from historical untested UI/OS paths.
+existing repository baseline of **58.85%** with all 289 tests passing. The aggregated
+service layer measures **64.7%**. Enforcing an 80% repository-wide threshold
+immediately would therefore make CI permanently red without distinguishing new
+regressions from historical untested UI/OS paths.
 
-PythonKni uses a ratchet instead: CI must never fall below conservative floors based
-on the measured baseline, while new/refactored critical code is held to a stronger
-standard.
+PythonKni uses a ratchet instead: CI must not fall below the measured baseline floors,
+while new/refactored critical code is held to a stronger standard.
 
 ```text
-repository-wide branch coverage                   >= 58%
-all pythonkni/*/service.py coverage                >= 64%
+repository-wide branch coverage                   >= 58.8%
+all pythonkni/*/service.py coverage                >= 64.7%
 refactored process/config/infrastructure coverage  >= 80%
 ```
 
