@@ -3,7 +3,7 @@ from types import SimpleNamespace
 from unittest.mock import Mock, patch
 
 import pytest
-from PyPDF2 import PdfWriter
+from pypdf import PdfWriter
 
 from tools.pdf_merge_tool import Tool as PdfTool
 from tools.pdf_tasks import extract_text_task, preview_text_task, split_pdf_task
@@ -38,6 +38,7 @@ def make_pdf(path, pages=2):
         writer.add_blank_page(width=100, height=100)
     with path.open("wb") as file:
         writer.write(file)
+    writer.close()
 
 
 def test_split_pdf_task_runs_without_gui_and_reports_progress(tmp_path):
