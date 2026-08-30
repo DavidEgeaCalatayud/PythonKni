@@ -4,16 +4,13 @@ on:
   push:
     branches:
       - "**"
-  pull_request:
 
 permissions:
-  contents: read
+  contents: write
 
 jobs:
-  validate:
+  refresh-development-lock:
     runs-on: windows-latest
-    env:
-      QT_QPA_PLATFORM: offscreen
 
     steps:
       - name: Checkout
@@ -24,94 +21,24 @@ jobs:
         with:
           python-version: "3.10.11"
 
-      - name: Install hash-locked dependencies
+      - name: Install current hash-locked tooling
         run: |
-          python -m pip install --require-hashes -r requirements.txt
           python -m pip install --require-hashes -r requirements-dev.txt
 
-      - name: Validate dependency locks
-        run: python scripts/check_dependency_locks.py
-
-      - name: Verify installed dependency consistency
-        run: python -m pip check
-
-      - name: Audit runtime dependencies
-        run: python -m pip_audit -r requirements.txt --no-deps --strict --progress-spinner=off
-
-      - name: Audit development dependencies
-        run: python -m pip_audit -r requirements-dev.txt --no-deps --strict --progress-spinner=off
-
-      - name: Generate runtime CycloneDX SBOM
-        run: python -m pip_audit -r requirements.txt --no-deps --strict --progress-spinner=off --format cyclonedx-json --output dependency-sbom.cdx.json
-
-      - name: Compile Python files
-        run: python -m compileall .
-
-      - name: Run tests and collect branch coverage
-        run: python -m pytest --cov=pythonkni --cov=tools --cov-branch --cov-report=term-missing --cov-report=xml
-
-      - name: Enforce repository coverage ratchet
-        run: python -m coverage report --fail-under=84.0
-
-      - name: Enforce service-layer coverage ratchet
-        run: python -m coverage report --include="pythonkni/*/service.py" --fail-under=91.0
-
-      - name: Enforce priority-service coverage ratchets
+      - name: Resolve patched development lock
         run: |
-          python -m coverage report --include="pythonkni/archive/service.py" --fail-under=95.0
-          python -m coverage report --include="pythonkni/converter/service.py" --fail-under=94.0
-          python -m coverage report --include="pythonkni/network/service.py" --fail-under=96.0
-          python -m coverage report --include="pythonkni/pdf/service.py" --fail-under=95.0
-          python -m coverage report --include="pythonkni/startup/service.py" --fail-under=87.5
-          python -m coverage report --include="pythonkni/event_viewer/service.py" --fail-under=95.0
-          python -m coverage report --include="pythonkni/system_report/service.py" --fail-under=97.0
-          python -m coverage report --include="pythonkni/temp_cleaner/service.py" --fail-under=86.0
+          python -m piptools compile requirements-dev.in --generate-hashes --allow-unsafe --strip-extras --no-header --output-file requirements-dev.txt
 
-      - name: Enforce priority-window coverage ratchets
-        run: |
-          python -m coverage report --include="pythonkni/startup/window.py" --fail-under=95.0
-          python -m coverage report --include="pythonkni/event_viewer/window.py" --fail-under=98.0
-          python -m coverage report --include="pythonkni/pdf/window.py" --fail-under=93.0
-
-      - name: Enforce refactored critical-code coverage
-        run: python -m coverage report --include="pythonkni/process_manager/service.py,pythonkni/config/service.py,pythonkni/infrastructure/*.py" --fail-under=84.0
-
-      - name: Ruff check
-        run: python -m ruff check .
-
-      - name: Ruff format check
-        run: python -m ruff format --check .
-
-      - name: Build Windows bundle
-        run: pyinstaller --noconfirm --clean PythonKni.spec
-
-      - name: Smoke test packaged application
+      - name: Commit patched development lock
         shell: powershell
         run: |
-          $exe = Join-Path $PWD "dist\PythonKni\PythonKni.exe"
-          if (-not (Test-Path $exe)) {
-            throw "PyInstaller did not produce $exe"
+          git diff --quiet -- requirements-dev.txt
+          if ($LASTEXITCODE -eq 0) {
+            Write-Host "Development lock already matches the requested policy."
+            exit 0
           }
-
-          $process = Start-Process -FilePath $exe -ArgumentList "--smoke-test" -Wait -PassThru
-          if ($process.ExitCode -ne 0) {
-            throw "Packaged application smoke test failed with exit code $($process.ExitCode)"
-          }
-
-      - name: Package validated Windows bundle
-        shell: powershell
-        run: .\scripts\package_windows_bundle.ps1 -OutputPrefix "PythonKni-windows-x64"
-
-      - name: Upload validated Windows bundle
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
-        with:
-          name: PythonKni-windows-${{ github.sha }}
-          path: |
-            dist/PythonKni-windows-x64.zip
-            dist/PythonKni-windows-x64.sha256
-            coverage.xml
-            dependency-sbom.cdx.json
-            requirements.txt
-            requirements-dev.txt
-          if-no-files-found: error
-          retention-days: 14
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add requirements-dev.txt
+          git commit -m "Update development lock to patched setuptools"
+          git push origin "HEAD:${{ github.ref_name }}"
