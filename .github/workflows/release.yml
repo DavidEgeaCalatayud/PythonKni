@@ -52,10 +52,16 @@ jobs:
         run: python -m pytest --cov=pythonkni --cov=tools --cov-branch --cov-report=term-missing --cov-report=xml
 
       - name: Enforce repository coverage ratchet
-        run: python -m coverage report --fail-under=58.8
+        run: python -m coverage report --fail-under=66.5
 
       - name: Enforce service-layer coverage ratchet
-        run: python -m coverage report --include="pythonkni/*/service.py" --fail-under=64.7
+        run: python -m coverage report --include="pythonkni/*/service.py" --fail-under=81.0
+
+      - name: Enforce priority-service coverage ratchets
+        run: |
+          python -m coverage report --include="pythonkni/startup/service.py" --fail-under=87.5
+          python -m coverage report --include="pythonkni/event_viewer/service.py" --fail-under=95.0
+          python -m coverage report --include="pythonkni/system_report/service.py" --fail-under=97.0
 
       - name: Enforce refactored critical-code coverage
         run: python -m coverage report --include="pythonkni/process_manager/service.py,pythonkni/config/service.py,pythonkni/infrastructure/*.py" --fail-under=80
