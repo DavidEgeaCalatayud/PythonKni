@@ -30,6 +30,21 @@ jobs:
           python -m pip install -r requirements.txt
           python -m pip install -r requirements-dev.txt
 
+      - name: Generate hashed lock candidates
+        run: |
+          python -m piptools compile requirements.in --generate-hashes --allow-unsafe --strip-extras --output-file requirements-hashed.generated.txt
+          python -m piptools compile requirements-dev.in --generate-hashes --allow-unsafe --strip-extras --output-file requirements-dev-hashed.generated.txt
+
+      - name: Upload hashed lock candidates
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: dependency-lock-candidates-${{ github.sha }}
+          path: |
+            requirements-hashed.generated.txt
+            requirements-dev-hashed.generated.txt
+          if-no-files-found: error
+          retention-days: 1
+
       - name: Validate dependency locks
         run: python scripts/check_dependency_locks.py
 
