@@ -13,11 +13,12 @@ from PyQt5.QtWidgets import (
     QWidget,
 )
 
-from tools.app_paths import CONFIG_FILE
+from pythonkni.infrastructure.paths import CONFIG_FILE
 from tools.base_tool import BaseTool
 from tools.language_manager import LanguageManager
 from tools.theme_manager import ThemeManager
 
+from . import runtime as _runtime
 from . import service as _service
 from .models import (
     DEFAULT_CONFIG as DEFAULT_CONFIG,
@@ -31,14 +32,17 @@ from .models import (
 from .models import (
     VALID_THEMES as VALID_THEMES,
 )
-from .service import (
+from .runtime import (
     apply_runtime_config as apply_runtime_config,
+)
+from .runtime import (
+    load_runtime_config as load_runtime_config,
+)
+from .runtime import (
+    save_runtime_config as save_runtime_config,
 )
 from .service import (
     load_config as load_config,
-)
-from .service import (
-    load_runtime_config as load_runtime_config,
 )
 from .service import (
     logger as logger,
@@ -48,9 +52,6 @@ from .service import (
 )
 from .service import (
     save_config as save_config,
-)
-from .service import (
-    save_runtime_config as save_runtime_config,
 )
 
 
@@ -154,16 +155,20 @@ class Tool(BaseTool):
 
 
 class _CompatibilityModule(_types.ModuleType):
-    """Forward legacy monkeypatches to the separated service module."""
+    """Forward legacy monkeypatches to the separated config modules."""
 
     def __setattr__(self, name, value):
         if hasattr(_service, name):
             setattr(_service, name, value)
+        if hasattr(_runtime, name):
+            setattr(_runtime, name, value)
         super().__setattr__(name, value)
 
     def __delattr__(self, name):
         if hasattr(_service, name):
             delattr(_service, name)
+        if hasattr(_runtime, name):
+            delattr(_runtime, name)
         super().__delattr__(name)
 
 

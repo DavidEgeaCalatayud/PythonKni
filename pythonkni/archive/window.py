@@ -15,12 +15,10 @@ from PyQt5.QtWidgets import (
     QWidget,
 )
 
+from pythonkni.infrastructure.archives import _default_extract_path
 from tools.base_tool import BaseTool
 from tools.theme_manager import ThemeManager
 from tools.worker import Worker
-from tools.zip_7zip_utils import (
-    _default_extract_path,
-)
 
 from . import service as _service
 from .service import (

@@ -11,7 +11,7 @@ from pathlib import Path
 
 import py7zr
 
-from tools.zip_7zip_utils import (
+from pythonkni.infrastructure.archives import (
     COPY_CHUNK_SIZE,
     DEFAULT_LIMITS,
     ArchiveLimits,

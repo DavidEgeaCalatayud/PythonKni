@@ -15,11 +15,11 @@ from PyQt5.QtWidgets import (
     QWidget,
 )
 
-from tools.app_paths import ASSETS_DIR, CONFIG_FILE
+from pythonkni.config.models import DEFAULT_CONFIG
+from pythonkni.config.runtime import apply_runtime_config, load_runtime_config
+from pythonkni.infrastructure.paths import ASSETS_DIR, CONFIG_FILE
 from tools.base_tool import BaseTool
-from tools.config_service import DEFAULT_CONFIG
 from tools.logging_config import setup_logging
-from tools.runtime_config import apply_runtime_config, load_runtime_config
 from tools.theme_manager import ThemeManager
 
 logger = logging.getLogger(__name__)
