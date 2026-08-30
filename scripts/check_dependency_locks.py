@@ -1,7 +1,7 @@
 from __future__ import annotations
 
-import sys
 from pathlib import Path
+import sys
 
 from packaging.requirements import Requirement
 from packaging.utils import canonicalize_name
