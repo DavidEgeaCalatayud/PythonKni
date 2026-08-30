@@ -198,7 +198,13 @@ class Tool(BaseTool):
                 for item in self.items:
                     writer.writerow(
                         safe_csv_row(
-                            [item.name, item.item_type, format_bytes(item.size), item.size, item.path]
+                            [
+                                item.name,
+                                item.item_type,
+                                format_bytes(item.size),
+                                item.size,
+                                item.path,
+                            ]
                         )
                     )
         except Exception as error:
