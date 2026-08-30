@@ -34,7 +34,7 @@ hiddenimports += local_python_modules('pythonkni')
 
 for package in [
     'PyQt5',
-    'PyPDF2',
+    'pypdf',
     'pytesseract',
     'pdf2image',
     'PIL',

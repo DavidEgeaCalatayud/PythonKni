@@ -25,6 +25,9 @@ The project has not published a tagged release for the work below yet, so the cu
 - Added focused service regressions for Startup Manager registry/folder behavior, Event Viewer parsing/diagnostics/export and System Report collection/fallback paths. (PR #35)
 - Added broad behavior-driven coverage for Archive, Converter, Network, PDF and Temp Cleaner services, including transactional output, cancellation, extraction limits, network fallbacks, PDF edge cases and safe cleanup branches. (PR #35)
 - Added high-coverage Qt orchestration regressions for Startup Manager, Event Viewer and PDF Toolkit, covering workers, cancellation, validation, filters, dialogs, exports, selection state and error paths. (PR #35)
+- Added separate direct-dependency policy files (`requirements.in`, `requirements-dev.in`) and exact transitive runtime/development locks containing SHA-256 hashes for every resolved package distribution. (PR #36)
+- Added `scripts/check_dependency_locks.py` plus regressions that reject missing hashes, malformed SHA-256 values, non-exact pins, missing direct dependencies and direct versions outside the declared policy range. (PR #36)
+- Added CycloneDX runtime SBOM generation and retention alongside Windows CI/release artifacts, plus weekly Dependabot checks for Python dependencies and GitHub Actions. (PR #36)
 
 ### Changed
 
@@ -49,6 +52,10 @@ The project has not published a tagged release for the work below yet, so the cu
 - Configuration normalization/atomic persistence remains in framework-independent `config.service`, while theme/language manager integration moved to `config.runtime`. (PR #34)
 - Process Manager presentation now delegates process lookup/termination to its service instead of importing `psutil` and performing operating-system mutations from the window. (PR #34)
 - Raised CI/release coverage ratchets to **84.0% repository-wide** and **91.0% across services**, with individual non-regression gates for the reinforced services and Startup/Event Viewer/PDF windows. (PR #35)
+- Migrated first-party PDF reading/writing from deprecated `PyPDF2` to maintained `pypdf`, including the modern merge API, PDF regressions and PyInstaller collection metadata. (PR #36)
+- Aligned the supported Python contract to **Python >=3.10** with Windows / CPython **3.10.11** as the canonical CI and release environment instead of retaining a partial legacy Python 3.8 claim. (PR #36)
+- CI and release now install the committed dependency graphs with `pip --require-hashes`, validate the resulting graph with `pip check`, and publish both dependency locks with validated build/release artifacts. (PR #36)
+- GitHub Actions used by CI/release are pinned to immutable commit SHAs rather than mutable version tags. (PR #36)
 
 ### Fixed
 
@@ -64,6 +71,7 @@ The project has not published a tagged release for the work below yet, so the cu
 - Configuration persistence now writes through a same-directory temporary file with flush, `fsync` and atomic `os.replace()`, preserving the previous valid configuration on failure. (PR #21)
 - Configuration save errors are surfaced to the UI without applying theme/language state that failed to persist. (PR #21)
 - Process termination now revalidates PID liveness and `create_time` inside the service immediately before `terminate()`, keeping PID-reuse protection adjacent to the destructive OS operation. (PR #34)
+- Removed vulnerable `setuptools 80.10.2` from the development lock after the new audit gate detected `PYSEC-2026-3447`; the policy now resolves to patched `setuptools 84.0.0` rather than suppressing the advisory. (PR #36)
 
 ### Security
 
@@ -79,6 +87,9 @@ The project has not published a tagged release for the work below yet, so the cu
 - Temp Cleaner preview follows the same no-link traversal rules, and Windows CI includes a real NTFS junction regression test. (PR #26)
 - Process termination and startup-management operations gained explicit protection/transaction controls for destructive system changes. (PRs #2, #4)
 - VirusTotal analysis hashes executables locally and queries by SHA-256 rather than uploading executable contents; the API key is read from the environment. (PR #5 and configuration hardening)
+- Runtime and development dependency graphs are exact-version/SHA-256 locked; CI/release reject unapproved package artifacts through `pip --require-hashes`. (PR #36)
+- Both Python dependency locks are audited with strict `pip-audit` gates, so known advisories fail validation; the runtime SBOM is generated in CycloneDX JSON format. (PR #36)
+- Dependency integrity tests, action SHA pinning and weekly Dependabot checks add non-regression controls around the project supply chain. (PR #36)
 
 ### Testing and CI
 
@@ -99,6 +110,8 @@ The project has not published a tagged release for the work below yet, so the cu
 - Archive, Converter, Network, PDF and Temp Cleaner services now measure **95.7%**, **94.5%**, **96.7%**, **95.3%** and **86.4%** respectively; Startup, Event Viewer and System Report remain at **87.7%**, **95.4%** and **97.2%**. (PR #35)
 - Startup, Event Viewer and PDF windows now measure **95.8%**, **98.9%** and **93.4%**, with dedicated CI/release non-regression gates. (PR #35)
 - Repository/service ratchets now enforce **84.0% / 91.0%**, while priority-module gates preserve the stronger coverage reached by the reinforced services and Qt windows. (PR #35)
+- Expanded the suite to **535 tests** with PDF migration/dependency-lock regressions while preserving the established **84.6% repository-wide / 91.5% service-layer** application coverage baseline. (PR #36)
+- The canonical Windows pipeline now validates hash-locked installation, lock structure, `pip check`, runtime/development vulnerability audits and SBOM generation before compile/test/lint/build/smoke/package stages. (PR #36)
 
 ### Documentation
 
@@ -112,7 +125,8 @@ The project has not published a tagged release for the work below yet, so the cu
 - Updated architecture and README documentation for `pythonkni.infrastructure`, Process Manager service ownership and the measured coverage-ratchet strategy. (PR #34)
 - Synchronized the README with the already-implemented CI artifacts and tag-driven GitHub Release workflow, removing release automation from the future-work roadmap. (PR #34)
 - Updated README and architecture documentation with the final **530-test / 84.6% global / 91.5% service** coverage baseline and removed the now-completed 80%/85% coverage target from the active roadmap. (PR #35)
+- Synchronized README, architecture, usage and security documentation with the `pypdf` backend, Python 3.10+ support contract, hashed dependency locks, vulnerability audits, SBOM artifacts and the 535-test CI path; removed the completed PDF/dependency-hardening items from the active roadmap. (PR #36)
 
 ### Development cycle covered
 
-This Unreleased section consolidates the major merged and pending hardening/refactoring work from **PR #2 through PR #35** during the August 2026 development cycle. PR #1 was intentionally not merged and was superseded by the later Temp Cleaner work in PRs #21 and #26.
+This Unreleased section consolidates the major merged and pending hardening/refactoring work from **PR #2 through PR #36** during the August 2026 development cycle. PR #1 was intentionally not merged and was superseded by the later Temp Cleaner work in PRs #21 and #26.

@@ -60,7 +60,7 @@ def test_require_pypdf_and_pick_pdf(qtbot, monkeypatch):
         lambda *args, **kwargs: critical.append(args[-1]),
     )
     assert not tool.require_pypdf()
-    assert "PyPDF2" in critical[-1]
+    assert "pypdf" in critical[-1]
 
     monkeypatch.setattr(
         pdf_window.QFileDialog,
