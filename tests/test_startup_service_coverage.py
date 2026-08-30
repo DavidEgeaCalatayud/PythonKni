@@ -74,7 +74,9 @@ def test_path_exists_from_command(monkeypatch, tmp_path):
     monkeypatch.setattr(startup, "extract_executable_path", lambda _command: "")
     assert startup.path_exists_from_command("anything") == "No detectable"
 
-    monkeypatch.setattr(startup, "extract_executable_path", lambda _command: str(tmp_path / "missing.exe"))
+    monkeypatch.setattr(
+        startup, "extract_executable_path", lambda _command: str(tmp_path / "missing.exe")
+    )
     assert startup.path_exists_from_command("anything") == "No"
 
 
@@ -284,9 +286,13 @@ def test_disable_registry_success_delegates_backup_then_delete(monkeypatch):
     monkeypatch.setattr(startup, "is_windows", lambda: True)
     monkeypatch.setattr(startup, "REGISTRY_ROOTS", {"HKCU": object()})
     monkeypatch.setattr(
-        startup, "create_disabled_registry_backup", lambda value: calls.append(("backup", value)) or "id"
+        startup,
+        "create_disabled_registry_backup",
+        lambda value: calls.append(("backup", value)) or "id",
     )
-    monkeypatch.setattr(startup, "_delete_registry_value", lambda value: calls.append(("delete", value)))
+    monkeypatch.setattr(
+        startup, "_delete_registry_value", lambda value: calls.append(("delete", value))
+    )
 
     startup.disable_registry_item(item)
     assert calls == [("backup", item), ("delete", item)]
@@ -307,7 +313,9 @@ def test_enable_registry_success_restores_and_deletes_backup(monkeypatch):
     monkeypatch.setattr(startup, "is_windows", lambda: True)
     monkeypatch.setattr(startup, "REGISTRY_ROOTS", {"HKCU": object()})
     monkeypatch.setattr(startup, "_registry_value_exists", lambda _item: False)
-    monkeypatch.setattr(startup, "_write_registry_value", lambda value: calls.append(("write", value)))
+    monkeypatch.setattr(
+        startup, "_write_registry_value", lambda value: calls.append(("write", value))
+    )
     monkeypatch.setattr(
         startup,
         "delete_disabled_registry_backup",
