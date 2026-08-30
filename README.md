@@ -256,8 +256,11 @@ Run the CI-equivalent quality checks with:
 ```powershell
 python -m compileall .
 python -m pytest --cov=pythonkni --cov=tools --cov-branch --cov-report=term-missing --cov-report=xml
-python -m coverage report --fail-under=58.8
-python -m coverage report --include="pythonkni/*/service.py" --fail-under=64.7
+python -m coverage report --fail-under=66.5
+python -m coverage report --include="pythonkni/*/service.py" --fail-under=81.0
+python -m coverage report --include="pythonkni/startup/service.py" --fail-under=87.5
+python -m coverage report --include="pythonkni/event_viewer/service.py" --fail-under=95.0
+python -m coverage report --include="pythonkni/system_report/service.py" --fail-under=97.0
 python -m coverage report --include="pythonkni/process_manager/service.py,pythonkni/config/service.py,pythonkni/infrastructure/*.py" --fail-under=80
 python -m ruff check .
 python -m ruff format --check .
@@ -265,17 +268,30 @@ python -m ruff format --check .
 
 ### Coverage ratchet
 
-The first repository-wide branch-coverage measurement established a real baseline of **58.85%** with **289/289 tests passing**. The service layer currently measures **64.7%** because several Windows-heavy domains still contain historical untested branches.
+The first repository-wide branch-coverage measurement established an initial baseline of **58.85%** with **289/289 tests passing**, while the aggregated service layer measured **64.7%**.
 
-CI therefore uses a **ratchet**, not an artificial green badge:
+The first focused coverage-hardening tranche expanded behavior-driven tests around Startup Manager, System Report and Event Viewer. The measured result is now **66.7% repository-wide** and **81.1% across all `service.py` modules**, with **415/415 tests passing**.
+
+The three previously weakest Windows-heavy services now measure:
 
 ```text
-repository-wide branch coverage                   >= 58.8%
-all pythonkni/*/service.py coverage                >= 64.7%
+Startup service        87.7%
+Event Viewer service   95.4%
+System Report service  97.2%
+```
+
+CI uses a **ratchet**, not an artificial green badge. Current enforced floors are:
+
+```text
+repository-wide branch coverage                   >= 66.5%
+all pythonkni/*/service.py coverage                >= 81.0%
+Startup service coverage                           >= 87.5%
+Event Viewer service coverage                      >= 95.0%
+System Report service coverage                     >= 97.0%
 refactored process/config/infrastructure coverage  >= 80%
 ```
 
-The long-term targets are **80% repository-wide** and **85% for services**. Ratchet floors should only be increased as tests are added; they should not be lowered to make a regression pass.
+The long-term targets remain **80% repository-wide** and **85% for the aggregated service layer**. Ratchet floors should only be increased as meaningful tests are added; they should not be lowered to make a regression pass.
 
 Ruff currently enforces full Pyflakes diagnostics plus import ordering:
 
@@ -283,7 +299,7 @@ Ruff currently enforces full Pyflakes diagnostics plus import ordering:
 select = ["F", "I"]
 ```
 
-The suite covers architecture boundaries, configuration persistence/runtime behavior, worker lifecycle/cancellation, archive security, converter transactions, duplicate handling, network validation/scanning, process protection and PID identity, PDF regressions, startup transactions, Event Viewer behavior, Temp Cleaner safety, WiFi behavior and packaged application discovery.
+The suite covers architecture boundaries, configuration persistence/runtime behavior, worker lifecycle/cancellation, archive security, converter transactions, duplicate handling, network validation/scanning, process protection and PID identity, Startup registry/folder transactions, Event Viewer parsing/diagnostics, System Report collection/export, PDF regressions, Temp Cleaner safety, WiFi behavior and packaged application discovery.
 
 ### CI pipeline
 
@@ -292,7 +308,7 @@ Every push and pull request runs:
 ```text
 compileall
    ↓
-289+ pytest tests + branch coverage
+415+ pytest tests + branch coverage
    ↓
 coverage ratchets
    ↓
@@ -371,7 +387,7 @@ python -m pytest tests/test_tool_contract.py tests/test_architecture_boundaries.
 - Network/system capabilities depend on firewall rules, topology and operating-system privileges.
 - The PDF stack still uses deprecated `PyPDF2` and should migrate to `pypdf`.
 - Dependency installation uses version lower bounds rather than a fully reproducible lock/constraints workflow.
-- Repository-wide branch coverage is still below the long-term 80% target, especially in Windows-heavy UI/OS paths.
+- Repository-wide branch coverage is still below the long-term 80% target, although the aggregated service layer is now above 80%.
 - GitHub Releases are automated, but executable signing and installer generation are not yet implemented.
 - Localization infrastructure exists, but not every user-visible string is extracted/translated.
 
@@ -382,8 +398,8 @@ python -m pytest tests/test_tool_contract.py tests/test_architecture_boundaries.
 ### Code and reliability
 
 - [ ] Raise the coverage ratchet progressively toward 80% overall / 85% services.
+- [ ] Expand tests in the remaining sub-80% services, especially Converter, Archive, PDF, Network and Temp Cleaner.
 - [ ] Migrate the PDF backend from `PyPDF2` to `pypdf`.
-- [ ] Expand tests in low-coverage Windows-heavy services, especially Startup, System Report and Event Viewer.
 - [ ] Decide and enforce the full Python-version support matrix in CI.
 - [ ] Add reproducible dependency constraints/locking and dependency-security checks.
 - [ ] Continue improving structured UI error reporting.
