@@ -1,7 +1,5 @@
-from pathlib import Path
-
 from PyQt5.QtGui import QColor
-from PyQt5.QtWidgets import QMessageBox, QPlainTextEdit, QPushButton
+from PyQt5.QtWidgets import QPlainTextEdit, QPushButton
 
 from pythonkni.event_viewer import window as event_window
 from pythonkni.event_viewer.models import EventItem, EventResult
