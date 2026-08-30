@@ -1,4 +1,6 @@
 # Development and CI dependencies. Runtime dependencies are installed from requirements.txt.
+pip==26.2.1
+setuptools>=80,<81
 pytest>=9.1,<10.0
 pytest-qt>=4.5,<5.0
 pytest-cov>=5.0,<6.0
