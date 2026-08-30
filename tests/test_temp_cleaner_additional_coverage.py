@@ -1,7 +1,4 @@
-import os
-import stat
 from pathlib import Path
-from types import SimpleNamespace
 
 import pytest
 
@@ -23,7 +20,7 @@ def test_env_absolute_path_handles_missing_blank_relative_and_absolute(monkeypat
     assert cleaner._env_absolute_path("PYTHONKNI_TEMP_TEST") == tmp_path
 
 
-def test_link_helpers_detect_symlink_and_handle_lstat_failure(monkeypatch, tmp_path):
+def test_link_helpers_detect_symlink_and_handle_lstat_failure(tmp_path):
     target = tmp_path / "target.txt"
     target.write_text("x", encoding="utf-8")
     link = tmp_path / "link.txt"
