@@ -274,7 +274,9 @@ def test_enable_selected_registry_folder_and_error_branches(qtbot, monkeypatch):
     assert any(title == "Error" and "boom" in message for title, message in critical)
 
 
-def test_open_selected_location_covers_file_registry_warning_and_error(qtbot, monkeypatch, tmp_path):
+def test_open_selected_location_covers_file_registry_warning_and_error(
+    qtbot, monkeypatch, tmp_path
+):
     tool = build_tool(qtbot, monkeypatch)
     opened = []
     regedit = []
