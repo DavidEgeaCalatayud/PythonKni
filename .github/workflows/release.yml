@@ -43,13 +43,22 @@ jobs:
         run: |
           python -m pip install --upgrade pip
           pip install -r requirements.txt
-          pip install pytest pytest-qt ruff pyinstaller
+          pip install pytest pytest-qt "pytest-cov>=5.0,<6.0" ruff pyinstaller
 
       - name: Compile Python files
         run: python -m compileall .
 
-      - name: Run tests
-        run: python -m pytest
+      - name: Run tests and collect branch coverage
+        run: python -m pytest --cov=pythonkni --cov=tools --cov-branch --cov-report=term-missing --cov-report=xml
+
+      - name: Enforce repository coverage ratchet
+        run: python -m coverage report --fail-under=58.8
+
+      - name: Enforce service-layer coverage ratchet
+        run: python -m coverage report --include="pythonkni/*/service.py" --fail-under=64.7
+
+      - name: Enforce refactored critical-code coverage
+        run: python -m coverage report --include="pythonkni/process_manager/service.py,pythonkni/config/service.py,pythonkni/infrastructure/*.py" --fail-under=80
 
       - name: Ruff check
         run: python -m ruff check .
@@ -84,6 +93,7 @@ jobs:
           path: |
             dist/PythonKni-${{ github.ref_name }}-windows-x64.zip
             dist/PythonKni-${{ github.ref_name }}-windows-x64.sha256
+            coverage.xml
           if-no-files-found: error
           retention-days: 30
 

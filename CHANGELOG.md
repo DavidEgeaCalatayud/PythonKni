@@ -20,6 +20,8 @@ The project has not published a tagged release for the work below yet, so the cu
 - Added shared spreadsheet-safe CSV helpers used by Disk Analyzer, Network history, Startup Manager and Event Viewer exports. (PR #20)
 - Added complete architecture-boundary tests covering every first-party domain and enforcing the `models <- service <- window <- adapter` dependency direction. (PR #24)
 - Added regression coverage for legacy adapter exports and monkeypatch forwarding after the layered architecture migration and stricter Ruff cleanup. (PR #27)
+- Added framework-independent shared infrastructure under `pythonkni/infrastructure/`, initially owning application paths plus ZIP/7Z validation, extraction safety, staging and publication primitives. (PR #34)
+- Added `pytest-cov` branch-coverage reporting and CI coverage ratchets based on the measured repository/service baselines, with an 80% floor for the critical code refactored in PR #34. (PR #34)
 
 ### Changed
 
@@ -39,6 +41,10 @@ The project has not published a tagged release for the work below yet, so the cu
 - Runtime configuration, history and logs are stored outside the repository under the user profile instead of beside source files.
 - VirusTotal configuration uses the `VIRUSTOTAL_API_KEY` environment variable instead of a source-code secret.
 - Runtime/development dependencies and OCR requirements were completed and normalized, including the canonical `requirements.txt` path.
+- Archive services now consume `pythonkni.infrastructure.archives` directly; `tools.zip_7zip_utils` remains only as a legacy/UI compatibility facade with monkeypatch forwarding. (PR #34)
+- Application filesystem paths now live in `pythonkni.infrastructure.paths`; `tools.app_paths` is retained as a compatibility alias. (PR #34)
+- Configuration normalization/atomic persistence remains in framework-independent `config.service`, while theme/language manager integration moved to `config.runtime`. (PR #34)
+- Process Manager presentation now delegates process lookup/termination to its service instead of importing `psutil` and performing operating-system mutations from the window. (PR #34)
 
 ### Fixed
 
@@ -53,6 +59,7 @@ The project has not published a tagged release for the work below yet, so the cu
 - Fatal tool-discovery errors such as directory enumeration/permission failures now leave the loading state, are logged and surface a persistent loader failure instead of silently killing the loader thread. (PR #22)
 - Configuration persistence now writes through a same-directory temporary file with flush, `fsync` and atomic `os.replace()`, preserving the previous valid configuration on failure. (PR #21)
 - Configuration save errors are surfaced to the UI without applying theme/language state that failed to persist. (PR #21)
+- Process termination now revalidates PID liveness and `create_time` inside the service immediately before `terminate()`, keeping PID-reuse protection adjacent to the destructive OS operation. (PR #34)
 
 ### Security
 
@@ -80,6 +87,10 @@ The project has not published a tagged release for the work below yet, so the cu
 - Added worker-lifecycle regressions covering close behavior, overlapping Process Manager refreshes, Event Viewer subprocess cleanup, WiFi background loading and managed analysis workers. (PRs #14, #15, #17, #25)
 - Added Temp Cleaner regressions for broad-root rejection, unsafe environment paths, symlink files/directories, Windows junctions and root/subdirectory replacement during traversal. (PRs #21, #26)
 - CI now validates `compileall`, the full pytest suite, Ruff `F + I`, Ruff formatting, the Windows PyInstaller bundle and the frozen-application smoke test before changes are merged. (PRs #13, #27)
+- Added service-level Process Manager regressions for own-process rejection, unavailable processes, process identity reuse and delegated termination, while UI tests now focus on confirmation/orchestration. (PR #34)
+- Added architecture regressions requiring shared infrastructure to remain PyQt/`tools` independent and preventing `psutil` from returning to `process_manager/window.py`. (PR #34)
+- Measured the first full `pythonkni` + `tools` branch-coverage baseline at 58.85% with 289/289 tests passing; CI now enforces non-regression ratchets of 58% repository-wide, 64% across services and 80% across the critical code refactored in PR #34. (PR #34)
+- Coverage XML is preserved alongside validated Windows CI/release artifacts so subsequent coverage work has a machine-readable baseline. (PR #34)
 
 ### Documentation
 
@@ -90,7 +101,9 @@ The project has not published a tagged release for the work below yet, so the cu
 - Expanded `docs/usage.md` from a minimal launcher/build stub into a per-tool operational guide covering all first-party tools, runtime data, permissions, cancellation, troubleshooting and CI-equivalent validation. (PR #29)
 - Expanded `docs/security.md` with sensitive-data flows, destructive-operation guarantees and limitations, archive/Temp Cleaner controls, process/startup protections, network authorization boundaries, WiFi/VirusTotal privacy behavior and dependency/packaging risks. (PR #29)
 - Documented installation, Windows build behavior, optional Tesseract/Poppler OCR dependencies and secret-handling guidance.
+- Updated architecture and README documentation for `pythonkni.infrastructure`, Process Manager service ownership and the measured coverage-ratchet strategy. (PR #34)
+- Synchronized the README with the already-implemented CI artifacts and tag-driven GitHub Release workflow, removing release automation from the future-work roadmap. (PR #34)
 
 ### Development cycle covered
 
-This Unreleased section consolidates the major merged work from **PR #2 through PR #29** during the August 2026 hardening/refactoring cycle. PR #1 was intentionally not merged and was superseded by the later Temp Cleaner work in PRs #21 and #26.
+This Unreleased section consolidates the major merged and pending hardening/refactoring work from **PR #2 through PR #34** during the August 2026 development cycle. PR #1 was intentionally not merged and was superseded by the later Temp Cleaner work in PRs #21 and #26.

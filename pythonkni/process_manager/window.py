@@ -3,7 +3,6 @@ from __future__ import annotations
 import sys as _sys
 import types as _types
 
-import psutil
 from PyQt5.QtCore import Qt
 from PyQt5.QtGui import QMovie
 from PyQt5.QtWidgets import (
@@ -19,7 +18,7 @@ from PyQt5.QtWidgets import (
     QWidget,
 )
 
-from tools.app_paths import ASSETS_DIR
+from pythonkni.infrastructure.paths import ASSETS_DIR
 from tools.base_tool import BaseTool
 from tools.theme_manager import ThemeManager
 from tools.worker import Worker
@@ -35,7 +34,16 @@ from .service import (
     SYSTEM_USERNAMES as SYSTEM_USERNAMES,
 )
 from .service import (
+    OwnProcessTerminationError as OwnProcessTerminationError,
+)
+from .service import (
     ProcessDetails as ProcessDetails,
+)
+from .service import (
+    ProcessIdentityChangedError as ProcessIdentityChangedError,
+)
+from .service import (
+    ProcessUnavailableError as ProcessUnavailableError,
 )
 from .service import (
     VirusTotalResult as VirusTotalResult,
@@ -53,6 +61,9 @@ from .service import (
     get_process_details as get_process_details,
 )
 from .service import (
+    get_termination_target as get_termination_target,
+)
+from .service import (
     get_vt_api_key as get_vt_api_key,
 )
 from .service import (
@@ -66,6 +77,9 @@ from .service import (
 )
 from .service import (
     logger as logger,
+)
+from .service import (
+    terminate_process as terminate_process,
 )
 
 
@@ -226,31 +240,21 @@ class Tool(BaseTool):
         self.table.setSortingEnabled(True)
 
     def kill_process(self):
-        """Termina el proceso seleccionado aplicando protecciones previas."""
+        """Coordinate confirmations while the service owns OS process operations."""
         selected = self.table.currentRow()
         if selected < 0:
             QMessageBox.warning(self, "Error", "Selecciona un proceso primero.")
             return
 
         pid = int(self.table.item(selected, 0).text())
-        if is_own_process(pid):
-            QMessageBox.warning(
-                self,
-                "Proceso protegido",
-                "PythonKni no puede terminar su propio proceso desde el Gestor de Procesos.",
-            )
-            return
-
         try:
-            proc = psutil.Process(pid)
-            details = get_process_details(proc)
-        except (psutil.NoSuchProcess, psutil.AccessDenied, psutil.ZombieProcess) as error:
+            details = get_termination_target(pid)
+        except OwnProcessTerminationError as error:
+            QMessageBox.warning(self, "Proceso protegido", str(error))
+            return
+        except ProcessUnavailableError as error:
             logger.warning("Could not inspect process %s before termination: %s", pid, error)
-            QMessageBox.warning(
-                self,
-                "Proceso no disponible",
-                "El proceso ya no existe o no se puede consultar con los permisos actuales.",
-            )
+            QMessageBox.warning(self, "Proceso no disponible", str(error))
             return
 
         confirmation = QMessageBox.question(
@@ -279,29 +283,24 @@ class Tool(BaseTool):
                 return
 
         try:
-            if not proc.is_running() or proc.create_time() != details.create_time:
-                QMessageBox.warning(
-                    self,
-                    "Proceso cambiado",
-                    "El proceso seleccionado ya no es el mismo. "
-                    "Se ha cancelado la operación por seguridad.",
-                )
-                return
+            terminate_process(details)
+        except ProcessIdentityChangedError as error:
+            QMessageBox.warning(self, "Proceso cambiado", str(error))
+            return
+        except OwnProcessTerminationError as error:
+            QMessageBox.warning(self, "Proceso protegido", str(error))
+            return
+        except ProcessUnavailableError as error:
+            logger.warning("Could not terminate process %s: %s", pid, error)
+            QMessageBox.critical(self, "Error", f"No se pudo terminar el proceso:\n{error}")
+            return
 
-            proc.terminate()
-            QMessageBox.information(
-                self,
-                "Éxito",
-                f"Proceso {details.name} (PID {pid}) terminado.",
-            )
-            self.load_processes()
-        except (psutil.NoSuchProcess, psutil.AccessDenied, psutil.ZombieProcess) as error:
-            logger.exception("Could not terminate process %s", pid)
-            QMessageBox.critical(
-                self,
-                "Error",
-                f"No se pudo terminar el proceso:\n{error}",
-            )
+        QMessageBox.information(
+            self,
+            "Éxito",
+            f"Proceso {details.name} (PID {pid}) terminado.",
+        )
+        self.load_processes()
 
     def analyze_process(self, pid):
         """Programa el análisis de VirusTotal fuera del hilo de la interfaz."""
