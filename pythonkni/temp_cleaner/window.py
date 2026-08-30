@@ -6,6 +6,7 @@ import types as _types
 from PyQt5.QtWidgets import QCheckBox, QMessageBox, QPushButton, QVBoxLayout, QWidget
 
 from tools.base_tool import BaseTool
+from tools.ui_feedback import show_error
 
 from . import service as _service
 from .models import (
@@ -109,16 +110,26 @@ class Tool(BaseTool):
         self.setCentralWidget(container)
 
     def clean_action(self):
-        targets = []
+        try:
+            targets = []
 
-        if self.chk_temp.isChecked():
-            targets.extend(get_temp_targets())
-        if self.chk_cache.isChecked():
-            targets.extend(get_browser_cache_targets())
-        if self.chk_logs.isChecked():
-            targets.extend(get_log_targets())
+            if self.chk_temp.isChecked():
+                targets.extend(get_temp_targets())
+            if self.chk_cache.isChecked():
+                targets.extend(get_browser_cache_targets())
+            if self.chk_logs.isChecked():
+                targets.extend(get_log_targets())
 
-        preview = build_preview(targets)
+            preview = build_preview(targets)
+        except Exception as error:
+            show_error(
+                self,
+                "Vista previa de limpieza",
+                "No se pudo preparar la vista previa de limpieza.",
+                error=error,
+            )
+            return
+
         if not preview.targets:
             QMessageBox.information(
                 self,
@@ -146,7 +157,16 @@ class Tool(BaseTool):
             )
             return
 
-        result = clean_targets(preview.targets)
+        try:
+            result = clean_targets(preview.targets)
+        except Exception as error:
+            show_error(
+                self,
+                "Limpieza de temporales",
+                "No se pudo completar la limpieza de temporales.",
+                error=error,
+            )
+            return
 
         QMessageBox.information(
             self,
