@@ -1,7 +1,12 @@
+from PyQt5.QtWidgets import QMessageBox
+
 from pythonkni.converter import window as converter_window
+from pythonkni.disk_analyzer import window as disk_window
 from pythonkni.network import window as network_window
 from pythonkni.system_report import window as report_window
 from pythonkni.system_report.models import ReportData
+from pythonkni.temp_cleaner import window as temp_window
+from pythonkni.wifi import window as wifi_window
 
 
 def capture_feedback(monkeypatch, module):
@@ -75,6 +80,49 @@ def test_converter_batch_folder_read_failure_is_structured(qtbot, monkeypatch):
     args, kwargs = feedback[-1]
     assert "folder denied" not in args[2]
     assert kwargs["error"] is error
+
+
+def test_disk_analyzer_worker_and_export_failures_are_structured(qtbot, monkeypatch, tmp_path):
+    worker_error = PermissionError("disk denied")
+
+    def fail_analysis(*args, **kwargs):
+        raise worker_error
+
+    monkeypatch.setattr(disk_window, "analyze_directory", fail_analysis)
+    worker = disk_window.DiskAnalyzerWorker(str(tmp_path))
+    failures = []
+    worker.failed.connect(failures.append)
+    worker.run()
+    assert failures == [worker_error]
+
+    feedback = capture_feedback(monkeypatch, disk_window)
+    monkeypatch.setattr(
+        disk_window.QMessageBox,
+        "information",
+        lambda *args, **kwargs: None,
+    )
+    tool = disk_window.Tool()
+    qtbot.addWidget(tool)
+    tool.progress.show()
+    tool.btn_analyze.setEnabled(False)
+    tool.on_analysis_failed(worker_error)
+
+    args, kwargs = feedback[-1]
+    assert not tool.progress.isVisible()
+    assert tool.btn_analyze.isEnabled()
+    assert "disk denied" not in args[2]
+    assert kwargs["error"] is worker_error
+
+    tool.items = [disk_window.DiskItem(str(tmp_path / "a"), "a", "Archivo", 1)]
+    monkeypatch.setattr(
+        disk_window.QFileDialog,
+        "getSaveFileName",
+        lambda *args, **kwargs: (str(tmp_path), ""),
+    )
+    tool.export_csv()
+    args, kwargs = feedback[-1]
+    assert "IsADirectoryError" not in args[2]
+    assert isinstance(kwargs["error"], OSError)
 
 
 def test_network_workers_emit_sanitized_failure_and_preserve_exception(qtbot, monkeypatch):
@@ -213,3 +261,61 @@ def test_system_report_worker_and_exports_preserve_diagnostics(qtbot, monkeypatc
     args, kwargs = feedback[-1]
     assert "IsADirectoryError" not in args[2]
     assert isinstance(kwargs["error"], OSError)
+
+
+def test_temp_cleaner_preview_and_cleanup_failures_are_structured(qtbot, monkeypatch, tmp_path):
+    feedback = capture_feedback(monkeypatch, temp_window)
+    monkeypatch.setattr(
+        temp_window.QMessageBox,
+        "information",
+        lambda *args, **kwargs: None,
+    )
+    tool = temp_window.Tool()
+    qtbot.addWidget(tool)
+
+    preview_error = RuntimeError("preview exploded")
+    monkeypatch.setattr(temp_window, "get_temp_targets", lambda: [])
+    monkeypatch.setattr(
+        temp_window,
+        "build_preview",
+        lambda _targets: (_ for _ in ()).throw(preview_error),
+    )
+    tool.clean_action()
+    args, kwargs = feedback[-1]
+    assert "preview exploded" not in args[2]
+    assert kwargs["error"] is preview_error
+
+    target = temp_window.CleanTarget("Temp", tmp_path)
+    preview = temp_window.CleanPreview(targets=[target], items=1, bytes=1)
+    monkeypatch.setattr(temp_window, "build_preview", lambda _targets: preview)
+    monkeypatch.setattr(
+        temp_window.QMessageBox,
+        "question",
+        lambda *args, **kwargs: QMessageBox.Yes,
+    )
+    clean_error = OSError("cleanup denied")
+    monkeypatch.setattr(
+        temp_window,
+        "clean_targets",
+        lambda _targets: (_ for _ in ()).throw(clean_error),
+    )
+    tool.clean_action()
+    args, kwargs = feedback[-1]
+    assert "cleanup denied" not in args[2]
+    assert kwargs["error"] is clean_error
+
+
+def test_wifi_unexpected_worker_failure_is_structured(qtbot, monkeypatch):
+    feedback = capture_feedback(monkeypatch, wifi_window)
+    monkeypatch.setattr(wifi_window.Tool, "refresh_wifi_data", lambda self: True)
+    tool = wifi_window.Tool()
+    qtbot.addWidget(tool)
+
+    error = RuntimeError("netsh exploded")
+    tool.on_loading_failed(error)
+
+    assert tool.table.item(0, 0).text() == "No se pudieron cargar los perfiles Wi-Fi"
+    assert "netsh exploded" not in tool.table.item(0, 1).text()
+    args, kwargs = feedback[-1]
+    assert "netsh exploded" not in args[2]
+    assert kwargs["error"] is error
