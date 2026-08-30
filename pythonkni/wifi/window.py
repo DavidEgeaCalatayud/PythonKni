@@ -12,6 +12,7 @@ from PyQt5.QtWidgets import (
 )
 
 from tools.base_tool import BaseTool
+from tools.ui_feedback import show_error
 from tools.worker import Worker
 
 from . import service as _service
@@ -120,7 +121,7 @@ class Tool(BaseTool):
 
         worker = Worker(_load_wifi_task)
         worker.result.connect(self.show_wifi_data)
-        worker.error.connect(lambda error: self.show_wifi_data([("Error", str(error))]))
+        worker.error.connect(self.on_loading_failed)
         worker.cancelled.connect(self.on_loading_cancelled)
         worker.finished.connect(lambda worker=worker: self._on_worker_finished(worker))
         self.worker = worker
@@ -138,6 +139,25 @@ class Tool(BaseTool):
         self.table.setRowCount(1)
         self.table.setItem(0, 0, QTableWidgetItem("Carga cancelada"))
         self.table.setItem(0, 1, QTableWidgetItem(""))
+
+    def on_loading_failed(self, error) -> None:
+        self.table.setRowCount(1)
+        self.table.setItem(0, 0, QTableWidgetItem("No se pudieron cargar los perfiles Wi-Fi"))
+        self.table.setItem(0, 1, QTableWidgetItem("Consulte los detalles del error"))
+        if isinstance(error, BaseException):
+            show_error(
+                self,
+                "Perfiles Wi-Fi",
+                "No se pudieron cargar los perfiles Wi-Fi guardados.",
+                error=error,
+            )
+        else:
+            show_error(
+                self,
+                "Perfiles Wi-Fi",
+                "No se pudieron cargar los perfiles Wi-Fi guardados.",
+                details=str(error),
+            )
 
     def show_wifi_data(self, data):
         self.table.setRowCount(len(data))
