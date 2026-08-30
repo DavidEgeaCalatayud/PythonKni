@@ -31,6 +31,7 @@ def build_tool(qtbot, monkeypatch, items=None):
     monkeypatch.setattr(startup_window.QMessageBox, "warning", lambda *args, **kwargs: None)
     monkeypatch.setattr(startup_window.QMessageBox, "information", lambda *args, **kwargs: None)
     monkeypatch.setattr(startup_window.QMessageBox, "critical", lambda *args, **kwargs: None)
+    monkeypatch.setattr(startup_window, "show_error", lambda *args, **kwargs: None)
     monkeypatch.setattr(
         startup_window.QMessageBox,
         "question",
@@ -76,6 +77,30 @@ def test_startup_window_loads_items_and_non_windows_state(qtbot, monkeypatch):
     assert tool.table.rowCount() == 0
     assert "solo funciona en Windows" in tool.status_label.text()
     assert warnings
+
+
+def test_startup_load_failure_is_structured(qtbot, monkeypatch):
+    tool = build_tool(qtbot, monkeypatch)
+    feedback = []
+    error = RuntimeError("registry exploded")
+    monkeypatch.setattr(
+        startup_window,
+        "collect_startup_items",
+        lambda: (_ for _ in ()).throw(error),
+    )
+    monkeypatch.setattr(
+        startup_window,
+        "show_error",
+        lambda *args, **kwargs: feedback.append((args, kwargs)),
+    )
+
+    tool.load_items()
+
+    assert tool.table.rowCount() == 0
+    assert "registry exploded" not in tool.status_label.text()
+    args, kwargs = feedback[-1]
+    assert "registry exploded" not in args[2]
+    assert kwargs["error"] is error
 
 
 def test_selected_item_handles_no_selection_missing_cell_and_unknown_id(qtbot, monkeypatch):
@@ -167,30 +192,38 @@ def test_disable_selected_registry_folder_and_guard_branches(qtbot, monkeypatch)
 
 def test_disable_selected_surfaces_permission_and_generic_errors(qtbot, monkeypatch):
     tool = build_tool(qtbot, monkeypatch)
-    critical = []
+    feedback = []
     monkeypatch.setattr(
-        startup_window.QMessageBox,
-        "critical",
-        lambda *args, **kwargs: critical.append((args[1], args[2])),
+        startup_window,
+        "show_error",
+        lambda *args, **kwargs: feedback.append((args, kwargs)),
     )
 
     select_item(tool, make_item())
+    permission_error = PermissionError("denied")
     monkeypatch.setattr(
         startup_window,
         "disable_registry_item",
-        lambda _item: (_ for _ in ()).throw(PermissionError("denied")),
+        lambda _item: (_ for _ in ()).throw(permission_error),
     )
     tool.disable_selected()
-    assert any(title == "Permisos insuficientes" for title, _ in critical)
+    args, kwargs = feedback[-1]
+    assert args[1] == "Permisos insuficientes"
+    assert "administrador" in args[2]
+    assert "denied" not in args[2]
+    assert kwargs["error"] is permission_error
 
-    critical.clear()
+    runtime_error = RuntimeError("boom")
     monkeypatch.setattr(
         startup_window,
         "disable_registry_item",
-        lambda _item: (_ for _ in ()).throw(RuntimeError("boom")),
+        lambda _item: (_ for _ in ()).throw(runtime_error),
     )
     tool.disable_selected()
-    assert any(title == "Error" and "boom" in message for title, message in critical)
+    args, kwargs = feedback[-1]
+    assert args[1] == "Error al desactivar"
+    assert "boom" not in args[2]
+    assert kwargs["error"] is runtime_error
 
 
 def test_enable_selected_registry_folder_and_error_branches(qtbot, monkeypatch):
@@ -249,29 +282,36 @@ def test_enable_selected_registry_folder_and_error_branches(qtbot, monkeypatch):
     tool.enable_selected()
     assert any("no se puede activar" in message for message in warnings)
 
-    critical = []
+    feedback = []
     monkeypatch.setattr(
-        startup_window.QMessageBox,
-        "critical",
-        lambda *args, **kwargs: critical.append((args[1], args[2])),
+        startup_window,
+        "show_error",
+        lambda *args, **kwargs: feedback.append((args, kwargs)),
     )
     select_item(tool, disabled_registry)
+    permission_error = PermissionError("denied")
     monkeypatch.setattr(
         startup_window,
         "enable_registry_item",
-        lambda _item: (_ for _ in ()).throw(PermissionError("denied")),
+        lambda _item: (_ for _ in ()).throw(permission_error),
     )
     tool.enable_selected()
-    assert any(title == "Permisos insuficientes" for title, _ in critical)
+    args, kwargs = feedback[-1]
+    assert args[1] == "Permisos insuficientes"
+    assert "denied" not in args[2]
+    assert kwargs["error"] is permission_error
 
-    critical.clear()
+    runtime_error = RuntimeError("boom")
     monkeypatch.setattr(
         startup_window,
         "enable_registry_item",
-        lambda _item: (_ for _ in ()).throw(RuntimeError("boom")),
+        lambda _item: (_ for _ in ()).throw(runtime_error),
     )
     tool.enable_selected()
-    assert any(title == "Error" and "boom" in message for title, message in critical)
+    args, kwargs = feedback[-1]
+    assert args[1] == "Error al restaurar"
+    assert "boom" not in args[2]
+    assert kwargs["error"] is runtime_error
 
 
 def test_open_selected_location_covers_file_registry_warning_and_error(
@@ -281,7 +321,7 @@ def test_open_selected_location_covers_file_registry_warning_and_error(
     opened = []
     regedit = []
     warnings = []
-    critical = []
+    feedback = []
     monkeypatch.setattr(startup_window, "open_folder", lambda path: opened.append(str(path)))
     monkeypatch.setattr(
         startup_window,
@@ -294,9 +334,9 @@ def test_open_selected_location_covers_file_registry_warning_and_error(
         lambda *args, **kwargs: warnings.append(args[-1]),
     )
     monkeypatch.setattr(
-        startup_window.QMessageBox,
-        "critical",
-        lambda *args, **kwargs: critical.append(args[-1]),
+        startup_window,
+        "show_error",
+        lambda *args, **kwargs: feedback.append((args, kwargs)),
     )
 
     file_path = tmp_path / "startup.lnk"
@@ -323,13 +363,16 @@ def test_open_selected_location_covers_file_registry_warning_and_error(
     assert any("No se pudo localizar" in message for message in warnings)
 
     select_item(tool, make_item())
+    open_error = RuntimeError("open failed")
     monkeypatch.setattr(
         startup_window,
         "run_regedit_at_key",
-        lambda *_args: (_ for _ in ()).throw(RuntimeError("open failed")),
+        lambda *_args: (_ for _ in ()).throw(open_error),
     )
     tool.open_selected_location()
-    assert any("open failed" in message for message in critical)
+    args, kwargs = feedback[-1]
+    assert "open failed" not in args[2]
+    assert kwargs["error"] is open_error
 
 
 def test_copy_selected_command_uses_clipboard(qtbot, monkeypatch):
@@ -342,10 +385,11 @@ def test_copy_selected_command_uses_clipboard(qtbot, monkeypatch):
     assert startup_window.QApplication.clipboard().text() == "example --start"
 
 
-def test_export_csv_empty_cancel_and_success(qtbot, monkeypatch, tmp_path):
+def test_export_csv_empty_cancel_success_and_failure(qtbot, monkeypatch, tmp_path):
     tool = build_tool(qtbot, monkeypatch)
     warnings = []
     info = []
+    feedback = []
     monkeypatch.setattr(
         startup_window.QMessageBox,
         "warning",
@@ -355,6 +399,11 @@ def test_export_csv_empty_cancel_and_success(qtbot, monkeypatch, tmp_path):
         startup_window.QMessageBox,
         "information",
         lambda *args, **kwargs: info.append(args[-1]),
+    )
+    monkeypatch.setattr(
+        startup_window,
+        "show_error",
+        lambda *args, **kwargs: feedback.append((args, kwargs)),
     )
 
     tool.items = []
@@ -382,3 +431,13 @@ def test_export_csv_empty_cancel_and_success(qtbot, monkeypatch, tmp_path):
     assert "'=Formula" in content
     assert "'+danger" in content
     assert any("CSV generado" in message for message in info)
+
+    monkeypatch.setattr(
+        startup_window.QFileDialog,
+        "getSaveFileName",
+        lambda *args, **kwargs: (str(tmp_path), ""),
+    )
+    tool.export_csv()
+    args, kwargs = feedback[-1]
+    assert "IsADirectoryError" not in args[2]
+    assert isinstance(kwargs["error"], OSError)

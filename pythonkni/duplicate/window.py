@@ -14,6 +14,7 @@ from PyQt5.QtWidgets import (
 
 from pythonkni.core.tasks import WorkerCancelled
 from tools.base_tool import BaseTool
+from tools.ui_feedback import show_error
 from tools.worker import Worker
 
 from . import service as _service
@@ -146,7 +147,7 @@ class Tool(BaseTool):
         self.btn_move.setEnabled(not busy and bool(self.duplicates))
 
     def _bind_worker(self, worker: Worker) -> None:
-        worker.error.connect(lambda error: self.on_operation_failed(str(error)))
+        worker.error.connect(self.on_operation_failed)
         worker.finished.connect(lambda worker=worker: self._on_operation_thread_finished(worker))
         self.worker = worker
         self._set_busy(True)
@@ -233,10 +234,25 @@ class Tool(BaseTool):
             "Vuelve a escanear para actualizar los resultados."
         )
 
-    def on_operation_failed(self, message: str):
+    def on_operation_failed(self, error):
         self.duplicates = {}
-        self.result_box.append(f"\nLa operación falló: {message}")
-        QMessageBox.critical(self, "Error", f"No se pudo completar la operación:\n{message}")
+        self.result_box.append(
+            "\nLa operación falló. Consulta los detalles técnicos para diagnosticarla."
+        )
+        if isinstance(error, BaseException):
+            show_error(
+                self,
+                "Operación de duplicados fallida",
+                "No se pudo completar la operación.",
+                error=error,
+            )
+        else:
+            show_error(
+                self,
+                "Operación de duplicados fallida",
+                "No se pudo completar la operación.",
+                details=str(error),
+            )
 
     def cancel_current_operation(self):
         worker = self.worker

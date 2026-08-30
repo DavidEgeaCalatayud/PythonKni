@@ -31,6 +31,7 @@ from pythonkni.pdf.service import (
     split_pdf_task,
 )
 from tools.base_tool import BaseTool
+from tools.ui_feedback import show_error
 from tools.worker import Worker
 
 
@@ -82,10 +83,10 @@ class Tool(BaseTool):
     def require_pypdf(self) -> bool:
         if require_pypdf_available():
             return True
-        QMessageBox.critical(
+        show_error(
             self,
             "Falta dependencia",
-            "No se encuentra pypdf.\nInstale con:\npython -m pip install pypdf",
+            "No se encuentra pypdf. Instálelo con: python -m pip install pypdf",
         )
         return False
 
@@ -127,7 +128,20 @@ class Tool(BaseTool):
 
     def _task_error(self, label, error):
         self.log(f"[{label}][ERROR] {error}")
-        QMessageBox.critical(self, "Error", str(error))
+        if isinstance(error, BaseException):
+            show_error(
+                self,
+                "Operación PDF fallida",
+                f"No se pudo completar la operación PDF: {label.rstrip('.')}.",
+                error=error,
+            )
+        else:
+            show_error(
+                self,
+                "Operación PDF fallida",
+                f"No se pudo completar la operación PDF: {label.rstrip('.')}.",
+                details=str(error),
+            )
 
     def _task_cancelled(self):
         self.log("[Tarea] Operación cancelada por el usuario.")

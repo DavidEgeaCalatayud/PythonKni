@@ -21,6 +21,7 @@ from PyQt5.QtWidgets import (
 from tools.base_tool import BaseTool
 from tools.csv_utils import safe_csv_row
 from tools.theme_manager import ThemeManager
+from tools.ui_feedback import show_error
 
 from .models import StartupItem as StartupItem
 from .service import (
@@ -127,6 +128,12 @@ class Tool(BaseTool):
 
         self.load_items()
 
+    def _technical_error(self, title: str, message: str, error) -> None:
+        if isinstance(error, BaseException):
+            show_error(self, title, message, error=error)
+        else:
+            show_error(self, title, message, details=str(error))
+
     def load_items(self) -> None:
         if not is_windows():
             self.table.setRowCount(0)
@@ -134,7 +141,21 @@ class Tool(BaseTool):
             QMessageBox.warning(self, self.name, "Esta herramienta solo funciona en Windows.")
             return
 
-        self.items = collect_startup_items()
+        try:
+            items = collect_startup_items()
+        except Exception as error:
+            self.items = []
+            self.items_by_id = {}
+            self.table.setRowCount(0)
+            self.status_label.setText("No se pudieron cargar las entradas de inicio.")
+            self._technical_error(
+                "Gestor de inicio",
+                "No se pudieron cargar las entradas de inicio de Windows.",
+                error,
+            )
+            return
+
+        self.items = items
         self.items_by_id = {item.id: item for item in self.items}
         self.fill_table(self.items)
         active_count = sum(1 for item in self.items if item.active)
@@ -205,13 +226,17 @@ class Tool(BaseTool):
             QMessageBox.information(self, self.name, "Entrada desactivada correctamente.")
             self.load_items()
         except PermissionError as error:
-            QMessageBox.critical(
-                self,
+            self._technical_error(
                 "Permisos insuficientes",
-                f"No se pudo desactivar la entrada. Prueba a ejecutar PythonKni como administrador.\n\n{error}",
+                "No se pudo desactivar la entrada. Prueba a ejecutar PythonKni como administrador.",
+                error,
             )
         except Exception as error:
-            QMessageBox.critical(self, "Error", f"No se pudo desactivar la entrada:\n{error}")
+            self._technical_error(
+                "Error al desactivar",
+                "No se pudo desactivar la entrada de inicio.",
+                error,
+            )
 
     def enable_selected(self) -> None:
         item = self.selected_item()
@@ -241,13 +266,17 @@ class Tool(BaseTool):
             QMessageBox.information(self, self.name, "Entrada restaurada correctamente.")
             self.load_items()
         except PermissionError as error:
-            QMessageBox.critical(
-                self,
+            self._technical_error(
                 "Permisos insuficientes",
-                f"No se pudo restaurar la entrada. Prueba a ejecutar PythonKni como administrador.\n\n{error}",
+                "No se pudo restaurar la entrada. Prueba a ejecutar PythonKni como administrador.",
+                error,
             )
         except Exception as error:
-            QMessageBox.critical(self, "Error", f"No se pudo restaurar la entrada:\n{error}")
+            self._technical_error(
+                "Error al restaurar",
+                "No se pudo restaurar la entrada de inicio.",
+                error,
+            )
 
     def open_selected_location(self) -> None:
         item = self.selected_item()
@@ -268,7 +297,11 @@ class Tool(BaseTool):
             else:
                 QMessageBox.warning(self, self.name, "No se pudo localizar una carpeta válida.")
         except Exception as error:
-            QMessageBox.critical(self, "Error", f"No se pudo abrir la ubicación:\n{error}")
+            self._technical_error(
+                "Abrir ubicación",
+                "No se pudo abrir la ubicación de la entrada seleccionada.",
+                error,
+            )
 
     def copy_selected_command(self) -> None:
         item = self.selected_item()
@@ -291,24 +324,40 @@ class Tool(BaseTool):
         if not file_path:
             return
 
-        with open(file_path, "w", newline="", encoding="utf-8-sig") as csv_file:
-            writer = csv.writer(csv_file, delimiter=";")
-            writer.writerow(
-                ["Activo", "Nombre", "Origen", "Comando / Ruta", "Tipo", "Existe archivo", "Riesgo"]
-            )
-            for item in self.items:
+        try:
+            with open(file_path, "w", newline="", encoding="utf-8-sig") as csv_file:
+                writer = csv.writer(csv_file, delimiter=";")
                 writer.writerow(
-                    safe_csv_row(
-                        [
-                            "Sí" if item.active else "No",
-                            item.name,
-                            item.source,
-                            item.command,
-                            item.item_type,
-                            item.exists,
-                            item.risk,
-                        ]
-                    )
+                    [
+                        "Activo",
+                        "Nombre",
+                        "Origen",
+                        "Comando / Ruta",
+                        "Tipo",
+                        "Existe archivo",
+                        "Riesgo",
+                    ]
                 )
+                for item in self.items:
+                    writer.writerow(
+                        safe_csv_row(
+                            [
+                                "Sí" if item.active else "No",
+                                item.name,
+                                item.source,
+                                item.command,
+                                item.item_type,
+                                item.exists,
+                                item.risk,
+                            ]
+                        )
+                    )
+        except Exception as error:
+            self._technical_error(
+                "Exportación CSV",
+                "No se pudo exportar la lista de programas de inicio.",
+                error,
+            )
+            return
 
         QMessageBox.information(self, "Exportado", "CSV generado correctamente.")
