@@ -236,7 +236,9 @@ class Tool(BaseTool):
 
     def on_operation_failed(self, error):
         self.duplicates = {}
-        self.result_box.append("\nLa operación falló. Consulta los detalles técnicos para diagnosticarla.")
+        self.result_box.append(
+            "\nLa operación falló. Consulta los detalles técnicos para diagnosticarla."
+        )
         if isinstance(error, BaseException):
             show_error(
                 self,
