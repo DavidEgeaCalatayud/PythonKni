@@ -17,6 +17,7 @@ from pythonkni.infrastructure.paths import CONFIG_FILE
 from tools.base_tool import BaseTool
 from tools.language_manager import LanguageManager
 from tools.theme_manager import ThemeManager
+from tools.ui_feedback import show_error
 
 from . import runtime as _runtime
 from . import service as _service
@@ -109,10 +110,11 @@ class Tool(BaseTool):
             )
         except (OSError, ValueError, TypeError) as error:
             logger.exception("Could not save config file: %s", CONFIG_FILE)
-            QMessageBox.critical(
+            show_error(
                 self,
                 "Error al guardar",
-                f"No se pudo guardar la configuración. No se han aplicado los cambios.\n\n{error}",
+                "No se pudo guardar la configuración. No se han aplicado los cambios.",
+                error=error,
             )
             return
 

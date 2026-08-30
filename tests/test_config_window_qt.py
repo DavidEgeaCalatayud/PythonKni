@@ -9,12 +9,12 @@ def test_config_window_reports_save_failure_without_applying_changes(tmp_path, m
     monkeypatch.setattr(config_window, "CONFIG_FILE", config_file)
     apply_runtime_config({"theme": "Claro", "language": "Español"})
 
-    critical_messages = []
+    error_messages = []
     information_messages = []
     monkeypatch.setattr(
-        config_window.QMessageBox,
-        "critical",
-        lambda *args: critical_messages.append(args),
+        config_window,
+        "show_error",
+        lambda *args, **kwargs: error_messages.append((args, kwargs)),
     )
     monkeypatch.setattr(
         config_window.QMessageBox,
@@ -34,8 +34,13 @@ def test_config_window_reports_save_failure_without_applying_changes(tmp_path, m
 
     tool.save_changes()
 
-    assert critical_messages
-    assert "No se pudo guardar" in critical_messages[0][2]
+    assert error_messages
+    args, kwargs = error_messages[0]
+    assert args[1] == "Error al guardar"
+    assert "No se pudo guardar" in args[2]
+    assert "disk full" not in args[2]
+    assert isinstance(kwargs["error"], OSError)
+    assert str(kwargs["error"]) == "disk full"
     assert information_messages == []
     assert ThemeManager.get_theme() == "Claro"
     assert LanguageManager.get_language() == "Español"

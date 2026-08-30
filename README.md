@@ -139,6 +139,12 @@ PythonKni/
 
 Long-running operations use reusable worker/lifecycle infrastructure and cooperative cancellation. `BaseTool` keeps worker lifetimes tied to windows so an active `QThread` is not destroyed during close.
 
+### Structured UI feedback
+
+Technical failures can now use `tools/ui_feedback.py` to separate the **actionable user summary** from optional **expandable technical details**. The primary dialog avoids dumping raw exceptions into normal UI copy while retaining the exception type/message for troubleshooting.
+
+The first migration tranche covers tool-loader discovery failures, configuration persistence failures, Archive background-operation failures and Process Manager refresh/VirusTotal worker failures. Business warnings, destructive-operation confirmations and other domain-specific dialogs retain their existing behavior. Remaining technical error paths can migrate incrementally without changing service contracts.
+
 ### Safer destructive operations
 
 Several workflows implement explicit safety properties:
@@ -282,7 +288,7 @@ python -m ruff format --check .
 
 ### Coverage ratchet
 
-The first full measurement established **58.85% repository-wide branch coverage** with 289 tests and **64.7% aggregated service coverage**. Behavior-driven hardening subsequently raised the project to **84.6% repository-wide** and **91.5% across all `pythonkni/*/service.py` modules**. The current suite contains **535 tests** after the dependency-lock regressions added in this phase.
+The first full measurement established **58.85% repository-wide branch coverage** with 289 tests and **64.7% aggregated service coverage**. Behavior-driven hardening subsequently raised the project to **84.7% repository-wide** and **91.5% across all `pythonkni/*/service.py` modules**. The current suite contains **545 tests** after the first structured-feedback tranche.
 
 Key measured service coverage remains:
 
@@ -303,6 +309,15 @@ Priority Qt windows:
 Startup window         95.8%
 Event Viewer window    98.9%
 PDF window             93.4%
+```
+
+Additional measured presentation coverage from this tranche:
+
+```text
+Archive window         70.2%
+Config window          85.0%
+Process Manager window 74.6%
+UI feedback helper     80.0%
 ```
 
 CI uses a ratchet rather than lowering thresholds to make regressions pass:
@@ -341,7 +356,7 @@ pip-audit runtime + development + CycloneDX SBOM
    ↓
 compileall
    ↓
-535 pytest tests + branch coverage
+545 pytest tests + branch coverage
    ↓
 repository/service/priority coverage ratchets
    ↓
@@ -411,6 +426,7 @@ For a first-party domain, place business/OS logic under `pythonkni/<domain>/serv
 - DOCX -> PDF conversion is intentionally simplified and does not preserve every Word feature.
 - Network/system capabilities depend on firewall rules, topology and operating-system privileges.
 - Coverage is above the original repository/service targets, but several presentation modules remain materially lower than the strongest Qt windows.
+- Structured technical feedback is only partially migrated; several windows still use legacy error dialogs.
 - GitHub Releases are automated, but Windows executable signing and installer generation are not yet implemented.
 - Localization infrastructure exists, but not every user-visible string is extracted/translated.
 
@@ -421,7 +437,7 @@ For a first-party domain, place business/OS logic under `pythonkni/<domain>/serv
 ### Code and reliability
 
 - [ ] Continue behavior-driven coverage work in lower-coverage UI modules, especially Converter, Temp Cleaner, Network and System Report.
-- [ ] Continue improving structured UI error reporting.
+- [ ] Continue migrating technical error paths to structured UI feedback, especially Converter, PDF, Network and System Report.
 - [ ] Reassess broader Python-minor support only when there is a concrete compatibility requirement and a full CI matrix can enforce it.
 
 ### Product quality

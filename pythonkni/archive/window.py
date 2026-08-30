@@ -18,6 +18,7 @@ from PyQt5.QtWidgets import (
 from pythonkni.infrastructure.archives import _default_extract_path
 from tools.base_tool import BaseTool
 from tools.theme_manager import ThemeManager
+from tools.ui_feedback import show_error
 from tools.worker import Worker
 
 from . import service as _service
@@ -148,7 +149,12 @@ class Tool(BaseTool):
     def _on_error(self, error) -> None:
         logger.warning("Archive operation failed: %s", error)
         self.status.setText("Operación fallida")
-        QMessageBox.critical(self, "Error", f"No se pudo completar la operación:\n{error}")
+        show_error(
+            self,
+            "Operación de archivo fallida",
+            "No se pudo completar la operación.",
+            error=error,
+        )
 
     def _on_cancelled(self) -> None:
         self.status.setText("Operación cancelada")

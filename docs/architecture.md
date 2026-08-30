@@ -69,9 +69,28 @@ Cross-cutting Qt/runtime infrastructure remains at the application edge:
 
 - `tools/base_tool.py`: common Qt tool-window lifecycle contract.
 - `tools/worker.py`: reusable Qt worker and signal adapter.
+- `tools/ui_feedback.py`: structured Qt feedback renderer that separates user-facing summaries from optional expandable technical details.
 - `tools/theme_manager.py` and `tools/language_manager.py`: UI runtime managers.
 - `tools/csv_utils.py`: spreadsheet-safe CSV helper used by presentation/export paths.
 - `assets/`: static UI assets.
+
+## Structured UI feedback boundary
+
+Technical failures should not force raw exception text into the primary message shown to a user. `tools/ui_feedback.py` provides a presentation-only model and renderer for information, warnings and errors:
+
+```text
+service/worker exception
+        ↓
+window.py chooses actionable summary
+        ↓
+tools/ui_feedback.py
+        ├─ primary text: concise user-facing message
+        └─ detailed text: exception type/message or diagnostics
+```
+
+The helper is intentionally kept at the Qt/application edge rather than under `pythonkni/infrastructure`, because it depends on `QMessageBox`. Domain services remain unaware of how errors are rendered.
+
+The first migration tranche covers loader discovery failures, configuration persistence failures, Archive background-task failures and Process Manager refresh/VirusTotal worker failures. Domain confirmations, destructive-operation warnings and other business-specific dialogs keep their existing flows. Remaining windows can migrate technical failures incrementally without changing service contracts.
 
 ## Configuration boundary
 
@@ -178,13 +197,13 @@ The release workflow repeats the same integrity gates before publishing a tag-dr
 - loader-facing tool modules remain thin compatibility adapters;
 - every domain window still implements the `BaseTool` contract.
 
-Dependency-lock behavior has its own focused regressions covering valid locks, missing hashes, malformed SHA-256 values and direct-version policy violations.
+Dependency-lock behavior has its own focused regressions covering valid locks, missing hashes, malformed SHA-256 values and direct-version policy violations. Structured-feedback regressions verify severity/icon mapping, expandable diagnostics and that migrated windows keep raw technical errors out of their primary user-facing message.
 
 ## Coverage ratchet
 
 The first full branch-coverage measurement of `pythonkni` + `tools` established an initial repository baseline of **58.85%** with 289 tests passing, while aggregated `pythonkni/*/service.py` coverage measured **64.7%**.
 
-Behavior-driven coverage hardening then raised the repository to **84.6% branch coverage** and the aggregated service layer to **91.5%**. The current suite contains **535 tests** after the PDF/dependency hardening regressions added in this phase. The new lock-validator tests do not artificially inflate application coverage because coverage collection remains scoped to `pythonkni` + `tools`.
+Behavior-driven coverage hardening then raised the repository to **84.7% branch coverage** and the aggregated service layer to **91.5%**. The current suite contains **545 tests** after the first structured-feedback regressions. The new feedback tests cover presentation behavior rather than changing service-layer metrics.
 
 Key measured service coverage:
 
@@ -205,6 +224,15 @@ Priority Qt windows:
 pythonkni/startup/window.py         95.8%
 pythonkni/event_viewer/window.py    98.9%
 pythonkni/pdf/window.py             93.4%
+```
+
+Additional windows improved by the structured-feedback tranche:
+
+```text
+pythonkni/archive/window.py         70.2%
+pythonkni/config/window.py          85.0%
+pythonkni/process_manager/window.py 74.6%
+tools/ui_feedback.py                80.0%
 ```
 
 PythonKni uses a ratchet: CI must not fall below measured floors, while focused services/windows keep their own gates so a regression cannot be hidden by gains in another module. Floors intentionally leave a small margin below the measured results.
@@ -228,4 +256,4 @@ refactored process/config/infrastructure coverage  >= 84.0%
 
 Future coverage work is selective rather than target-chasing. Lower-coverage presentation modules such as Converter, Temp Cleaner, Network and System Report remain useful candidates when additional tests validate meaningful behavior.
 
-Coverage is a guardrail rather than a substitute for behavioral assertions. Security, rollback, cancellation, process identity, dependency integrity and destructive-operation behavior continue to have dedicated regressions.
+Coverage is a guardrail rather than a substitute for behavioral assertions. Security, rollback, cancellation, process identity, dependency integrity, user-feedback and destructive-operation behavior continue to have dedicated regressions.
