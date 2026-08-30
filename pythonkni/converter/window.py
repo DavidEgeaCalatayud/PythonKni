@@ -16,6 +16,7 @@ from PyQt5.QtWidgets import (
 )
 
 from tools.base_tool import BaseTool
+from tools.ui_feedback import show_error
 from tools.worker import Worker
 
 from . import service as _service
@@ -157,16 +158,34 @@ class Tool(BaseTool):
                 QMessageBox.information(self, "Conversión completada", message)
             return
 
-        message = "No se publicó ningún resultado incompleto."
+        details = []
         if result.failures:
-            message += "\n\nErrores:\n- " + "\n- ".join(result.failures)
+            details.append("Errores:\n- " + "\n- ".join(result.failures))
         if result.warnings:
-            message += "\n\nAvisos:\n- " + "\n- ".join(result.warnings)
-        QMessageBox.critical(self, "Conversión fallida", message)
+            details.append("Avisos:\n- " + "\n- ".join(result.warnings))
+        show_error(
+            self,
+            "Conversión fallida",
+            "No se pudo completar la conversión. No se publicó ningún resultado incompleto.",
+            details="\n\n".join(details) or None,
+        )
 
     def _conversion_error(self, error):
         logger.error("Conversion failed: %s", error)
-        QMessageBox.critical(self, "Error", f"No se pudo completar la conversión:\n{error}")
+        if isinstance(error, BaseException):
+            show_error(
+                self,
+                "Conversión fallida",
+                "No se pudo completar la conversión.",
+                error=error,
+            )
+        else:
+            show_error(
+                self,
+                "Conversión fallida",
+                "No se pudo completar la conversión.",
+                details=str(error),
+            )
 
     def _conversion_cancelled(self):
         self.task_status.setText("Conversión cancelada")
@@ -272,17 +291,31 @@ class Tool(BaseTool):
             f"PDF creado en:\n{save_path}",
         )
 
+    def _files_with_extension(self, path, extension):
+        try:
+            return [
+                os.path.join(path, filename)
+                for filename in os.listdir(path)
+                if filename.lower().endswith(extension)
+            ]
+        except OSError as error:
+            show_error(
+                self,
+                "Conversión por lotes",
+                "No se pudo leer la carpeta seleccionada.",
+                error=error,
+            )
+            return None
+
     def convert_text_to_kml(self):
         path = QFileDialog.getExistingDirectory(
             self,
             "Seleccionar carpeta con TXT o archivo individual",
         )
         if path:
-            txt_files = [
-                os.path.join(path, filename)
-                for filename in os.listdir(path)
-                if filename.lower().endswith(".txt")
-            ]
+            txt_files = self._files_with_extension(path, ".txt")
+            if txt_files is None:
+                return
             if not txt_files:
                 QMessageBox.warning(
                     self,
@@ -327,11 +360,9 @@ class Tool(BaseTool):
             "Seleccionar carpeta con KML o archivo individual",
         )
         if path:
-            kml_files = [
-                os.path.join(path, filename)
-                for filename in os.listdir(path)
-                if filename.lower().endswith(".kml")
-            ]
+            kml_files = self._files_with_extension(path, ".kml")
+            if kml_files is None:
+                return
             if not kml_files:
                 QMessageBox.warning(
                     self,
