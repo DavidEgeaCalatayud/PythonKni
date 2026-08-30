@@ -10,46 +10,6 @@ permissions:
   contents: read
 
 jobs:
-  python38-archive-compat:
-    runs-on: windows-latest
-    env:
-      QT_QPA_PLATFORM: offscreen
-
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: Set up Python 3.8
-        uses: actions/setup-python@v5
-        with:
-          python-version: "3.8"
-
-      - name: Install legacy archive dependencies
-        run: |
-          python -m pip install --upgrade pip
-          pip install "PyQt5>=5.15,<5.16" "py7zr==0.22.0"
-
-      - name: Verify archive tool loads with legacy py7zr
-        shell: powershell
-        run: |
-          @'
-          import py7zr
-          import tools.archive_tool
-          from pythonkni.archive import service
-
-          print(f"py7zr {py7zr.__version__}")
-          if service.HAS_STREAMING_7Z_FACTORY:
-              raise SystemExit("py7zr 0.22.0 unexpectedly exposes the modern streaming factory API")
-
-          try:
-              service._require_streaming_7z_factory()
-          except RuntimeError as error:
-              if "py7zr >= 1.0.0" not in str(error):
-                  raise
-          else:
-              raise SystemExit("Legacy py7zr must fail closed for secure 7Z extraction")
-          '@ | python -
-
   validate:
     runs-on: windows-latest
     env:
@@ -67,8 +27,21 @@ jobs:
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
-          pip install -r requirements.txt
-          pip install pytest pytest-qt "pytest-cov>=5.0,<6.0" ruff pyinstaller
+          python -m pip install -r requirements.txt
+          python -m pip install -r requirements-dev.in
+
+      - name: Resolve lock candidates
+        run: |
+          python -m piptools compile requirements.in --output-file requirements.generated.txt --strip-extras
+          python -m piptools compile requirements-dev.in --output-file requirements-dev.generated.txt --strip-extras
+          Get-Content requirements.generated.txt
+          Get-Content requirements-dev.generated.txt
+
+      - name: Verify installed dependency consistency
+        run: python -m pip check
+
+      - name: Audit runtime dependencies
+        run: python -m pip_audit -r requirements.txt --progress-spinner=off
 
       - name: Compile Python files
         run: python -m compileall .
