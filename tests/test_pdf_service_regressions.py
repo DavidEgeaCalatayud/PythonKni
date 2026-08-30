@@ -3,7 +3,7 @@ from pathlib import Path
 from unittest.mock import patch
 
 import pytest
-from PyPDF2 import PdfReader, PdfWriter
+from pypdf import PdfReader, PdfWriter
 
 from pythonkni.core.tasks import WorkerCancelled
 from pythonkni.pdf.service import (
@@ -41,6 +41,7 @@ def make_pdf(path: Path, widths):
         writer.add_blank_page(width=width, height=100)
     with path.open("wb") as file:
         writer.write(file)
+    writer.close()
 
 
 def make_encrypted_pdf(path: Path, widths, password: str):
@@ -50,6 +51,7 @@ def make_encrypted_pdf(path: Path, widths, password: str):
     writer.encrypt(password)
     with path.open("wb") as file:
         writer.write(file)
+    writer.close()
 
 
 def pdf_widths(path: Path):
