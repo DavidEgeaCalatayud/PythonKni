@@ -25,7 +25,7 @@ class RecordingWorker:
 def test_output_transaction_rejects_destination_outside_directory(tmp_path):
     transaction = converter.OutputTransaction(tmp_path / "out")
     try:
-        with pytest.raises(ValueError, match="misma carpeta"):
+        with pytest.raises(ValueError, match="compartir carpeta"):
             transaction.stage_for(tmp_path / "other" / "result.txt")
     finally:
         transaction.abort()
@@ -164,7 +164,7 @@ def test_kml_to_text_converts_points(tmp_path):
     )
     worker = RecordingWorker()
 
-    result = converter.kml_to_text(source, output, worker=worker)
+    result = converter.kml_to_text(str(source), str(output), worker=worker)
 
     assert result.success
     assert output.read_text(encoding="utf-8").splitlines() == [
@@ -184,7 +184,7 @@ def test_kml_to_text_missing_coordinates_does_not_replace_existing_output(tmp_pa
     )
 
     with pytest.raises(ValueError, match="sin coordenadas"):
-        converter.kml_to_text(source, output)
+        converter.kml_to_text(str(source), str(output))
 
     assert output.read_text(encoding="utf-8") == "previous"
     assert not list(tmp_path.glob(".pythonkni-converter-*"))
