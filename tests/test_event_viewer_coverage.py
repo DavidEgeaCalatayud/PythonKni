@@ -2,8 +2,6 @@ import json
 import subprocess
 import threading
 import xml.etree.ElementTree as ET
-from pathlib import Path
-from types import SimpleNamespace
 
 import pytest
 
@@ -47,7 +45,8 @@ def test_is_windows_and_clean_text(monkeypatch):
 
 def test_xml_child_helpers_handle_namespaces_and_defaults():
     root = ET.fromstring(
-        '<Root xmlns="urn:test"><Child attr=" value "> text </Child><Nested><Target>x</Target></Nested></Root>'
+        '<Root xmlns="urn:test"><Child attr=" value "> text </Child>'
+        "<Nested><Target>x</Target></Nested></Root>"
     )
     child = events.first_child(root, "Child")
     assert child is not None
@@ -157,7 +156,7 @@ def test_run_wevtutil_uses_generic_failure_when_process_has_no_output(monkeypatc
     assert warning == "No se pudo leer el registro Application."
 
 
-def test_kill_and_drain_retries_after_reap_timeout(monkeypatch):
+def test_kill_and_drain_retries_after_reap_timeout():
     class SlowProcess(FakeProcess):
         def communicate(self, timeout=None):
             self.communicate_calls += 1
@@ -186,13 +185,16 @@ def test_normalize_xml_output(raw, expected):
 
 def test_rendered_message_falls_back_to_event_data():
     event = ET.fromstring(
-        "<Event><EventData><Data Name='Device'>Disk 0</Data><Data>failed</Data></EventData></Event>"
+        "<Event><EventData><Data Name='Device'>Disk 0</Data>"
+        "<Data>failed</Data></EventData></Event>"
     )
     assert events.rendered_message(event) == "Device: Disk 0 | Dato: failed"
 
 
 def test_rendered_message_falls_back_to_user_data_and_default():
-    user_event = ET.fromstring("<Event><UserData><Root><Value>  value  </Value></Root></UserData></Event>")
+    user_event = ET.fromstring(
+        "<Event><UserData><Root><Value>  value  </Value></Root></UserData></Event>"
+    )
     assert "value" in events.rendered_message(user_event)
 
     empty_event = ET.fromstring("<Event><System /></Event>")
@@ -205,7 +207,7 @@ def test_rendered_message_falls_back_to_user_data_and_default():
         ("Disk", "7", 2, "I/O", "problema de disco"),
         ("Disk", "1", 4, "info", "almacenamiento"),
         ("Ntfs", "55", 2, "fs", "sistema de archivos"),
-        ("Microsoft-Windows-WHEA-Logger", "18", 2, "hardware"),
+        ("Microsoft-Windows-WHEA-Logger", "18", 2, "hardware", "hardware"),
         ("BugCheck", "1001", 2, "bugcheck", "pantallazo"),
         ("Service Control Manager", "7000", 2, "service", "servicio de Windows"),
         ("Service Control Manager", "1", 4, "service", "servicios de Windows"),
@@ -214,7 +216,13 @@ def test_rendered_message_falls_back_to_user_data_and_default():
         ("DNS Client Events", "1014", 3, "dns", "resolución DNS"),
         ("WindowsUpdateClient", "20", 2, "update", "Windows Update"),
         ("EventLog", "6008", 2, "shutdown", "apagado inesperado"),
-        ("Microsoft-Windows-Security-Auditing", "4625", 2, "login", "inicio de sesión"),
+        (
+            "Microsoft-Windows-Security-Auditing",
+            "4625",
+            2,
+            "login",
+            "inicio de sesión",
+        ),
         ("Other", "1", 1, "critical", "Evento crítico"),
         ("Other", "2", 2, "error", "Error de sistema"),
         ("Other", "3", 3, "warning", "Advertencia"),
@@ -278,7 +286,10 @@ def test_parse_events_xml_handles_missing_and_invalid_fields():
 
 
 def test_parse_events_xml_raw_xml_failure_is_non_fatal(monkeypatch):
-    xml = "<Event><System><Provider Name='Test'/><EventID>4</EventID><Level>4</Level></System></Event>"
+    xml = (
+        "<Event><System><Provider Name='Test'/><EventID>4</EventID>"
+        "<Level>4</Level></System></Event>"
+    )
 
     def fail(*_args, **_kwargs):
         raise RuntimeError("serialize")
