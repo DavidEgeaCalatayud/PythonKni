@@ -52,13 +52,30 @@ jobs:
         run: python -m pytest --cov=pythonkni --cov=tools --cov-branch --cov-report=term-missing --cov-report=xml
 
       - name: Enforce repository coverage ratchet
-        run: python -m coverage report --fail-under=58.8
+        run: python -m coverage report --fail-under=84.0
 
       - name: Enforce service-layer coverage ratchet
-        run: python -m coverage report --include="pythonkni/*/service.py" --fail-under=64.7
+        run: python -m coverage report --include="pythonkni/*/service.py" --fail-under=91.0
+
+      - name: Enforce priority-service coverage ratchets
+        run: |
+          python -m coverage report --include="pythonkni/archive/service.py" --fail-under=95.0
+          python -m coverage report --include="pythonkni/converter/service.py" --fail-under=94.0
+          python -m coverage report --include="pythonkni/network/service.py" --fail-under=96.0
+          python -m coverage report --include="pythonkni/pdf/service.py" --fail-under=95.0
+          python -m coverage report --include="pythonkni/startup/service.py" --fail-under=87.5
+          python -m coverage report --include="pythonkni/event_viewer/service.py" --fail-under=95.0
+          python -m coverage report --include="pythonkni/system_report/service.py" --fail-under=97.0
+          python -m coverage report --include="pythonkni/temp_cleaner/service.py" --fail-under=86.0
+
+      - name: Enforce priority-window coverage ratchets
+        run: |
+          python -m coverage report --include="pythonkni/startup/window.py" --fail-under=95.0
+          python -m coverage report --include="pythonkni/event_viewer/window.py" --fail-under=98.0
+          python -m coverage report --include="pythonkni/pdf/window.py" --fail-under=93.0
 
       - name: Enforce refactored critical-code coverage
-        run: python -m coverage report --include="pythonkni/process_manager/service.py,pythonkni/config/service.py,pythonkni/infrastructure/*.py" --fail-under=80
+        run: python -m coverage report --include="pythonkni/process_manager/service.py,pythonkni/config/service.py,pythonkni/infrastructure/*.py" --fail-under=84.0
 
       - name: Ruff check
         run: python -m ruff check .
