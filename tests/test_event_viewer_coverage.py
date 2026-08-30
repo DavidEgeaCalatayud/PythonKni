@@ -185,8 +185,7 @@ def test_normalize_xml_output(raw, expected):
 
 def test_rendered_message_falls_back_to_event_data():
     event = ET.fromstring(
-        "<Event><EventData><Data Name='Device'>Disk 0</Data>"
-        "<Data>failed</Data></EventData></Event>"
+        "<Event><EventData><Data Name='Device'>Disk 0</Data><Data>failed</Data></EventData></Event>"
     )
     assert events.rendered_message(event) == "Device: Disk 0 | Dato: failed"
 
