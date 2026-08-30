@@ -32,6 +32,7 @@ def build_tool(qtbot, monkeypatch):
     monkeypatch.setattr(event_window.QMessageBox, "information", lambda *args, **kwargs: None)
     monkeypatch.setattr(event_window.QMessageBox, "warning", lambda *args, **kwargs: None)
     monkeypatch.setattr(event_window.QMessageBox, "critical", lambda *args, **kwargs: None)
+    monkeypatch.setattr(event_window, "show_error", lambda *args, **kwargs: None)
     tool = event_window.Tool()
     qtbot.addWidget(tool)
     return tool
@@ -53,15 +54,16 @@ def test_event_worker_success_failure_and_cancel(qtbot, monkeypatch):
     worker.cancel()
     assert worker._cancel_event.is_set()
 
+    error = RuntimeError("boom")
     monkeypatch.setattr(
         event_window,
         "collect_events",
-        lambda *args, **kwargs: (_ for _ in ()).throw(RuntimeError("boom")),
+        lambda *args, **kwargs: (_ for _ in ()).throw(error),
     )
     failed_worker = event_window.EventWorker(["System"], 24, 10, False)
     failed_worker.failed.connect(failures.append)
     failed_worker.run()
-    assert failures[-1] == "boom"
+    assert failures[-1] is error
 
 
 def test_event_detail_dialog_populates_and_copies(qtbot):
@@ -217,17 +219,25 @@ def test_loaded_failed_filtering_summary_and_styles(qtbot, monkeypatch):
     tool.visible_events = []
     assert tool.build_summary() == "Sin eventos cargados."
 
-    critical = []
+    feedback = []
     monkeypatch.setattr(
-        event_window.QMessageBox,
-        "critical",
-        lambda *args, **kwargs: critical.append(args[-1]),
+        event_window,
+        "show_error",
+        lambda *args, **kwargs: feedback.append((args, kwargs)),
     )
-    tool.on_events_failed("access denied")
+    error = PermissionError("access denied")
+    tool.on_events_failed(error)
     assert tool.events == []
     assert tool.table.rowCount() == 0
     assert tool.lbl_summary.text() == "Error al cargar eventos."
-    assert critical == ["access denied"]
+    args, kwargs = feedback[-1]
+    assert "access denied" not in args[2]
+    assert kwargs["error"] is error
+
+    tool._technical_error("Legacy", "Clean", "legacy detail")
+    args, kwargs = feedback[-1]
+    assert args[2] == "Clean"
+    assert kwargs["details"] == "legacy detail"
 
 
 def test_selected_event_detail_copy_and_no_selection(qtbot, monkeypatch):
@@ -271,11 +281,11 @@ def test_selected_event_detail_copy_and_no_selection(qtbot, monkeypatch):
     assert tool.selected_event() is None
 
 
-def test_exports_cover_empty_cancel_success_and_pdf_errors(qtbot, monkeypatch, tmp_path):
+def test_exports_cover_empty_cancel_success_and_structured_errors(qtbot, monkeypatch, tmp_path):
     tool = build_tool(qtbot, monkeypatch)
     info = []
     warnings = []
-    critical = []
+    feedback = []
     monkeypatch.setattr(
         event_window.QMessageBox,
         "information",
@@ -287,9 +297,9 @@ def test_exports_cover_empty_cancel_success_and_pdf_errors(qtbot, monkeypatch, t
         lambda *args, **kwargs: warnings.append(args[-1]),
     )
     monkeypatch.setattr(
-        event_window.QMessageBox,
-        "critical",
-        lambda *args, **kwargs: critical.append(args[-1]),
+        event_window,
+        "show_error",
+        lambda *args, **kwargs: feedback.append((args, kwargs)),
     )
 
     tool.events = []
@@ -319,6 +329,16 @@ def test_exports_cover_empty_cancel_success_and_pdf_errors(qtbot, monkeypatch, t
     assert "'=Formula" in content
     assert "'+danger" in content
 
+    monkeypatch.setattr(
+        event_window.QFileDialog,
+        "getSaveFileName",
+        lambda *args, **kwargs: (str(tmp_path), ""),
+    )
+    tool.export_csv()
+    args, kwargs = feedback[-1]
+    assert "IsADirectoryError" not in args[2]
+    assert isinstance(kwargs["error"], OSError)
+
     html_path = tmp_path / "events.html"
     monkeypatch.setattr(event_window, "events_to_html", lambda events: "<html>ok</html>")
     monkeypatch.setattr(
@@ -328,6 +348,17 @@ def test_exports_cover_empty_cancel_success_and_pdf_errors(qtbot, monkeypatch, t
     )
     tool.export_html()
     assert html_path.read_text(encoding="utf-8") == "<html>ok</html>"
+
+    html_error = RuntimeError("html failed")
+    monkeypatch.setattr(
+        event_window,
+        "events_to_html",
+        lambda _events: (_ for _ in ()).throw(html_error),
+    )
+    tool.export_html()
+    args, kwargs = feedback[-1]
+    assert "html failed" not in args[2]
+    assert kwargs["error"] is html_error
 
     monkeypatch.setattr(event_window, "_REPORTLAB_AVAILABLE", False)
     tool.export_pdf()
@@ -356,28 +387,31 @@ def test_exports_cover_empty_cancel_success_and_pdf_errors(qtbot, monkeypatch, t
     tool.export_pdf()
     assert pdf_calls and pdf_calls[0][2] == str(pdf_path)
 
+    pdf_error = RuntimeError("pdf failed")
     monkeypatch.setattr(
         event_window,
         "events_to_pdf",
-        lambda *args, **kwargs: (_ for _ in ()).throw(RuntimeError("pdf failed")),
+        lambda *args, **kwargs: (_ for _ in ()).throw(pdf_error),
     )
     tool.export_pdf()
-    assert "pdf failed" in critical[-1]
+    args, kwargs = feedback[-1]
+    assert "pdf failed" not in args[2]
+    assert kwargs["error"] is pdf_error
 
 
 def test_open_event_viewer_and_add_to_report(qtbot, monkeypatch, tmp_path):
     tool = build_tool(qtbot, monkeypatch)
     info = []
-    critical = []
+    feedback = []
     monkeypatch.setattr(
         event_window.QMessageBox,
         "information",
         lambda *args, **kwargs: info.append(args[-1]),
     )
     monkeypatch.setattr(
-        event_window.QMessageBox,
-        "critical",
-        lambda *args, **kwargs: critical.append(args[-1]),
+        event_window,
+        "show_error",
+        lambda *args, **kwargs: feedback.append((args, kwargs)),
     )
 
     popen_calls = []
@@ -389,13 +423,16 @@ def test_open_event_viewer_and_add_to_report(qtbot, monkeypatch, tmp_path):
     tool.open_windows_event_viewer()
     assert popen_calls
 
+    open_error = OSError("missing")
     monkeypatch.setattr(
         event_window.subprocess,
         "Popen",
-        lambda *args, **kwargs: (_ for _ in ()).throw(OSError("missing")),
+        lambda *args, **kwargs: (_ for _ in ()).throw(open_error),
     )
     tool.open_windows_event_viewer()
-    assert "missing" in critical[-1]
+    args, kwargs = feedback[-1]
+    assert "missing" not in args[2]
+    assert kwargs["error"] is open_error
 
     tool.events = []
     tool.add_to_technical_report()
@@ -427,3 +464,14 @@ def test_open_event_viewer_and_add_to_report(qtbot, monkeypatch, tmp_path):
     assert summary["medium_risk"] == 1
     assert summary["top_providers"][0] == {"provider": "Disk", "count": 2}
     assert str(snapshot) in info[-1]
+
+    snapshot_error = OSError("snapshot denied")
+    monkeypatch.setattr(
+        event_window,
+        "save_events_snapshot",
+        lambda *_args: (_ for _ in ()).throw(snapshot_error),
+    )
+    tool.add_to_technical_report()
+    args, kwargs = feedback[-1]
+    assert "snapshot denied" not in args[2]
+    assert kwargs["error"] is snapshot_error
