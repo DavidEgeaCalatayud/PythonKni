@@ -2,7 +2,7 @@ from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
-from PyPDF2 import PdfWriter
+from pypdf import PdfReader, PdfWriter
 
 from pythonkni.pdf import service as pdf
 
@@ -80,7 +80,7 @@ def test_parse_page_list_reversed_range_and_page_spec_empty():
 
 def test_open_reader_requires_library(monkeypatch):
     monkeypatch.setattr(pdf, "PdfReader", None)
-    with pytest.raises(RuntimeError, match="PyPDF2"):
+    with pytest.raises(RuntimeError, match="pypdf"):
         pdf._open_reader("file.pdf")
 
 
@@ -324,11 +324,34 @@ def test_load_reorder_task_reports_structure(monkeypatch):
     assert worker.progress == [{"message": "Leyendo estructura del PDF..."}]
 
 
-def test_merge_requires_pypdf_merger(monkeypatch, tmp_path):
-    monkeypatch.setattr(pdf, "PdfMerger", None)
+def test_merge_requires_pypdf_writer(monkeypatch, tmp_path):
+    monkeypatch.setattr(pdf, "PdfWriter", None)
 
-    with pytest.raises(RuntimeError, match="PyPDF2"):
+    with pytest.raises(RuntimeError, match="pypdf"):
         pdf.merge_pdfs_task(RecordingWorker(), [], str(tmp_path / "merged.pdf"))
+
+
+def test_merge_uses_modern_pypdf_writer_and_publishes_valid_pdf(tmp_path):
+    first = tmp_path / "first.pdf"
+    second = tmp_path / "second.pdf"
+    output = tmp_path / "merged.pdf"
+
+    for path in (first, second):
+        writer = PdfWriter()
+        writer.add_blank_page(width=100, height=100)
+        with path.open("wb") as handle:
+            writer.write(handle)
+        writer.close()
+
+    result = pdf.merge_pdfs_task(
+        RecordingWorker(),
+        [str(first), str(second)],
+        str(output),
+    )
+
+    assert result == {"save_path": str(output), "file_count": 2}
+    assert len(PdfReader(output).pages) == 2
+    assert not Path(str(output) + ".pythonkni.tmp").exists()
 
 
 def test_write_writer_atomic_publishes_valid_pdf(tmp_path):
@@ -337,6 +360,7 @@ def test_write_writer_atomic_publishes_valid_pdf(tmp_path):
     writer.add_blank_page(width=100, height=100)
 
     pdf._write_writer_atomic(writer, str(output))
+    writer.close()
 
     assert output.exists()
     assert not Path(str(output) + ".pythonkni.tmp").exists()

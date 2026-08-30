@@ -85,7 +85,7 @@ class Tool(BaseTool):
         QMessageBox.critical(
             self,
             "Falta dependencia",
-            "No se encuentra PyPDF2.\nInstale con:\npython -m pip install PyPDF2",
+            "No se encuentra pypdf.\nInstale con:\npython -m pip install pypdf",
         )
         return False
 

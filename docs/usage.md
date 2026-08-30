@@ -6,16 +6,23 @@ For architecture details, see [`architecture.md`](architecture.md). For authoriz
 
 ## Run PythonKni
 
+### Supported environment
+
+PythonKni requires **Python 3.10 or newer**. The canonical CI and release environment is **CPython 3.10.11 on Windows**.
+
 ### Development mode
 
-Create and activate a virtual environment, install the runtime dependencies, then start the application:
+Create and activate a Python 3.10 virtual environment, then install the committed SHA-256-locked dependency graphs:
 
 ```powershell
-python -m venv .venv
+py -3.10 -m venv .venv
 .\.venv\Scripts\Activate.ps1
-pip install -r requirements.txt
+python -m pip install --require-hashes -r requirements.txt
+python -m pip install --require-hashes -r requirements-dev.txt
 python main.py
 ```
+
+`requirements.in` and `requirements-dev.in` contain the direct dependency policy. `requirements.txt` and `requirements-dev.txt` contain the exact transitive versions and approved distribution hashes used by CI/release. Do not hand-edit transitive pins or hashes.
 
 The main window discovers valid `tools/*_tool.py` adapters dynamically and adds their `Tool` classes to the menu.
 
@@ -33,7 +40,7 @@ The executable is expected at:
 dist\PythonKni\PythonKni.exe
 ```
 
-The non-interactive packaging smoke test used by CI can be run with:
+Run the non-interactive packaging smoke test used by CI with:
 
 ```powershell
 dist\PythonKni\PythonKni.exe --smoke-test
@@ -61,13 +68,13 @@ If `LOCALAPPDATA` is unavailable, PythonKni falls back to `APPDATA` and finally 
 
 ## Optional system dependencies
 
-Some features require software outside the Python environment:
+Some features require software outside the Python lock:
 
 - **Tesseract OCR** for OCR-based PDF text extraction.
 - **Poppler** for PDF/image workflows that depend on `pdf2image`.
 - Standard Windows utilities such as `netsh`, `ping`, `arp` and Windows registry/event-log facilities for the corresponding system tools.
 
-Features that depend on operating-system resources can also be limited by the current user's permissions.
+These external executables are not covered by Python package hashes or the generated Python SBOM. Features that depend on operating-system resources can also be limited by the current user's permissions.
 
 ---
 
@@ -110,7 +117,7 @@ Converter outputs are transactional where the service supports publication: fail
 
 **Menu name:** `PDF Toolkit`
 
-The tool is organized into tabs:
+The PDF backend uses the maintained **`pypdf`** package for PDF reading/writing operations. PyMuPDF, ReportLab and optional OCR tooling are used where their specific capabilities are required.
 
 ### Extract text
 
@@ -122,7 +129,7 @@ The tool is organized into tabs:
 - Optionally include page headers.
 - Enable OCR when required, with an option to OCR only pages that appear empty.
 
-The UI also exposes a configurable threshold for considering a PDF probably scanned based on pages with no extracted text.
+The UI exposes a configurable threshold for considering a PDF probably scanned based on pages with no extracted text.
 
 ### Split
 
@@ -145,7 +152,7 @@ Load a PDF, change page order in the graphical list and save the reordered docum
 
 Add multiple PDFs, arrange them in the desired order and write the combined result to a new PDF.
 
-PDF operations run in the background and expose cancellation. OCR additionally requires local Tesseract/Poppler support. The PDF backend currently still uses `PyPDF2`; migration to `pypdf` remains active roadmap work.
+PDF operations run in the background and expose cancellation. OCR additionally requires local Tesseract/Poppler support.
 
 ## Duplicate Finder
 
@@ -290,11 +297,7 @@ Reading the Security log can require administrator privileges. Risk classificati
 
 **Menu name:** `Informe Técnico del Equipo`
 
-Generate a point-in-time technical report containing supported system, disk, network, process and temporary-data information. The result can be reviewed in the UI and exported as:
-
-- TXT;
-- HTML;
-- PDF.
+Generate a point-in-time technical report containing supported system, disk, network, process and temporary-data information. The result can be reviewed in the UI and exported as TXT, HTML or PDF.
 
 Diagnostic reports can contain hostnames, addresses, process information and other environment details. Review an exported report before sharing it externally.
 
@@ -312,7 +315,19 @@ Localization infrastructure exists, but not every user-visible string is fully t
 
 Many long-running tools use managed background workers or domain-specific worker threads. Cancellation is cooperative: the service checks a cancellation signal at safe points and stops as soon as the underlying operation permits.
 
-This means cancellation is not identical to forcibly killing a thread or subprocess. An already completed filesystem mutation may remain completed; tools that can partially mutate state are designed to report or record that state where practical.
+Cancellation is not identical to forcibly killing a thread or subprocess. An already completed filesystem mutation may remain completed; tools that can partially mutate state are designed to report or record that state where practical.
+
+## Dependency maintenance
+
+When a direct Python dependency must change:
+
+1. change its allowed range in `requirements.in` or `requirements-dev.in`;
+2. regenerate the corresponding lock with `pip-tools` on the canonical Windows / CPython 3.10.11 environment;
+3. keep `--generate-hashes --allow-unsafe --strip-extras --no-header` so every installable distribution remains hash-locked;
+4. run the lock validator, `pip check` and both `pip-audit` gates;
+5. review the generated diff before committing it.
+
+The canonical commands are documented in the README. Dependabot checks Python dependencies and GitHub Actions weekly, but updates still require the same CI validation as application changes.
 
 ## Troubleshooting
 
@@ -338,17 +353,27 @@ Process, startup, Event Viewer, WiFi and some temp-directory operations depend o
 
 ICMP/ping may be blocked, reverse DNS may not exist, ARP visibility is limited to relevant local-network information, and firewalls can reject or silently drop TCP probes. A missing result is not proof that a device/service is absent.
 
+### A dependency install fails with a hash mismatch
+
+Do not bypass `--require-hashes`. A mismatch means the requested artifact is not one of the distributions recorded in the lock. Regenerate the lock only as part of an intentional dependency update and review the resulting version/hash diff.
+
 ## Development validation
 
-Run the same core checks used by CI:
+Run the core validation path used by CI:
 
 ```powershell
+python scripts/check_dependency_locks.py
+python -m pip check
+python -m pip_audit -r requirements.txt --no-deps --strict --progress-spinner=off
+python -m pip_audit -r requirements-dev.txt --no-deps --strict --progress-spinner=off
 python -m compileall .
-python -m pytest
+python -m pytest --cov=pythonkni --cov=tools --cov-branch --cov-report=term-missing --cov-report=xml
+python -m coverage report --fail-under=84.0
+python -m coverage report --include="pythonkni/*/service.py" --fail-under=91.0
 python -m ruff check .
 python -m ruff format --check .
 pyinstaller --noconfirm --clean PythonKni.spec
 .\dist\PythonKni\PythonKni.exe --smoke-test
 ```
 
-The GitHub Actions `CI / validate` job performs these checks on Windows with Python 3.10.
+The GitHub Actions `CI / validate` job performs the complete Windows validation on CPython 3.10.11, including the individual priority-module coverage ratchets, dependency audits, CycloneDX SBOM generation and packaged artifact creation.

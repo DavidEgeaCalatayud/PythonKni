@@ -9,9 +9,9 @@ from typing import Iterable
 from pythonkni.core.tasks import WorkerCancelled
 
 try:
-    from PyPDF2 import PdfMerger, PdfReader, PdfWriter
+    from pypdf import PdfReader, PdfWriter
 except ImportError:
-    PdfReader = PdfWriter = PdfMerger = None
+    PdfReader = PdfWriter = None
 
 
 class _PdfOutputTransaction:
@@ -128,7 +128,7 @@ def parse_page_spec(spec: str, max_pages: int) -> list[list[int]]:
 
 def _open_reader(src: str):
     if PdfReader is None:
-        raise RuntimeError("No se encuentra PyPDF2.")
+        raise RuntimeError("No se encuentra pypdf.")
     reader = PdfReader(src)
     if getattr(reader, "is_encrypted", False):
         try:
@@ -438,25 +438,25 @@ def reorder_pdf_task(worker, src: str, order: Iterable[int], save_path: str):
 
 
 def merge_pdfs_task(worker, paths: Iterable[str], save_path: str):
-    if PdfMerger is None:
-        raise RuntimeError("No se encuentra PyPDF2.")
+    if PdfWriter is None:
+        raise RuntimeError("No se encuentra pypdf.")
     pdf_paths = list(paths)
-    merger = PdfMerger()
+    writer = PdfWriter()
     temp_path = _temp_path(save_path)
     _remove_quietly(temp_path)
     try:
         total = len(pdf_paths)
         for position, path in enumerate(pdf_paths, start=1):
             worker.check_cancelled()
-            merger.append(path)
+            writer.append(path)
             _progress(worker, f"Combinando PDF {position}/{total}", position, total)
         worker.check_cancelled()
-        merger.write(temp_path)
+        _write_writer(writer, temp_path)
         worker.check_cancelled()
         os.replace(temp_path, save_path)
     except Exception:
         _remove_quietly(temp_path)
         raise
     finally:
-        merger.close()
+        writer.close()
     return {"save_path": save_path, "file_count": len(pdf_paths)}
