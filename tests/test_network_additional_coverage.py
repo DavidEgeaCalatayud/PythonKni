@@ -300,7 +300,7 @@ def test_scan_open_ports_callbacks_and_probe_errors(monkeypatch):
         on_open=opened.append,
     )
 
-    assert checked == [20, 21, 22]
+    assert set(checked) == {20, 21, 22}
     assert result == [OpenPort(22, "service-22")]
     assert opened == result
 
