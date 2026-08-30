@@ -42,6 +42,7 @@ def build_tool(qtbot, monkeypatch):
     monkeypatch.setattr(pdf_window.QMessageBox, "information", lambda *args, **kwargs: None)
     monkeypatch.setattr(pdf_window.QMessageBox, "warning", lambda *args, **kwargs: None)
     monkeypatch.setattr(pdf_window.QMessageBox, "critical", lambda *args, **kwargs: None)
+    monkeypatch.setattr(pdf_window, "show_error", lambda *args, **kwargs: None)
     tool = pdf_window.Tool()
     qtbot.addWidget(tool)
     return tool
@@ -52,15 +53,16 @@ def test_require_pypdf_and_pick_pdf(qtbot, monkeypatch):
     monkeypatch.setattr(pdf_window, "require_pypdf_available", lambda: True)
     assert tool.require_pypdf()
 
-    critical = []
+    feedback = []
     monkeypatch.setattr(pdf_window, "require_pypdf_available", lambda: False)
     monkeypatch.setattr(
-        pdf_window.QMessageBox,
-        "critical",
-        lambda *args, **kwargs: critical.append(args[-1]),
+        pdf_window,
+        "show_error",
+        lambda *args, **kwargs: feedback.append((args, kwargs)),
     )
     assert not tool.require_pypdf()
-    assert "pypdf" in critical[-1]
+    assert "pypdf" in feedback[-1][0][2]
+    assert feedback[-1][1] == {}
 
     monkeypatch.setattr(
         pdf_window.QFileDialog,
@@ -117,11 +119,11 @@ def test_start_task_busy_and_signal_wiring(qtbot, monkeypatch):
 
 def test_task_progress_error_cancel_finish_and_close(qtbot, monkeypatch):
     tool = build_tool(qtbot, monkeypatch)
-    critical = []
+    feedback = []
     monkeypatch.setattr(
-        pdf_window.QMessageBox,
-        "critical",
-        lambda *args, **kwargs: critical.append(args[-1]),
+        pdf_window,
+        "show_error",
+        lambda *args, **kwargs: feedback.append((args, kwargs)),
     )
 
     tool._task_progress({"message": "Half", "percent": 50})
@@ -133,9 +135,12 @@ def test_task_progress_error_cancel_finish_and_close(qtbot, monkeypatch):
     tool._task_progress("plain")
     assert tool.task_status.text() == "plain"
 
-    tool._task_error("Merge", "failure")
+    error = RuntimeError("failure")
+    tool._task_error("Merge", error)
     assert "[Merge][ERROR] failure" in tool.log_box.toPlainText()
-    assert critical[-1] == "failure"
+    args, kwargs = feedback[-1]
+    assert "failure" not in args[2]
+    assert kwargs["error"] is error
 
     tool._task_cancelled()
     assert tool.task_status.text() == "Operación cancelada"
