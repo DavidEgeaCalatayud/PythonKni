@@ -45,9 +45,7 @@ def test_get_ipv4_interfaces_skips_down_incomplete_and_invalid_entries(monkeypat
 
     result = network.get_ipv4_interfaces()
 
-    assert result == [
-        NetworkInterface("Mixed", "10.0.0.20", "255.255.255.0", "10.0.0.0/24")
-    ]
+    assert result == [NetworkInterface("Mixed", "10.0.0.20", "255.255.255.0", "10.0.0.0/24")]
 
 
 class FakeDatagramSocket:
@@ -124,9 +122,7 @@ def test_get_mac_address_returns_value_and_handles_failures(monkeypatch):
     monkeypatch.setattr(
         network.subprocess,
         "run",
-        lambda *_args, **_kwargs: SimpleNamespace(
-            stdout="192.0.2.1 aa-bb-cc-dd-ee-ff dynamic"
-        ),
+        lambda *_args, **_kwargs: SimpleNamespace(stdout="192.0.2.1 aa-bb-cc-dd-ee-ff dynamic"),
     )
     assert network.get_mac_address("192.0.2.1") == "aa-bb-cc-dd-ee-ff"
 
