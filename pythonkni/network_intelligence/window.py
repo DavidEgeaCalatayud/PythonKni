@@ -139,9 +139,7 @@ class Tool(BaseTool):
         layout.addWidget(self.status_label)
 
         self.table = QTableWidget(0, 6)
-        self.table.setHorizontalHeaderLabels(
-            ["IP", "Hostname", "MAC", "Type", "Services", "Risk"]
-        )
+        self.table.setHorizontalHeaderLabels(["IP", "Hostname", "MAC", "Type", "Services", "Risk"])
         self.table.setSelectionBehavior(QTableWidget.SelectRows)
         self.table.setSelectionMode(QTableWidget.SingleSelection)
         self.table.setEditTriggers(QTableWidget.NoEditTriggers)
