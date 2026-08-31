@@ -52,21 +52,25 @@ jobs:
         run: python -m pytest --cov=pythonkni --cov=tools --cov-branch --cov-report=term-missing --cov-report=xml
 
       - name: Enforce repository coverage ratchet
-        run: python -m coverage report --fail-under=84.0
+        run: python -m coverage report --fail-under=86.0
 
       - name: Enforce service-layer coverage ratchet
-        run: python -m coverage report --include="pythonkni/*/service.py" --fail-under=91.0
+        run: python -m coverage report --include="pythonkni/*/service.py" --fail-under=93.0
 
       - name: Enforce priority-service coverage ratchets
         run: |
           python -m coverage report --include="pythonkni/archive/service.py" --fail-under=95.0
           python -m coverage report --include="pythonkni/converter/service.py" --fail-under=94.0
+          python -m coverage report --include="pythonkni/disk_analyzer/service.py" --fail-under=94.5
+          python -m coverage report --include="pythonkni/duplicate/service.py" --fail-under=90.0
           python -m coverage report --include="pythonkni/network/service.py" --fail-under=96.0
           python -m coverage report --include="pythonkni/pdf/service.py" --fail-under=95.0
+          python -m coverage report --include="pythonkni/process_manager/service.py" --fail-under=99.0
           python -m coverage report --include="pythonkni/startup/service.py" --fail-under=87.5
           python -m coverage report --include="pythonkni/event_viewer/service.py" --fail-under=95.0
           python -m coverage report --include="pythonkni/system_report/service.py" --fail-under=97.0
           python -m coverage report --include="pythonkni/temp_cleaner/service.py" --fail-under=86.0
+          python -m coverage report --include="pythonkni/wifi/service.py" --fail-under=95.5
 
       - name: Enforce priority-window coverage ratchets
         run: |
@@ -75,7 +79,7 @@ jobs:
           python -m coverage report --include="pythonkni/pdf/window.py" --fail-under=93.0
 
       - name: Enforce refactored critical-code coverage
-        run: python -m coverage report --include="pythonkni/process_manager/service.py,pythonkni/config/service.py,pythonkni/infrastructure/*.py" --fail-under=84.0
+        run: python -m coverage report --include="pythonkni/process_manager/service.py,pythonkni/config/service.py,pythonkni/infrastructure/*.py" --fail-under=88.5
 
       - name: Ruff check
         run: python -m ruff check .
