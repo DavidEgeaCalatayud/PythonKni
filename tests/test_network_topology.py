@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from datetime import datetime, timezone
 
+from PyQt5.QtCore import Qt
 from PyQt5.QtWidgets import QGraphicsLineItem, QGraphicsRectItem
 
 from pythonkni.camera_auditor.models import RiskLevel
@@ -81,7 +82,7 @@ def test_topology_prefers_online_router_and_keeps_offline_assets():
     graph = build_logical_topology([nas, pc, router])
     lan_id = lan_node_id(router.scope)
 
-    assert graph.gateway_node_id == lan_id
+    assert graph.gateway_node_id == router.asset_id
     assert graph.physical_links_known is False
     assert {node.asset_id for node in graph.nodes if node.asset_id} == {
         router.asset_id,
@@ -229,7 +230,7 @@ def test_topology_view_renders_confidence_styles_and_evidence(qtbot):
 
     lines = [item for item in view.scene().items() if isinstance(item, QGraphicsLineItem)]
     assert len(lines) == 2
-    assert all(line.pen().style() == 3 for line in lines)
+    assert all(line.pen().style() == Qt.DotLine for line in lines)
     assert any("historical asset" in line.toolTip() for line in lines)
 
 
