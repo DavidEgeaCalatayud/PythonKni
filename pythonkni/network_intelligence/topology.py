@@ -34,6 +34,9 @@ class TopologyEdge:
     relationship: str
     confidence: RelationshipConfidence
     evidence: tuple[str, ...] = ()
+    source_port: str = ""
+    target_port: str = ""
+    protocol: str = ""
 
 
 @dataclass(frozen=True, slots=True)
@@ -200,6 +203,9 @@ def build_logical_topology(
                 relationship=relation.kind.value,
                 confidence=relation.confidence,
                 evidence=relation.evidence,
+                source_port=relation.source_port,
+                target_port=relation.target_port,
+                protocol=relation.protocol,
             )
         )
 
@@ -218,16 +224,29 @@ def build_logical_topology(
     gateway_node_id = (
         gateway_relation.target_id if gateway_relation is not None else sorted(lan_ids)[0]
     )
+    physical_links_known = any(
+        relation.kind == RelationshipKind.PHYSICAL_LINK
+        and relation.confidence == RelationshipConfidence.CONFIRMED
+        for relation in active_relationships
+    )
+
+    if physical_links_known:
+        note = (
+            "Hybrid topology. Logical relationships retain their confidence styling; physical links "
+            "come from imported administrative LLDP/MAC-table evidence and are only marked confirmed "
+            "when both endpoints resolve through strong inventory identity."
+        )
+    else:
+        note = (
+            "Relationship-aware logical topology. Solid links are confirmed by local evidence, "
+            "dashed links are inferred, and dotted links are unknown. No confirmed physical "
+            "switch, access-point or cabling path is currently available."
+        )
 
     return NetworkTopology(
         nodes=tuple(nodes_by_id.values()),
         edges=tuple(edges),
         gateway_node_id=gateway_node_id,
-        physical_links_known=False,
-        note=(
-            "Relationship-aware logical topology. Solid links are confirmed by local evidence, "
-            "dashed links are inferred, and dotted links are unknown. Confirmed currently means "
-            "a logical fact such as the OS default route or observed LAN membership; PythonKni "
-            "still does not claim physical switch, access-point or cabling paths."
-        ),
+        physical_links_known=physical_links_known,
+        note=note,
     )
