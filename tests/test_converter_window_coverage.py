@@ -236,7 +236,13 @@ def test_finished_preserves_cancelled_status_and_schedules_deferred_close(qtbot,
     ("method_name", "source_title", "output_path", "expected_function", "expected_label"),
     [
         ("convert_text_to_docx", "source.txt", "result.docx", "text_to_docx", "Creando DOCX..."),
-        ("convert_docx_to_text", "source.docx", "result.txt", "docx_to_text", "Extrayendo texto..."),
+        (
+            "convert_docx_to_text",
+            "source.docx",
+            "result.txt",
+            "docx_to_text",
+            "Extrayendo texto...",
+        ),
         ("convert_docx_to_pdf", "source.docx", "result.pdf", "docx_to_pdf", "Creando PDF..."),
     ],
 )
