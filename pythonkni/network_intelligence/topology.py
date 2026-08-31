@@ -208,7 +208,8 @@ def build_logical_topology(
             relation
             for relation in active_relationships
             if relation.kind == RelationshipKind.DEFAULT_GATEWAY
-            and relation.confidence == RelationshipConfidence.CONFIRMED
+            and relation.confidence
+            in {RelationshipConfidence.CONFIRMED, RelationshipConfidence.INFERRED}
             and relation.target_id in nodes_by_id
             and not relation.target_id.startswith("synthetic:")
         ),
