@@ -14,8 +14,8 @@ from pythonkni.network_intelligence.models import (
     RelationshipKind,
 )
 from pythonkni.network_intelligence.physical_evidence import import_physical_snapshot
-from pythonkni.network_intelligence.relationships import INTERNET_NODE_ID, lan_node_id
 from pythonkni.network_intelligence.relationship_store import RelationshipStore
+from pythonkni.network_intelligence.relationships import INTERNET_NODE_ID, lan_node_id
 from pythonkni.network_intelligence.topology import build_logical_topology
 
 
