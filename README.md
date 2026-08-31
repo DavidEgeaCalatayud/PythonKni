@@ -83,10 +83,10 @@ Current layered domains:
 
 ```text
 archive          config           converter
- disk_analyzer   duplicate        event_viewer
- network          pdf              process_manager
- startup          system_report    temp_cleaner
- wifi
+disk_analyzer    duplicate        event_viewer
+network          pdf              process_manager
+startup          system_report    temp_cleaner
+wifi
 ```
 
 Shared framework-independent infrastructure lives under `pythonkni/core` and `pythonkni/infrastructure`. Loader-facing modules under `tools/*_tool.py` remain thin compatibility adapters so the dynamic plugin contract can coexist with the layered codebase.
@@ -396,7 +396,23 @@ A loader-compatible module under `tools/` must:
 4. override `setup_ui()`;
 5. define non-empty `name`, `description` and `category` metadata.
 
-For a real first-party domain, keep the adapter thin and use:
+Minimal loader-facing contract:
+
+```python
+from tools.base_tool import BaseTool
+
+
+class Tool(BaseTool):
+    name = "My New Tool"
+    description = "Describe what the tool does"
+    category = "Utilities"
+
+    def setup_ui(self):
+        # Build the Qt presentation layer here.
+        pass
+```
+
+For a real first-party domain, keep that adapter thin and put the implementation in:
 
 ```text
 pythonkni/<domain>/models.py
@@ -405,7 +421,7 @@ pythonkni/<domain>/window.py
 tools/<domain>_tool.py
 ```
 
-Business/OS logic belongs in `service.py`; Qt orchestration belongs in `window.py`.
+Business/OS logic belongs in `service.py`; Qt orchestration belongs in `window.py`. The loader/plugin contract itself is regression-tested by `tests/test_tool_contract.py`.
 
 ---
 
