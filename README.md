@@ -4,15 +4,15 @@
 ![PyQt5](https://img.shields.io/badge/UI-PyQt5-41CD52)
 ![Platform](https://img.shields.io/badge/platform-Windows-blue)
 ![Build](https://img.shields.io/badge/build-PyInstaller-orange)
-![Tests](https://img.shields.io/badge/tests-686%20pytest-green)
-![Coverage](https://img.shields.io/badge/branch%20coverage-92.9%25-green)
-![Services](https://img.shields.io/badge/service%20coverage-93.2%25-green)
+![Tests](https://img.shields.io/badge/tests-731%20pytest-green)
+![Coverage](https://img.shields.io/badge/branch%20coverage-93.1%25-green)
+![Services](https://img.shields.io/badge/service%20coverage-93.6%25-green)
 ![Dependencies](https://img.shields.io/badge/dependencies-SHA--256%20locked-blueviolet)
 ![Audit](https://img.shields.io/badge/security-pip--audit-success)
 ![Lint](https://img.shields.io/badge/lint-Ruff%20F%20%2B%20I-purple)
 ![License](https://img.shields.io/badge/license-MIT-lightgrey)
 
-PythonKni is a **local-first Windows desktop utility suite** built with Python and PyQt5. It combines file and PDF operations, archive handling, duplicate detection, network diagnostics, process inspection, startup management, Windows event analysis, system reporting, WiFi diagnostics and safe temporary-file cleanup in one application.
+PythonKni is a **local-first Windows desktop utility suite** built with Python and PyQt5. It combines file and PDF operations, archive handling, duplicate detection, network diagnostics, process inspection, startup management, Windows event analysis, system reporting, WiFi diagnostics, defensive WiFi auditing and safe temporary-file cleanup in one application.
 
 The repository is maintained as an application rather than a collection of scripts. First-party domains follow an enforced layered architecture, long-running work is moved away from the GUI thread, destructive operations have explicit safeguards, dependencies are reproducibly locked and audited, and every push is validated through the real Windows packaging path.
 
@@ -32,6 +32,7 @@ The repository is maintained as an application rather than a collection of scrip
 | **Process Manager** | Inspect processes, filter resource use, safely terminate selected processes and query optional VirusTotal reports |
 | **Temporary Cleaner** | Preview and clean explicitly authorized temporary/cache targets without following symlinks/reparse points |
 | **WiFi Profiles** | Read locally stored Windows WiFi profiles for authorized support/diagnostics |
+| **WiFi Auditor** | One-click defensive visible-network inventory, security/channel findings, score and SHA-256 evidence reporting |
 | **Disk Analyzer** | Rank large files/directories and export analysis results |
 | **Windows Startup Manager** | Inspect and reversibly enable/disable supported registry/folder startup entries |
 | **Windows Event Viewer** | Read, classify, filter and export Windows event information |
@@ -86,7 +87,7 @@ archive          config           converter
 disk_analyzer    duplicate        event_viewer
 network          pdf              process_manager
 startup          system_report    temp_cleaner
-wifi
+wifi             wifi_auditor
 ```
 
 Shared framework-independent infrastructure lives under `pythonkni/core` and `pythonkni/infrastructure`. Loader-facing modules under `tools/*_tool.py` remain thin compatibility adapters so the dynamic plugin contract can coexist with the layered codebase.
@@ -176,7 +177,8 @@ PythonKni/
 ├─ docs/
 │  ├─ architecture.md
 │  ├─ security.md
-│  └─ usage.md
+│  ├─ usage.md
+│  └─ wifi-auditor.md
 ├─ pythonkni/
 │  ├─ core/
 │  ├─ infrastructure/
@@ -184,9 +186,12 @@ PythonKni/
 │     ├─ models.py
 │     ├─ service.py
 │     └─ window.py
+├─ docker/
+│  └─ wifi-auditor/
 ├─ scripts/
 │  ├─ check_dependency_locks.py
-│  └─ package_windows_bundle.ps1
+│  ├─ package_windows_bundle.ps1
+│  └─ verify_wifi_audit_report.py
 ├─ tests/
 ├─ tools/                       # adapters + shared Qt/runtime helpers
 ├─ main.py
@@ -285,13 +290,13 @@ See [`docs/security.md`](docs/security.md).
 
 ## Testing and coverage
 
-The current behavior-driven suite contains **686 tests**.
+The current behavior-driven suite contains **731 tests**.
 
 Measured branch coverage on the canonical Windows CI environment:
 
 ```text
-Repository-wide                 92.9%
-All service.py modules          93.2%
+Repository-wide                 93.1%
+All service.py modules          93.6%
 ```
 
 Key service coverage:
@@ -310,6 +315,7 @@ Startup service                 87.7%
 System Report service           97.2%
 Temp Cleaner service            86.4%
 WiFi service                    96.0%
+WiFi Auditor service            99.1%
 ```
 
 Presentation coverage now has dedicated behavioral regression suites around worker lifecycle, stale/current callbacks, cancellation, dialog flows, imports/exports, confirmation paths and technical-error rendering:
@@ -328,9 +334,10 @@ Startup window                  95.3%
 System Report window            94.7%
 Temp Cleaner window             94.2%
 WiFi window                     95.0%
+WiFi Auditor window             99.2%
 ```
 
-The presentation-hardening pass deliberately targets real orchestration contracts rather than changing production behavior just to increase coverage. Converter and Network include worker overlap/cancellation and I/O flows; Process Manager covers termination/VirusTotal orchestration; Archive, Duplicate, Disk Analyzer, Temp Cleaner, Config, WiFi and System Report cover their corresponding state, dialog and error paths.
+The presentation-hardening pass deliberately targets real orchestration contracts rather than changing production behavior just to increase coverage. Converter and Network include worker overlap/cancellation and I/O flows; Process Manager covers termination/VirusTotal orchestration; Archive, Duplicate, Disk Analyzer, Temp Cleaner, Config, WiFi and System Report cover their corresponding state, dialog and error paths. WiFi Auditor adds deterministic parsing/scoring, cancellation, evidence integrity and UI/export regressions while keeping offensive credential-acquisition behavior out of scope.
 
 ### Coverage ratchets
 
@@ -351,6 +358,7 @@ Event Viewer service coverage                      >= 95.0%
 System Report service coverage                     >= 97.0%
 Temp Cleaner service coverage                      >= 86.0%
 WiFi service coverage                              >= 95.5%
+WiFi Auditor service coverage                      >= 98.0%
 Archive window coverage                            >= 96.5%
 Config window coverage                             >= 90.0%
 Converter window coverage                          >= 86.0%
@@ -364,6 +372,7 @@ Startup window coverage                            >= 95.0%
 System Report window coverage                      >= 94.0%
 Temp Cleaner window coverage                       >= 93.5%
 WiFi window coverage                               >= 94.5%
+WiFi Auditor window coverage                       >= 98.0%
 process/config/infrastructure aggregate             >= 88.5%
 ```
 
@@ -451,6 +460,7 @@ Business/OS logic belongs in `service.py`; Qt orchestration belongs in `window.p
 - OCR depends on local Tesseract/Poppler installation and document quality.
 - DOCX → PDF conversion is intentionally simplified and cannot reproduce every Microsoft Word layout feature.
 - Network/system capabilities depend on Windows permissions, topology, firewall policy and available OS utilities.
+- WiFi Auditor uses Windows visible-network enumeration only: it does not enable monitor mode, actively probe WPS, capture authentication material, validate passwords, crack PSKs or create deceptive access points.
 - Presentation coverage is materially stronger and now protected per window, but Converter remains the lowest measured first-party window at 86.9%; further tests should continue to protect meaningful orchestration/failure contracts rather than chase uniform percentages.
 - Localization infrastructure exists, but not every user-visible string is extracted/translated.
 - Windows code signing and installer generation remain release-engineering work.
@@ -487,6 +497,7 @@ Business/OS logic belongs in `service.py`; Qt orchestration belongs in `window.p
 - [`docs/architecture.md`](docs/architecture.md) — dependency boundaries, infrastructure and coverage ratchets
 - [`docs/usage.md`](docs/usage.md) — per-tool operation, cancellation, permissions and troubleshooting
 - [`docs/security.md`](docs/security.md) — security controls, sensitive-data flows, destructive operations and supply-chain limits
+- [`docs/wifi-auditor.md`](docs/wifi-auditor.md) — defensive WiFi audit workflow, evidence semantics, Docker verifier and explicit scope boundaries
 - [`CHANGELOG.md`](CHANGELOG.md) — development history
 
 ---

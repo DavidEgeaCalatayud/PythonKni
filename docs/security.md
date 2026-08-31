@@ -138,6 +138,20 @@ These limits are not authorization controls. Firewalls, ICMP filtering, NAT and 
 
 ---
 
+# WiFi Auditor
+
+WiFi Auditor is a defensive configuration/inventory boundary separate from the stored-profile viewer. Its live path asks Windows for visible BSSID metadata and analyzes only the information exposed by that operating-system command. It does not obtain or validate credentials.
+
+The current feature deliberately excludes monitor mode, frame injection, active WPS probing, authentication-material capture, password-list generation, password cracking and deceptive/clone access points. An inconsistent SSID/security observation is surfaced as a manual-review indicator and is not treated as proof that a BSSID is malicious.
+
+Exported evidence contains local wireless metadata such as SSID/BSSID, channel, signal and security configuration. Treat those reports as environment-sensitive diagnostic data before sharing them.
+
+Each report contains a SHA-256 integrity digest calculated over canonical JSON. Verification can detect changed content but does not authenticate the person or machine that created the report. The digest is not a digital signature and does not by itself establish forensic chain of custody.
+
+Report publication is transactional through same-directory temporary output plus `fsync` and `os.replace`. The Docker image under `docker/wifi-auditor/` performs offline report verification only and receives the report directory read-only in the documented invocation; it does not perform live wireless scanning.
+
+---
+
 # CSV exports
 
 Shared CSV serialization neutralizes values that common spreadsheet software could interpret as formulas, including dangerous prefixes after leading whitespace/tab characters. New export paths should reuse the shared helper rather than implement independent CSV escaping.

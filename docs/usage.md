@@ -208,6 +208,31 @@ Because WiFi credentials are sensitive:
 
 Each requested profile is exported with `key=clear` into an isolated temporary directory, matched to the correct XML profile and removed when the operation finishes. Loading runs in a managed worker and can be cancelled. Windows permissions/policy can prevent credentials from being returned.
 
+## WiFi Auditor
+
+**Menu name:** `WiFi Auditor` (category `Red`)
+
+Press **Escanear redes visibles** to run one managed defensive pipeline: Windows visible-network inventory → SSID/BSSID normalization → band/channel/signal/security review → deterministic findings/score → exportable SHA-256 evidence. The operation supports cooperative cancellation and rejects overlapping scans.
+
+The live scan uses `netsh wlan show networks mode=bssid`. It does not require stored WiFi passwords and does not enable monitor mode. The tool does not actively probe WPS, capture authentication exchanges, validate WiFi passwords, generate target password lists, crack PSKs or create clone/deceptive access points.
+
+Exported JSON reports include the observed access points, findings, score, declared limitations and an integrity digest. Report publication uses same-directory temporary output, flush/`fsync` and `os.replace` before the destination becomes visible. The SHA-256 digest detects report changes; it is not a digital signature.
+
+Offline verification:
+
+```powershell
+python scripts/verify_wifi_audit_report.py .\wifi-audit.json
+```
+
+Docker can run the verifier without attempting to control the host wireless adapter:
+
+```powershell
+docker build -f docker/wifi-auditor/Dockerfile -t pythonkni-wifi-audit-verifier .
+docker run --rm -v "${PWD}:/data:ro" pythonkni-wifi-audit-verifier /data/wifi-audit.json
+```
+
+See [`wifi-auditor.md`](wifi-auditor.md) for the complete evidence format, scoring semantics, limitations and scope boundaries.
+
 ## Disk Analyzer
 
 **Menu name:** `Analizador de Disco`
@@ -318,7 +343,7 @@ Do not bypass `--require-hashes`. A mismatch means the artifact is not one of th
 
 ## Development validation
 
-The current behavior-driven suite contains **686 tests**, with **92.9% repository-wide branch coverage** and **93.2% aggregate service coverage** on the canonical Windows CI environment.
+The current behavior-driven suite contains **731 tests**, with **93.1% repository-wide branch coverage** and **93.6% aggregate service coverage** on the canonical Windows CI environment.
 
 The normal local validation path is:
 
@@ -337,7 +362,7 @@ pyinstaller --noconfirm --clean PythonKni.spec
 .\dist\PythonKni\PythonKni.exe --smoke-test
 ```
 
-CI and Release additionally enforce individual non-regression floors for every first-party service and for the 13 prioritized presentation windows. Current presentation floors are:
+CI and Release additionally enforce individual non-regression floors for every first-party service and for the 14 prioritized presentation windows. Current presentation floors are:
 
 ```text
 Archive          >= 96.5%      Config           >= 90.0%
@@ -346,7 +371,7 @@ Duplicate        >= 97.0%      Event Viewer     >= 98.0%
 Network          >= 91.0%      PDF              >= 93.0%
 Process Manager  >= 97.5%      Startup          >= 95.0%
 System Report    >= 94.0%      Temp Cleaner     >= 93.5%
-WiFi             >= 94.5%
+WiFi             >= 94.5%      WiFi Auditor     >= 98.0%
 ```
 
 These floors intentionally sit below the measured values. Coverage changes should protect real behavior, failure modes, cancellation, persistence or orchestration contracts rather than adding assertions whose only purpose is to increase a percentage.

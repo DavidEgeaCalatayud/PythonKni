@@ -46,7 +46,8 @@ pythonkni/
 ├─ startup/
 ├─ system_report/
 ├─ temp_cleaner/
-└─ wifi/
+├─ wifi/
+└─ wifi_auditor/
 ```
 
 Each domain exposes `models.py`, `service.py` and `window.py`, even when a domain currently has only minimal custom model state. This prevents future data structures from drifting into presentation code.
@@ -148,6 +149,12 @@ PDF reading/writing is based on maintained `pypdf`. `pdf/service.py` owns docume
 
 PyMuPDF, ReportLab, `pdf2image` and Tesseract retain narrower rendering/report/OCR roles where needed. `PythonKni.spec` collects `pypdf`, keeping source and frozen dependency graphs aligned.
 
+## WiFi Auditor boundary
+
+`wifi_auditor.service` owns Windows visible-network parsing, deterministic configuration findings, scoring and SHA-256 evidence generation. `wifi_auditor.window` owns the one-click managed-worker flow, cancellation, result rendering and export dialogs. The service never imports Qt.
+
+The live scan is intentionally limited to information Windows exposes through `netsh wlan show networks mode=bssid`; no monitor-mode or credential-validation behavior is delegated to the service. Docker support is separated from live scanning and is limited to offline verification of exported evidence. The SHA-256 field is an integrity checksum over canonical report data, not a digital signature or provenance proof.
+
 ## Compatibility and plugin boundary
 
 `main.py` discovers modules ending in `tools/*_tool.py`. A loader-compatible module exposes a valid `Tool` inheriting `BaseTool`, overrides `setup_ui()` and declares non-empty `name`, `description` and `category` metadata.
@@ -193,7 +200,7 @@ runtime/dev pip-audit + CycloneDX SBOM
           ↓
 compileall
           ↓
-686 pytest tests + branch coverage
+731 pytest tests + branch coverage
           ↓
 repository/service/priority-window coverage ratchets
           ↓
@@ -241,10 +248,10 @@ Service-hardening baseline
 86.4% repository branch coverage
 93.2% aggregated services
 
-Current presentation-hardened baseline
-686 tests
-92.9% repository branch coverage
-93.2% aggregated services
+Current WiFi-Auditor baseline
+731 tests
+93.1% repository branch coverage
+93.6% aggregated services
 ```
 
 Current service measurements:
@@ -263,6 +270,7 @@ Startup service                 87.7%
 System Report service           97.2%
 Temp Cleaner service            86.4%
 WiFi service                    96.0%
+WiFi Auditor service            99.1%
 ```
 
 Current presentation measurements:
@@ -281,6 +289,7 @@ Startup window                  95.3%
 System Report window            94.7%
 Temp Cleaner window             94.2%
 WiFi window                     95.0%
+WiFi Auditor window             99.2%
 ```
 
 The latest presentation-hardening work added behavior/failure-path tests without changing production implementation: worker overlap and cancellation, stale/current results, deferred close behavior, conversion/dialog flows, Network history I/O, Process Manager/VirusTotal states, archive/duplicate operations, Disk Analyzer export paths, Temp Cleaner confirmation/error handling, Config load/save application, WiFi loading states and System Report generation/export orchestration.
@@ -302,6 +311,7 @@ Event Viewer service coverage                      >= 95.0%
 System Report service coverage                     >= 97.0%
 Temp Cleaner service coverage                      >= 86.0%
 WiFi service coverage                              >= 95.5%
+WiFi Auditor service coverage                      >= 98.0%
 Archive window coverage                            >= 96.5%
 Config window coverage                             >= 90.0%
 Converter window coverage                          >= 86.0%
@@ -315,6 +325,7 @@ Startup window coverage                            >= 95.0%
 System Report window coverage                      >= 94.0%
 Temp Cleaner window coverage                       >= 93.5%
 WiFi window coverage                               >= 94.5%
+WiFi Auditor window coverage                       >= 98.0%
 process/config/infrastructure aggregate             >= 88.5%
 ```
 
