@@ -50,7 +50,7 @@ def test_generate_report_wires_worker_and_ready_state(qtbot, monkeypatch):
     worker = FakeReportWorker.instances[-1]
     assert worker.started
     assert not tool.btn_generate.isEnabled()
-    assert tool.progress.isVisible()
+    assert not tool.progress.isHidden()
 
     data = sample_report()
     worker.result_ready.emit(data)
@@ -64,7 +64,7 @@ def test_generate_report_wires_worker_and_ready_state(qtbot, monkeypatch):
     assert tool.cpu_table.rowCount() == 1
     assert tool.memory_table.rowCount() == 1
     assert tool.temp_table.rowCount() == 1
-    assert not tool.progress.isVisible()
+    assert tool.progress.isHidden()
     assert tool.btn_generate.isEnabled()
     assert tool.btn_html.isEnabled()
     assert tool.btn_pdf.isEnabled()
@@ -86,7 +86,7 @@ def test_generate_report_failure_signal_restores_state(qtbot, monkeypatch):
     FakeReportWorker.instances[-1].failed.emit("plain failure")
 
     assert tool.btn_generate.isEnabled()
-    assert not tool.progress.isVisible()
+    assert tool.progress.isHidden()
     assert feedback[-1][1]["details"] == "plain failure"
 
 
