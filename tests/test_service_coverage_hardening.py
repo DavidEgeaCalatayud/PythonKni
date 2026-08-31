@@ -468,11 +468,12 @@ def test_duplicate_verified_groups_support_multiple_collision_groups(monkeypatch
 
 
 def test_duplicate_manifest_paths_and_inside_checks(monkeypatch, tmp_path):
-    monkeypatch.setattr(
-        duplicate_service.datetime,
-        "now",
-        lambda _tz: SimpleNamespace(strftime=lambda _fmt: "20260831T100000Z"),
-    )
+    class FakeDateTime:
+        @classmethod
+        def now(cls, _tz):
+            return SimpleNamespace(strftime=lambda _fmt: "20260831T100000Z")
+
+    monkeypatch.setattr(duplicate_service, "datetime", FakeDateTime)
     first = tmp_path / f"{duplicate_service.RESTORE_MANIFEST_PREFIX}_20260831T100000Z.json"
     first.write_text("{}", encoding="utf-8")
 
