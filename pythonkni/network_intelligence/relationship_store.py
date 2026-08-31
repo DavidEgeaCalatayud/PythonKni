@@ -58,7 +58,8 @@ class RelationshipStore:
                 """
             )
             columns = {
-                row["name"] for row in connection.execute("PRAGMA table_info(network_relationships)")
+                row["name"]
+                for row in connection.execute("PRAGMA table_info(network_relationships)")
             }
             migrations = {
                 "source_port": "ALTER TABLE network_relationships ADD COLUMN source_port TEXT NOT NULL DEFAULT ''",
