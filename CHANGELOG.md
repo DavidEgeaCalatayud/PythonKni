@@ -30,6 +30,7 @@ The project has not published a tagged release for the work below yet, so the cu
 - Added CycloneDX runtime SBOM generation and retention alongside Windows CI/release artifacts, plus weekly Dependabot checks for Python dependencies and GitHub Actions. (PR #36)
 - Added `tools/ui_feedback.py`, a reusable Qt feedback renderer that keeps concise user-facing summaries separate from optional expandable technical diagnostics. (PR #39)
 - Added domain-specific service regression suites for Disk Analyzer, WiFi, Process Manager and Duplicate Finder, covering real error, cancellation, identity, parsing and recovery paths without changing production service behavior. (PR #41)
+- Added dedicated behavior-driven Qt regression suites for Converter, Network, System Report, Archive, Process Manager, Duplicate Finder, Disk Analyzer, Temp Cleaner, Config and WiFi, covering worker lifecycle, overlap rejection, stale/current callbacks, cancellation, deferred close, dialogs, import/export, confirmations and technical-error paths without changing production behavior. (PR #42)
 
 ### Changed
 
@@ -61,6 +62,7 @@ The project has not published a tagged release for the work below yet, so the cu
 - Tool-loader failures, configuration persistence failures, Archive worker failures and Process Manager refresh/VirusTotal worker failures now show actionable primary text while preserving exception/diagnostic data in expandable details. Domain confirmations and business-specific warnings remain unchanged. (PR #39)
 - Completed the structured technical-feedback migration across the remaining first-party windows, keeping actionable primary text separate from expandable diagnostics while preserving explicit validation, confirmation and domain-warning flows. (PR #40)
 - Raised CI/release coverage ratchets to **86.0% repository-wide** and **93.0% across services**, added dedicated floors for Disk Analyzer, Duplicate Finder, Process Manager and WiFi, and raised the Process/config/infrastructure aggregate floor to **88.5%**. (PR #41)
+- Raised the repository-wide CI/release branch-coverage ratchet to **92.5%** and expanded presentation non-regression floors to 13 first-party windows while keeping the service-layer floor at **93.0%**. (PR #42)
 
 ### Fixed
 
@@ -120,6 +122,7 @@ The project has not published a tagged release for the work below yet, so the cu
 - Expanded the suite to **545 tests** for structured feedback behavior, raising repository-wide branch coverage to **84.7%** while preserving **91.5%** service-layer coverage. Archive, Config and Process Manager windows now measure **70.2%**, **85.0%** and **74.6%** respectively, and the shared feedback helper measures **80.0%**. (PR #39)
 - Completed the structured-feedback coverage tranche at **555 tests** and **85.6% repository-wide branch coverage**, while preserving **91.5% aggregate service coverage** and validating the complete migrated window set through the frozen Windows bundle. (PR #40)
 - Expanded the suite from **555 to 578 tests**, raising repository-wide branch coverage from **85.6% to 86.4%** and aggregate service coverage from **91.5% to 93.2%**. Disk Analyzer now measures **95.0%**, Duplicate **90.5%**, Process Manager **99.3%** and WiFi **96.0%**. (PR #41)
+- Expanded the suite from **578 to 686 tests**, raising repository-wide branch coverage from **86.4% to 92.9%** while preserving **93.2% aggregate service coverage**. Presentation coverage now measures Archive **97.2%**, Config **90.7%**, Converter **86.9%**, Disk Analyzer **96.9%**, Duplicate Finder **97.4%**, Event Viewer **98.9%**, Network **91.5%**, PDF **93.1%**, Process Manager **98.0%**, Startup **95.3%**, System Report **94.7%**, Temp Cleaner **94.2%** and WiFi **95.0%**. (PR #42)
 
 ### Documentation
 
@@ -137,7 +140,8 @@ The project has not published a tagged release for the work below yet, so the cu
 - Documented the first structured-feedback tranche, its presentation-layer boundary, troubleshooting flow, exact coverage/test metrics and the remaining incremental migration roadmap. (PR #39)
 - Updated the first-party documentation to reflect the completed structured-feedback migration rather than the earlier partial rollout. (PR #40)
 - Rebuilt README coverage/status sections around the **578-test / 86.4% global / 93.2% service** baseline, restored the regression-tested plugin example, synchronized architecture/usage guidance and redirected the active coverage roadmap toward lower-covered presentation modules. (PR #41)
+- Synchronized README, architecture, usage and roadmap guidance with the **686-test / 92.9% global / 93.2% service** presentation-hardened baseline and the **92.5%** repository coverage ratchet. (PR #42)
 
 ### Development cycle covered
 
-This Unreleased section consolidates the major merged hardening/refactoring work from **PR #2 through PR #41** during the August 2026 development cycle. PR #1 was intentionally not merged and was superseded by the later Temp Cleaner work in PRs #21 and #26.
+This Unreleased section consolidates the major merged hardening/refactoring work from **PR #2 through PR #42** during the August 2026 development cycle. PR #1 was intentionally not merged and was superseded by the later Temp Cleaner work in PRs #21 and #26.
