@@ -23,15 +23,28 @@ def make_device(ip="192.168.1.21", kind=DeviceKind.CAMERA):
             risk=RiskLevel.MEDIUM,
             risk_reasons=("RTSP expuesto",),
         )
+    last_octet = int(ip.split(".")[-1])
     return NetworkIntelligenceDevice(
-        host=DiscoveredHost(ip=ip, hostname="device.local", mac="AA:BB:CC:DD:EE:FF"),
+        host=DiscoveredHost(
+            ip=ip,
+            hostname="device.local",
+            mac=f"AA:BB:CC:DD:EE:{last_octet:02X}",
+        ),
         kind=kind,
         open_ports=(554,) if kind == DeviceKind.CAMERA else (3389,),
         services=("RTSP",) if kind == DeviceKind.CAMERA else ("RDP",),
         evidence=("classified",),
         risk=RiskLevel.MEDIUM if kind == DeviceKind.CAMERA else RiskLevel.LOW,
         camera=camera,
+        vendor="Reolink" if kind == DeviceKind.CAMERA else "Unknown",
     )
+
+
+def row_for_ip(tool, ip):
+    for row in range(tool.table.rowCount()):
+        if tool.table.item(row, 0).text() == ip:
+            return row
+    raise AssertionError(f"IP {ip} not found")
 
 
 def test_default_scope_uses_interface_and_caps_large_network(monkeypatch):
@@ -53,19 +66,23 @@ def test_default_scope_falls_back(monkeypatch):
 
 
 @pytest.fixture
-def tool(qtbot, monkeypatch):
+def tool(qtbot, monkeypatch, tmp_path):
     monkeypatch.setattr(window, "_default_scope", lambda: "192.168.1.0/24")
+    monkeypatch.setattr(window, "NETWORK_INTELLIGENCE_DB", tmp_path / "network.sqlite3")
     instance = window.Tool()
     qtbot.addWidget(instance)
     return instance
 
 
-def test_initial_state(tool):
+def test_initial_state_has_inventory_score_and_timeline(tool):
     assert tool.name == "Network Intelligence"
     assert tool.scope_input.text() == "192.168.1.0/24"
     assert not tool.stop_button.isEnabled()
     assert not tool.camera_button.isEnabled()
-    assert tool.table.columnCount() == 6
+    assert not tool.device_audit_button.isEnabled()
+    assert tool.table.columnCount() == 9
+    assert tool.timeline_table.columnCount() == 4
+    assert "100/100" in tool.score_label.text()
 
 
 def test_start_scan_rejects_public_scope(tool, monkeypatch):
@@ -94,35 +111,39 @@ def test_start_scan_uses_managed_worker(tool, monkeypatch):
     assert tool.stop_button.isEnabled()
 
 
-def test_progress_upserts_and_sorts_devices(tool):
+def test_progress_persists_assets_and_sorts_transient_devices(tool):
     second = make_device("192.168.1.44", DeviceKind.PC)
     first = make_device("192.168.1.21", DeviceKind.CAMERA)
     tool._handle_progress({"message": "working", "device": second})
     tool._handle_progress({"device": first})
     assert tool.status_label.text() == "working"
     assert [item.host.ip for item in tool.devices] == ["192.168.1.21", "192.168.1.44"]
-    assert tool.table.item(0, 3).text() == "Camera"
+    assert {asset.ip for asset in tool.assets} == {"192.168.1.21", "192.168.1.44"}
 
 
-def test_selection_enables_camera_action_only_for_camera(tool):
+def test_selection_builds_device_profile_and_camera_action(tool):
     camera = make_device("192.168.1.21", DeviceKind.CAMERA)
     pc = make_device("192.168.1.44", DeviceKind.PC)
     tool._scan_finished([camera, pc])
 
-    tool.table.selectRow(0)
+    tool.table.selectRow(row_for_ip(tool, "192.168.1.21"))
     tool._selection_changed()
     assert tool.camera_button.isEnabled()
-    assert "Camera evidence" in tool.detail_area.toPlainText()
+    assert tool.device_audit_button.isEnabled()
+    profile = tool.detail_area.toPlainText()
+    assert "First seen" in profile
+    assert "Classification evidence" in profile
 
-    tool.table.selectRow(1)
+    tool.table.selectRow(row_for_ip(tool, "192.168.1.44"))
     tool._selection_changed()
     assert not tool.camera_button.isEnabled()
+    assert tool.device_audit_button.isEnabled()
 
 
 def test_open_selected_camera_sets_single_host_scope_and_starts(tool, monkeypatch):
     camera = make_device()
     tool._scan_finished([camera])
-    tool.table.selectRow(0)
+    tool.table.selectRow(row_for_ip(tool, camera.host.ip))
     tool._selection_changed()
 
     opened = []
@@ -156,11 +177,37 @@ def test_open_selected_camera_sets_single_host_scope_and_starts(tool, monkeypatc
     assert opened[0] in tool._camera_windows
 
 
-def test_finished_cancelled_failed_and_worker_terminal_states(tool, monkeypatch):
+def test_open_device_auditor_uses_persisted_asset_without_rescan(tool, monkeypatch):
+    pc = make_device("192.168.1.44", DeviceKind.PC)
+    tool._scan_finished([pc])
+    tool.table.selectRow(row_for_ip(tool, pc.host.ip))
+    opened = []
+
+    class FakeDialog:
+        def __init__(self, asset, parent=None):
+            self.asset = asset
+            self.parent = parent
+            self.shown = False
+            opened.append(self)
+
+        def show(self):
+            self.shown = True
+
+    monkeypatch.setattr(window, "DeviceAuditorDialog", FakeDialog)
+    tool.open_selected_device_auditor()
+    assert opened[0].asset.ip == "192.168.1.44"
+    assert opened[0].shown is True
+
+
+def test_finished_populates_score_and_timeline(tool):
     device = make_device()
     tool._scan_finished([device])
     assert "Camera: 1" in tool.status_label.text()
+    assert "Devices 1" in tool.score_label.text()
+    assert tool.timeline_table.rowCount() >= 1
 
+
+def test_cancelled_failed_and_worker_terminal_states(tool, monkeypatch):
     tool._scan_cancelled()
     assert "cancelado" in tool.status_label.text()
 
