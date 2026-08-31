@@ -130,9 +130,7 @@ def classify_device(
             evidence.append("RTSP :554 accesible en la LAN.")
             risk = RiskLevel.MEDIUM
         kind = DeviceKind.CAMERA
-    elif ports & PRINTER_PORTS or _hostname_contains(
-        host.hostname, PRINTER_HOSTNAME_HINTS
-    ):
+    elif ports & PRINTER_PORTS or _hostname_contains(host.hostname, PRINTER_HOSTNAME_HINTS):
         kind = DeviceKind.PRINTER
         evidence.append("Servicios o hostname compatibles con impresora.")
         if 515 in ports or 9100 in ports:
@@ -157,13 +155,9 @@ def classify_device(
         evidence.append("Servicios interactivos/SMB compatibles con estación o servidor.")
     else:
         kind = DeviceKind.UNKNOWN
-        evidence.append(
-            "No hay señales suficientes para clasificar el dispositivo con confianza."
-        )
+        evidence.append("No hay señales suficientes para clasificar el dispositivo con confianza.")
 
-    services = tuple(
-        INTELLIGENCE_PORTS[port] for port in open_ports if port in INTELLIGENCE_PORTS
-    )
+    services = tuple(INTELLIGENCE_PORTS[port] for port in open_ports if port in INTELLIGENCE_PORTS)
     return NetworkIntelligenceDevice(
         host=host,
         kind=kind,
@@ -226,9 +220,7 @@ def analyze_hosts(
     onvif_by_ip = {match.ip: match for match in onvif_matches}
 
     candidates = [
-        host
-        for host in hosts
-        if _is_local_ip(host.ip) and ipaddress.ip_address(host.ip) in network
+        host for host in hosts if _is_local_ip(host.ip) and ipaddress.ip_address(host.ip) in network
     ]
     workers = max(1, min(max_workers, len(candidates) or 1))
     pending = {}
