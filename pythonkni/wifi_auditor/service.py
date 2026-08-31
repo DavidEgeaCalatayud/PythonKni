@@ -3,6 +3,7 @@ from __future__ import annotations
 import hashlib
 import json
 import os
+import shutil
 import subprocess
 import tempfile
 import threading
@@ -14,16 +15,32 @@ from pathlib import Path
 
 from pythonkni.core.tasks import WorkerCancelled
 
-from .models import AccessPoint, AuditFinding, AuditReport
+from .models import (
+    AccessPoint,
+    AuditFinding,
+    AuditPlanItem,
+    AuditReport,
+    CaptureInspection,
+)
 
 NETSH_TIMEOUT_SECONDS = 12.0
-REPORT_SCHEMA_VERSION = 1
+TSHARK_TIMEOUT_SECONDS = 20.0
+REPORT_SCHEMA_VERSION = 2
 LIMITATIONS = (
     "El inventario usa la enumeración WiFi disponible en Windows y no activa modo monitor.",
     "El informe evalúa configuración visible; no intenta obtener ni validar credenciales.",
     "No se realiza sondeo WPS activo; WPS solo puede revisarse con información pasiva disponible.",
     "Las inconsistencias de SSID son indicadores para revisión manual, no una atribución de rogue AP.",
+    "El análisis de capturas es exclusivamente offline y no extrae material para recuperación de contraseñas.",
 )
+
+_CAPTURE_MAGICS = {
+    b"\xd4\xc3\xb2\xa1": "pcap",
+    b"\xa1\xb2\xc3\xd4": "pcap",
+    b"\x4d\x3c\xb2\xa1": "pcap",
+    b"\xa1\xb2\x3c\x4d": "pcap",
+    b"\x0a\x0d\x0d\x0a": "pcapng",
+}
 
 
 def _check_cancel(cancel_event: threading.Event | None) -> None:
@@ -91,7 +108,8 @@ def parse_networks(output: str) -> list[AccessPoint]:
                 channel=channel if isinstance(channel, int) else None,
                 radio_type=str(current.get("radio") or ""),
                 band=_band(
-                    channel if isinstance(channel, int) else None, str(current.get("band") or "")
+                    channel if isinstance(channel, int) else None,
+                    str(current.get("band") or ""),
                 ),
                 network_type=str(current.get("network_type") or ""),
             )
@@ -113,8 +131,12 @@ def parse_networks(output: str) -> list[AccessPoint]:
             network_type = value
         elif label in {"authentication", "autenticacion"}:
             auth = value
+            if current is not None:
+                current["authentication"] = value
         elif label in {"encryption", "cifrado"}:
             encryption = value
+            if current is not None:
+                current["encryption"] = value
         elif label.startswith("bssid "):
             flush()
             current = {
@@ -147,7 +169,7 @@ def scan_access_points(cancel_event: threading.Event | None = None) -> list[Acce
 def _security_kind(point: AccessPoint) -> str:
     auth = _normalize(point.authentication)
     encryption = _normalize(point.encryption)
-    if "wep" in auth or "wep" in encryption:
+    if "wep" in auth or "wep" in encryption or "tkip" in encryption:
         return "legacy"
     if "wpa3" in auth:
         return "modern"
@@ -235,11 +257,103 @@ def analyze_access_points(points: list[AccessPoint]) -> tuple[int, list[AuditFin
     return max(0, 100 - min(100, sum(item.penalty for item in findings))), findings
 
 
+def recommend_audit_plan(points: list[AccessPoint]) -> list[AuditPlanItem]:
+    items: list[AuditPlanItem] = []
+    kinds = [_security_kind(point) for point in points]
+    by_ssid: dict[str, set[str]] = defaultdict(set)
+    for point, kind in zip(points, kinds):
+        by_ssid[point.ssid].add(kind)
+
+    if not points:
+        items.append(
+            AuditPlanItem(
+                100,
+                "adapter-visibility-review",
+                "Comprobar visibilidad del adaptador",
+                "Windows no ha expuesto BSSID en el snapshot actual.",
+                "Revise estado del adaptador, permisos y ubicación antes de repetir el inventario.",
+            )
+        )
+    if any(kind in {"open", "legacy"} for kind in kinds):
+        items.append(
+            AuditPlanItem(
+                100,
+                "security-policy-review",
+                "Revisar política de cifrado",
+                "Hay redes abiertas o configuraciones WiFi heredadas visibles.",
+                "Priorice migración a WPA2-AES/WPA3 y confirme que las redes abiertas sean intencionadas.",
+            )
+        )
+    if any(
+        len({kind for kind in ssid_kinds if kind != "unknown"}) > 1
+        for ssid_kinds in by_ssid.values()
+    ):
+        items.append(
+            AuditPlanItem(
+                90,
+                "ssid-consistency-review",
+                "Validar consistencia de SSID/BSSID",
+                "Un mismo SSID anuncia políticas de seguridad diferentes.",
+                "Compare inventario autorizado de BSSID, ubicación y configuración antes de atribuir un rogue AP.",
+            )
+        )
+    if any(kind == "unknown" for kind in kinds):
+        items.append(
+            AuditPlanItem(
+                75,
+                "capability-review",
+                "Completar capacidades no identificadas",
+                "Windows no ha expuesto suficiente información de seguridad para todos los BSSID.",
+                "Contraste la configuración del controlador/AP y documente autenticación y cifrado esperados.",
+            )
+        )
+
+    channels = Counter((point.band, point.channel) for point in points if point.channel is not None)
+    if any(count >= 4 for count in channels.values()):
+        items.append(
+            AuditPlanItem(
+                70,
+                "channel-planning-review",
+                "Revisar planificación RF",
+                "Existe al menos un canal con alta densidad visible de BSSID.",
+                "Revise canal, ancho y distribución de AP para reducir interferencia co-canal.",
+            )
+        )
+
+    if points:
+        items.append(
+            AuditPlanItem(
+                50,
+                "offline-capture-review",
+                "Analizar evidencia de captura offline",
+                "Una captura PCAP/PCAPNG autorizada puede aportar contexto adicional sin interactuar con la red.",
+                "Importe una captura existente para identificar formato, integridad y presencia de tramas EAPOL/RSN.",
+            )
+        )
+        items.append(
+            AuditPlanItem(
+                20,
+                "evidence-baseline",
+                "Conservar baseline verificable",
+                "El snapshot actual puede servir como referencia para comparaciones posteriores.",
+                "Exporte el informe JSON y conserve su SHA-256 junto con la fecha y el alcance autorizado.",
+            )
+        )
+
+    best: dict[str, AuditPlanItem] = {}
+    for item in items:
+        previous = best.get(item.code)
+        if previous is None or item.priority > previous.priority:
+            best[item.code] = item
+    return sorted(best.values(), key=lambda item: (-item.priority, item.code))
+
+
 def _payload(
     generated_at: str,
     score: int,
     points: list[AccessPoint],
     findings: list[AuditFinding],
+    plan: list[AuditPlanItem],
 ) -> dict[str, object]:
     return {
         "schema_version": REPORT_SCHEMA_VERSION,
@@ -247,6 +361,7 @@ def _payload(
         "score": score,
         "access_points": [asdict(point) for point in points],
         "findings": [asdict(item) for item in findings],
+        "plan": [asdict(item) for item in plan],
         "limitations": list(LIMITATIONS),
     }
 
@@ -264,7 +379,8 @@ def _digest(payload: dict[str, object]) -> str:
 def build_report(points: list[AccessPoint], generated_at: str | None = None) -> AuditReport:
     timestamp = generated_at or datetime.now(timezone.utc).isoformat()
     score, findings = analyze_access_points(points)
-    payload = _payload(timestamp, score, points, findings)
+    plan = recommend_audit_plan(points)
+    payload = _payload(timestamp, score, points, findings, plan)
     return AuditReport(
         timestamp,
         score,
@@ -272,6 +388,7 @@ def build_report(points: list[AccessPoint], generated_at: str | None = None) -> 
         tuple(findings),
         LIMITATIONS,
         _digest(payload),
+        tuple(plan),
     )
 
 
@@ -285,6 +402,7 @@ def report_to_dict(report: AuditReport) -> dict[str, object]:
         report.score,
         list(report.access_points),
         list(report.findings),
+        list(report.plan),
     )
     data["evidence_sha256"] = report.evidence_sha256
     return data
@@ -334,3 +452,84 @@ def verify_report_data(data: dict[str, object]) -> bool:
 def verify_report_file(path: str | Path) -> bool:
     data = json.loads(Path(path).read_text(encoding="utf-8"))
     return isinstance(data, dict) and verify_report_data(data)
+
+
+def _capture_format(header: bytes) -> str | None:
+    return _CAPTURE_MAGICS.get(header[:4])
+
+
+def _sha256_file(path: Path, cancel_event: threading.Event | None = None) -> str:
+    digest = hashlib.sha256()
+    with path.open("rb") as handle:
+        while True:
+            _check_cancel(cancel_event)
+            chunk = handle.read(1024 * 1024)
+            if not chunk:
+                break
+            digest.update(chunk)
+    _check_cancel(cancel_event)
+    return digest.hexdigest()
+
+
+def _count_tshark_frames(path: Path, display_filter: str) -> int | None:
+    if shutil.which("tshark") is None:
+        return None
+    try:
+        completed = subprocess.run(
+            [
+                "tshark",
+                "-r",
+                str(path),
+                "-Y",
+                display_filter,
+                "-T",
+                "fields",
+                "-e",
+                "frame.number",
+            ],
+            capture_output=True,
+            text=True,
+            encoding="utf-8",
+            errors="replace",
+            check=True,
+            timeout=TSHARK_TIMEOUT_SECONDS,
+        )
+    except (OSError, subprocess.SubprocessError):
+        return None
+    return sum(1 for line in completed.stdout.splitlines() if line.strip())
+
+
+def inspect_capture(
+    path: str | Path,
+    cancel_event: threading.Event | None = None,
+) -> CaptureInspection:
+    _check_cancel(cancel_event)
+    capture = Path(path)
+    if not capture.is_file():
+        raise FileNotFoundError(capture)
+
+    with capture.open("rb") as handle:
+        header = handle.read(4)
+    capture_format = _capture_format(header)
+    if capture_format is None:
+        raise ValueError("El archivo no tiene una cabecera PCAP/PCAPNG reconocida.")
+
+    sha256 = _sha256_file(capture, cancel_event)
+    _check_cancel(cancel_event)
+    eapol_frames = _count_tshark_frames(capture, "eapol")
+    _check_cancel(cancel_event)
+    rsn_frames = _count_tshark_frames(capture, "wlan.rsn")
+    analyzer = "tshark" if eapol_frames is not None or rsn_frames is not None else "builtin"
+    return CaptureInspection(
+        str(capture),
+        capture_format,
+        capture.stat().st_size,
+        sha256,
+        eapol_frames,
+        rsn_frames,
+        analyzer,
+    )
+
+
+def capture_inspection_to_dict(inspection: CaptureInspection) -> dict[str, object]:
+    return asdict(inspection)
