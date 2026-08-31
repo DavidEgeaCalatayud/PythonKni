@@ -29,6 +29,7 @@ from .inventory import InventoryStore
 from .models import AssetRecord, DeviceKind, NetworkIntelligenceDevice
 from .score import calculate_security_score
 from .service import analyze_hosts
+from .topology_view import NetworkTopologyView
 
 
 def _default_scope() -> str:
@@ -108,6 +109,31 @@ def _run_network_intelligence(worker: Worker, scope: str):
 
 def _format_time(value) -> str:
     return value.astimezone().strftime("%d/%m/%Y %H:%M:%S")
+
+
+def _asset_profile_text(asset: AssetRecord) -> str:
+    lines = [
+        asset.ip,
+        asset.kind.value,
+        "",
+        f"Hostname      {asset.hostname}",
+        f"MAC           {asset.mac}",
+        f"Vendor        {asset.vendor}",
+        f"First seen    {_format_time(asset.first_seen)}",
+        f"Last seen     {_format_time(asset.last_seen)}",
+        f"Last change   {_format_time(asset.last_change)}",
+        f"Status        {'Online' if asset.is_online else 'Offline'}",
+        "",
+        "Services",
+    ]
+    if asset.services:
+        for port, service in zip(asset.open_ports, asset.services):
+            lines.append(f"✓ {service:<14} {port}")
+    else:
+        lines.append("No known services detected")
+    lines.extend(["", "Risk", asset.risk.value, "", "Classification evidence"])
+    lines.extend(f"• {item}" for item in asset.evidence)
+    return "\n".join(lines)
 
 
 class Tool(BaseTool):
@@ -207,6 +233,23 @@ class Tool(BaseTool):
         action_row.addStretch(1)
         inventory_layout.addLayout(action_row)
         self.tabs.addTab(inventory_tab, "Asset Inventory")
+
+        topology_tab = QWidget()
+        topology_layout = QVBoxLayout(topology_tab)
+        self.topology_note = QLabel()
+        self.topology_note.setWordWrap(True)
+        topology_layout.addWidget(self.topology_note)
+        self.topology_view = NetworkTopologyView()
+        self.topology_view.asset_selected.connect(self._topology_asset_selected)
+        topology_layout.addWidget(self.topology_view, 3)
+        self.topology_detail = QTextEdit()
+        self.topology_detail.setReadOnly(True)
+        self.topology_detail.setMaximumHeight(190)
+        self.topology_detail.setPlaceholderText(
+            "Pulsa un activo del mapa para ver su Device Profile."
+        )
+        topology_layout.addWidget(self.topology_detail, 1)
+        self.tabs.addTab(topology_tab, "Network Topology")
 
         timeline_tab = QWidget()
         timeline_layout = QVBoxLayout(timeline_tab)
@@ -349,6 +392,13 @@ class Tool(BaseTool):
             for column, value in enumerate(values):
                 self.timeline_table.setItem(row, column, QTableWidgetItem(str(value)))
 
+        self.topology_view.set_assets(self.assets)
+        if self.topology_view.graph is not None:
+            self.topology_note.setText(
+                "Logical topology · "
+                f"{len(self.assets)} persisted asset(s). {self.topology_view.graph.note}"
+            )
+
         score = calculate_security_score(self.assets)
         self.score_label.setText(
             f"Network Security Score: {score.score}/100  ·  Devices {score.total_devices}  ·  "
@@ -357,6 +407,10 @@ class Tool(BaseTool):
         )
         self.score_findings.setPlainText("\n".join(f"• {item}" for item in score.findings))
         self._selection_changed()
+        selected_asset = self._selected_asset()
+        self.topology_detail.setPlainText(
+            _asset_profile_text(selected_asset) if selected_asset is not None else ""
+        )
 
     def _write_asset_row(self, row: int, asset: AssetRecord) -> None:
         values = (
@@ -396,30 +450,22 @@ class Tool(BaseTool):
             self.device_audit_button.setEnabled(False)
             return
 
-        lines = [
-            asset.ip,
-            asset.kind.value,
-            "",
-            f"Hostname      {asset.hostname}",
-            f"MAC           {asset.mac}",
-            f"Vendor        {asset.vendor}",
-            f"First seen    {_format_time(asset.first_seen)}",
-            f"Last seen     {_format_time(asset.last_seen)}",
-            f"Last change   {_format_time(asset.last_change)}",
-            f"Status        {'Online' if asset.is_online else 'Offline'}",
-            "",
-            "Services",
-        ]
-        if asset.services:
-            for port, service in zip(asset.open_ports, asset.services):
-                lines.append(f"✓ {service:<14} {port}")
-        else:
-            lines.append("No known services detected")
-        lines.extend(["", "Risk", asset.risk.value, "", "Classification evidence"])
-        lines.extend(f"• {item}" for item in asset.evidence)
-        self.detail_area.setPlainText("\n".join(lines))
+        self.detail_area.setPlainText(_asset_profile_text(asset))
         self.device_audit_button.setEnabled(True)
         self.camera_button.setEnabled(asset.kind == DeviceKind.CAMERA and asset.is_online)
+
+    def _topology_asset_selected(self, asset_id: str) -> None:
+        asset = next((item for item in self.assets if item.asset_id == asset_id), None)
+        if asset is None:
+            self.topology_detail.clear()
+            return
+        self.topology_detail.setPlainText(_asset_profile_text(asset))
+        for row in range(self.table.rowCount()):
+            item = self.table.item(row, 0)
+            if item is not None and item.data(Qt.UserRole) == asset_id:
+                self.table.selectRow(row)
+                self.table.scrollToItem(item)
+                break
 
     def open_selected_device_auditor(self) -> None:
         asset = self._selected_asset()
