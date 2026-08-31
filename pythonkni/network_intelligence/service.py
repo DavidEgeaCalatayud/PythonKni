@@ -77,11 +77,18 @@ def probe_intelligence_ports(
     *,
     timeout: float = INTELLIGENCE_PORT_TIMEOUT_SECONDS,
     probe_func=None,
+    stop_event: threading.Event | None = None,
 ) -> tuple[int, ...]:
     if not _is_local_ip(ip):
         raise ValueError("Network Intelligence solo admite direcciones IP locales.")
     probe_func = probe_func or _probe_port
-    open_ports = [port for port in INTELLIGENCE_PORTS if probe_func(ip, port, timeout)]
+    stop_event = stop_event or threading.Event()
+    open_ports = []
+    for port in INTELLIGENCE_PORTS:
+        if stop_event.is_set():
+            break
+        if probe_func(ip, port, timeout):
+            open_ports.append(port)
     return tuple(sorted(open_ports))
 
 
@@ -181,7 +188,11 @@ def inspect_host(
     if not _is_local_ip(host.ip):
         return None
 
-    open_ports = probe_intelligence_ports(host.ip, probe_func=port_probe_func)
+    open_ports = probe_intelligence_ports(
+        host.ip,
+        probe_func=port_probe_func,
+        stop_event=stop_event,
+    )
     if stop_event.is_set():
         return None
 
