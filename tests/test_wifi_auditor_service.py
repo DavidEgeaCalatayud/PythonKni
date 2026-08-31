@@ -8,7 +8,6 @@ import pythonkni.wifi_auditor.service as service
 from pythonkni.core.tasks import WorkerCancelled
 from pythonkni.wifi_auditor.models import AccessPoint
 
-
 ENGLISH_SCAN = """
 SSID 1 : Office
     Network type            : Infrastructure
@@ -45,7 +44,9 @@ SSID 1 : Casa
 
 
 def _ap(ssid="Office", auth="WPA2-Personal", encryption="CCMP", channel=36, bssid="aa"):
-    return AccessPoint(ssid, bssid, auth, encryption, 80, channel, "802.11ax", "5 GHz", "Infrastructure")
+    return AccessPoint(
+        ssid, bssid, auth, encryption, 80, channel, "802.11ax", "5 GHz", "Infrastructure"
+    )
 
 
 def test_parse_networks_reads_multiple_bssid_and_security():

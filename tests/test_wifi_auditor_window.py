@@ -197,7 +197,9 @@ def test_export_success_and_failure(qtbot, monkeypatch):
     assert "correctamente" in info[-1][2].lower()
 
     failure = OSError("disk full")
-    monkeypatch.setattr(window, "export_report", lambda path, report: (_ for _ in ()).throw(failure))
+    monkeypatch.setattr(
+        window, "export_report", lambda path, report: (_ for _ in ()).throw(failure)
+    )
     tool.export_current_report()
     assert errors[-1][1]["error"] is failure
 

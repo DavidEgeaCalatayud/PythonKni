@@ -85,10 +85,14 @@ def parse_networks(output: str) -> list[AccessPoint]:
                 bssid=str(current.get("bssid") or "").lower(),
                 authentication=str(current.get("authentication") or "Unknown"),
                 encryption=str(current.get("encryption") or "Unknown"),
-                signal_percent=current.get("signal") if isinstance(current.get("signal"), int) else None,
+                signal_percent=current.get("signal")
+                if isinstance(current.get("signal"), int)
+                else None,
                 channel=channel if isinstance(channel, int) else None,
                 radio_type=str(current.get("radio") or ""),
-                band=_band(channel if isinstance(channel, int) else None, str(current.get("band") or "")),
+                band=_band(
+                    channel if isinstance(channel, int) else None, str(current.get("band") or "")
+                ),
                 network_type=str(current.get("network_type") or ""),
             )
         )
@@ -289,12 +293,15 @@ def report_to_dict(report: AuditReport) -> dict[str, object]:
 def export_report(path: str | Path, report: AuditReport) -> Path:
     destination = Path(path)
     destination.parent.mkdir(parents=True, exist_ok=True)
-    data = json.dumps(
-        report_to_dict(report),
-        ensure_ascii=False,
-        indent=2,
-        sort_keys=True,
-    ) + "\n"
+    data = (
+        json.dumps(
+            report_to_dict(report),
+            ensure_ascii=False,
+            indent=2,
+            sort_keys=True,
+        )
+        + "\n"
+    )
     descriptor, temp_name = tempfile.mkstemp(
         prefix=f".{destination.name}.",
         suffix=".tmp",

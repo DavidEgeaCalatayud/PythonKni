@@ -1,5 +1,4 @@
 import os
-from pathlib import Path
 
 import pytest
 
@@ -50,7 +49,9 @@ def test_export_report_tolerates_cleanup_failure_and_preserves_original_exceptio
     destination = tmp_path / "audit.json"
     replace_failure = OSError("replace failed")
     monkeypatch.setattr(os, "replace", lambda *_args: (_ for _ in ()).throw(replace_failure))
-    monkeypatch.setattr(os, "unlink", lambda *_args: (_ for _ in ()).throw(OSError("cleanup failed")))
+    monkeypatch.setattr(
+        os, "unlink", lambda *_args: (_ for _ in ()).throw(OSError("cleanup failed"))
+    )
 
     with pytest.raises(OSError, match="replace failed"):
         service.export_report(destination, _report())
