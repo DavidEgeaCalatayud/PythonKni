@@ -30,6 +30,16 @@ jobs:
                   raise SystemExit(f"Expected text not found in {path}: {old[:100]!r}")
               p.write_text(text.replace(old, new), encoding="utf-8", newline="\n")
 
+          def replace_section(path, start_heading, end_heading, body):
+              p = Path(path)
+              text = p.read_text(encoding="utf-8")
+              start = text.find(start_heading)
+              end = text.find(end_heading, start + len(start_heading))
+              if start < 0 or end < 0:
+                  raise SystemExit(f"Section markers missing in {path}: {start_heading!r}, {end_heading!r}")
+              updated = text[:start] + body.rstrip() + "\n\n" + text[end:]
+              p.write_text(updated, encoding="utf-8", newline="\n")
+
           replace("README.md", "tests-731%20pytest", "tests-745%20pytest")
           replace("README.md", "branch%20coverage-93.1%25", "branch%20coverage-93.2%25")
           replace(
@@ -60,10 +70,16 @@ jobs:
           )
           replace("docs/architecture.md", "WiFi Auditor service            99.1%", "WiFi Auditor service            98.5%")
           replace("docs/architecture.md", "WiFi Auditor window             99.2%", "WiFi Auditor window             99.0%")
-          replace(
+          replace_section(
               "docs/architecture.md",
-              "`wifi_auditor.service` owns Windows visible-network parsing, deterministic configuration findings, scoring and SHA-256 evidence generation. `wifi_auditor.window` owns the one-click managed-worker flow, cancellation, result rendering and export dialogs. The service never imports Qt.\n\nThe live scan is intentionally limited to information Windows exposes through `netsh wlan show networks mode=bssid`; no monitor-mode or credential-validation behavior is delegated to the service. Docker support is separated from live scanning and is limited to offline verification of exported evidence. The SHA-256 field is an integrity checksum over canonical report data, not a digital signature or provenance proof.",
-              "`wifi_auditor.service` owns Windows visible-network parsing, deterministic findings/scoring, ranked defensive audit planning, offline PCAP/PCAPNG inspection and SHA-256 evidence generation. `wifi_auditor.window` owns the managed-worker flows, cancellation, result rendering, capture selection and export dialogs. The service never imports Qt.\n\nThe live scan is intentionally limited to information Windows exposes through `netsh wlan show networks mode=bssid`. Offline capture inspection validates existing files, hashes them and can optionally ask a local `tshark` executable to count EAPOL/RSN frames; it does not extract password-recovery material. Docker support is separated from live scanning and is limited to offline verification of exported report evidence. The SHA-256 field is an integrity checksum over canonical report data, not a digital signature or provenance proof.",
+              "## WiFi Auditor boundary",
+              "## Compatibility and plugin boundary",
+              """## WiFi Auditor boundary
+
+`wifi_auditor.service` owns Windows visible-network parsing, deterministic findings/scoring, ranked defensive audit planning, offline PCAP/PCAPNG inspection and SHA-256 evidence generation. `wifi_auditor.window` owns the managed-worker flows, cancellation, result rendering, capture selection and export dialogs. The service never imports Qt.
+
+The live scan is intentionally limited to information Windows exposes through `netsh wlan show networks mode=bssid`. Offline capture inspection validates existing files, hashes them and can optionally ask a local `tshark` executable to count EAPOL/RSN frames; it does not extract password-recovery material. Docker support is separated from live scanning and is limited to offline verification of exported report evidence. The SHA-256 field is an integrity checksum over canonical report data, not a digital signature or provenance proof.
+""",
           )
           replace(
               "docs/architecture.md",
@@ -71,18 +87,60 @@ jobs:
               "Other focused suites protect archive extraction safety, Temp Cleaner path identity, startup rollback, duplicate revalidation/manifests, process PID identity, CSV injection, worker lifecycle, dependency locks, structured feedback behavior and WiFi Auditor planning/offline-capture integrity contracts.",
           )
 
-          replace(
+          replace_section(
               "docs/usage.md",
-              "Press **Escanear redes visibles** to run one managed defensive pipeline: Windows visible-network inventory → SSID/BSSID normalization → band/channel/signal/security review → deterministic findings/score → exportable SHA-256 evidence. The operation supports cooperative cancellation and rejects overlapping scans.\n\nThe live scan uses `netsh wlan show networks mode=bssid`. It does not require stored WiFi passwords and does not enable monitor mode. The tool does not actively probe WPS, capture authentication exchanges, validate WiFi passwords, generate target password lists, crack PSKs or create clone/deceptive access points.\n\nExported JSON reports include the observed access points, findings, score, declared limitations and an integrity digest. Report publication uses same-directory temporary output, flush/`fsync` and `os.replace` before the destination becomes visible. The SHA-256 digest detects report changes; it is not a digital signature.",
-              "Press **Escanear redes visibles** to run one managed defensive pipeline: Windows visible-network inventory → SSID/BSSID normalization → band/channel/signal/security review → deterministic findings/score → ranked defensive audit plan → exportable SHA-256 evidence. The operation supports cooperative cancellation and rejects overlapping work.\n\nPress **Analizar captura offline** to inspect an existing authorized PCAP/PCAPNG without interacting with a live target. PythonKni records format, size and SHA-256; when a local `tshark` executable is available it also counts EAPOL and RSN frames. If `tshark` is unavailable or fails, inspection degrades to built-in metadata only. It does not extract password hashes, PMKID material, keys or credentials.\n\nThe live scan uses `netsh wlan show networks mode=bssid`. It does not require stored WiFi passwords and does not enable monitor mode. The tool does not actively probe WPS, capture authentication exchanges from live targets, validate WiFi passwords, generate target password lists, crack PSKs or create clone/deceptive access points.\n\nExported schema-v2 JSON reports include observed access points, findings, the ranked `plan[]`, score, declared limitations and an integrity digest. Report publication uses same-directory temporary output, flush/`fsync` and `os.replace` before the destination becomes visible. The SHA-256 digest detects report changes; it is not a digital signature.",
+              "## WiFi Auditor",
+              "## Disk Analyzer",
+              """## WiFi Auditor
+
+**Menu name:** `WiFi Auditor` (category `Red`)
+
+Press **Escanear redes visibles** to run one managed defensive pipeline: Windows visible-network inventory → SSID/BSSID normalization → band/channel/signal/security review → deterministic findings/score → ranked defensive audit plan → exportable SHA-256 evidence. The operation supports cooperative cancellation and rejects overlapping work.
+
+Press **Analizar captura offline** to inspect an existing authorized PCAP/PCAPNG without interacting with a live target. PythonKni records format, size and SHA-256; when a local `tshark` executable is available it also counts EAPOL and RSN frames. If `tshark` is unavailable or fails, inspection degrades to built-in metadata only. It does not extract password hashes, PMKID material, keys or credentials.
+
+The live scan uses `netsh wlan show networks mode=bssid`. It does not require stored WiFi passwords and does not enable monitor mode. The tool does not actively probe WPS, capture authentication exchanges from live targets, validate WiFi passwords, generate target password lists, crack PSKs or create clone/deceptive access points.
+
+Exported schema-v2 JSON reports include observed access points, findings, the ranked `plan[]`, score, declared limitations and an integrity digest. Report publication uses same-directory temporary output, flush/`fsync` and `os.replace` before the destination becomes visible. The SHA-256 digest detects report changes; it is not a digital signature.
+
+Offline verification:
+
+```powershell
+python scripts/verify_wifi_audit_report.py .\\wifi-audit.json
+```
+
+Docker can run the verifier without attempting to control the host wireless adapter:
+
+```powershell
+docker build -f docker/wifi-auditor/Dockerfile -t pythonkni-wifi-audit-verifier .
+docker run --rm -v \"${PWD}:/data:ro\" pythonkni-wifi-audit-verifier /data/wifi-audit.json
+```
+
+See [`wifi-auditor.md`](wifi-auditor.md) for the complete evidence format, ranked planning semantics, offline-capture behavior and scope boundaries.
+""",
           )
           replace("docs/usage.md", "suite contains **731 tests**", "suite contains **745 tests**")
           replace("docs/usage.md", "**93.1% repository-wide branch coverage**", "**93.2% repository-wide branch coverage**")
 
-          replace(
+          replace_section(
               "docs/security.md",
-              "The current feature deliberately excludes monitor mode, frame injection, active WPS probing, authentication-material capture, password-list generation, password cracking and deceptive/clone access points. An inconsistent SSID/security observation is surfaced as a manual-review indicator and is not treated as proof that a BSSID is malicious.",
-              "The current feature deliberately excludes monitor mode, frame injection, active WPS probing, live authentication-material capture, password-list generation, password cracking and deceptive/clone access points. An inconsistent SSID/security observation is surfaced as a manual-review indicator and is not treated as proof that a BSSID is malicious.\n\nWiFi Auditor can inspect an existing PCAP/PCAPNG file offline. The built-in path validates the capture header and hashes the file; an optional local `tshark` installation can count EAPOL/RSN frames. It does not extract password hashes, PMKID material, keys or credentials. Capture files remain untrusted structured input to packet parsers, so analyze only intentionally obtained evidence and use isolation where appropriate. `tshark` is an external executable outside PythonKni's Python dependency lock and SBOM.",
+              "## WiFi Auditor",
+              "# CSV exports",
+              """## WiFi Auditor
+
+WiFi Auditor performs a defensive visible-network inventory using the information Windows exposes through `netsh wlan show networks mode=bssid`. It records SSID/BSSID, radio/channel/security metadata, deterministic findings and a ranked defensive audit plan. The plan is remediation/review guidance rather than a password-recovery strategy.
+
+The current feature deliberately excludes monitor mode, frame injection, active WPS probing, live authentication-material capture, password-list generation, password cracking and deceptive/clone access points. An inconsistent SSID/security observation is surfaced as a manual-review indicator and is not treated as proof that a BSSID is malicious.
+
+WiFi Auditor can inspect an existing PCAP/PCAPNG file offline. The built-in path validates the capture header and hashes the file; an optional local `tshark` installation can count EAPOL/RSN frames. It does not extract password hashes, PMKID material, keys or credentials. Capture files remain untrusted structured input to packet parsers, so analyze only intentionally obtained evidence and use isolation where appropriate. `tshark` is an external executable outside PythonKni's Python dependency lock and SBOM.
+
+Exported audit reports use canonicalized JSON plus SHA-256 to detect payload modification. The digest is not a digital signature and does not prove origin. Report publication is atomic at the filesystem level through same-directory temporary output, flush/`fsync` and `os.replace`.
+
+Docker support is restricted to offline report verification and does not control the host wireless adapter.
+
+---
+
+""",
           )
           '@ | python -
 
