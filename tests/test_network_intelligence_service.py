@@ -155,6 +155,7 @@ def test_analyze_hosts_filters_out_of_scope_hosts_and_reports_devices():
     assert [item.ip for item in checked] == ["192.168.1.10"]
 
 
-def test_analyze_hosts_rejects_public_scope():
+@pytest.mark.parametrize("scope", ["8.8.8.0/24", "192.168.0.0/16"])
+def test_analyze_hosts_rejects_public_or_oversized_scope(scope):
     with pytest.raises(ValueError):
-        analyze_hosts("8.8.8.0/24", [])
+        analyze_hosts(scope, [])
