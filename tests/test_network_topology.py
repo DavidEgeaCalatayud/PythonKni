@@ -95,7 +95,7 @@ def test_topology_uses_synthetic_lan_when_router_is_not_classified():
     assert any(edge.target_id == "mac:AA:BB:CC:DD:EE:30" for edge in graph.edges)
 
 
-def test_topology_falls_back_to_offline_router_and_handles_invalid_ip():
+def test_topology_does_not_treat_offline_router_as_current_gateway_and_handles_invalid_ip():
     router = make_asset(
         asset_id="mac:AA:BB:CC:DD:EE:01",
         ip="not-an-ip",
@@ -104,7 +104,11 @@ def test_topology_falls_back_to_offline_router_and_handles_invalid_ip():
         online=False,
     )
     graph = build_logical_topology([router, make_asset()])
-    assert graph.gateway_node_id == router.asset_id
+
+    assert graph.gateway_node_id == "synthetic:lan"
+    router_node = next(node for node in graph.nodes if node.asset_id == router.asset_id)
+    assert router_node.is_online is False
+    assert any(edge.target_id == router.asset_id for edge in graph.edges)
 
 
 def test_topology_view_renders_and_emits_asset_selection(qtbot):
@@ -138,13 +142,14 @@ def test_topology_view_renders_and_emits_asset_selection(qtbot):
     assert "MEDIUM" in child_text
 
 
-def test_topology_view_handles_empty_inventory(qtbot):
+def test_topology_view_handles_empty_inventory_and_cleared_selection(qtbot):
     view = NetworkTopologyView()
     qtbot.addWidget(view)
     view.set_assets([])
     assert view.graph is not None
     assert view.graph.gateway_node_id == "synthetic:lan"
     assert len(view.scene().items()) >= 3
+    view._selection_changed()
 
 
 def test_network_window_topology_selection_shows_device_profile(qtbot, monkeypatch, tmp_path):
@@ -166,3 +171,13 @@ def test_network_window_topology_selection_shows_device_profile(qtbot, monkeypat
     assert "diskstation" in tool.topology_detail.toPlainText()
     assert "NAS" in tool.topology_detail.toPlainText()
     assert tool.table.currentRow() == 0
+
+
+def test_network_window_topology_selection_ignores_unknown_asset(qtbot, monkeypatch, tmp_path):
+    monkeypatch.setattr(window, "_default_scope", lambda: "192.168.1.0/24")
+    monkeypatch.setattr(window, "NETWORK_INTELLIGENCE_DB", tmp_path / "network.sqlite3")
+    tool = window.Tool()
+    qtbot.addWidget(tool)
+    tool.topology_detail.setPlainText("stale")
+    tool._topology_asset_selected("missing")
+    assert tool.topology_detail.toPlainText() == ""
