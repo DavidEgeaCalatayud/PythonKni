@@ -2,7 +2,9 @@ from __future__ import annotations
 
 import hashlib
 import json
+import os
 import subprocess
+import tempfile
 import threading
 import unicodedata
 from collections import Counter, defaultdict
@@ -19,6 +21,7 @@ REPORT_SCHEMA_VERSION = 1
 LIMITATIONS = (
     "El inventario usa la enumeración WiFi disponible en Windows y no activa modo monitor.",
     "El informe evalúa configuración visible; no intenta obtener ni validar credenciales.",
+    "No se realiza sondeo WPS activo; WPS solo puede revisarse con información pasiva disponible.",
     "Las inconsistencias de SSID son indicadores para revisión manual, no una atribución de rogue AP.",
 )
 
@@ -154,7 +157,12 @@ def _security_kind(point: AccessPoint) -> str:
 
 
 def security_rating(point: AccessPoint) -> str:
-    return {"modern": "Good", "legacy": "Review", "open": "Review", "unknown": "Unknown"}[_security_kind(point)]
+    return {
+        "modern": "Good",
+        "legacy": "Review",
+        "open": "Review",
+        "unknown": "Unknown",
+    }[_security_kind(point)]
 
 
 def analyze_access_points(points: list[AccessPoint]) -> tuple[int, list[AuditFinding]]:
@@ -164,26 +172,71 @@ def analyze_access_points(points: list[AccessPoint]) -> tuple[int, list[AuditFin
         kind = _security_kind(point)
         by_ssid[point.ssid].add(kind)
         if kind == "open":
-            findings.append(AuditFinding("high", f"Red abierta: {point.ssid}", f"{point.bssid} aparece sin autenticación protegida.", "Revise si la red abierta es intencionada y use WPA2/WPA3 cuando corresponda.", 15))
+            findings.append(
+                AuditFinding(
+                    "high",
+                    f"Red abierta: {point.ssid}",
+                    f"{point.bssid} aparece sin autenticación protegida.",
+                    "Revise si la red abierta es intencionada y use WPA2/WPA3 cuando corresponda.",
+                    15,
+                )
+            )
         elif kind == "legacy":
-            findings.append(AuditFinding("high", f"Configuración heredada: {point.ssid}", f"{point.bssid} anuncia un esquema WiFi heredado.", "Revise compatibilidad y migre a WPA2-AES o WPA3 cuando sea posible.", 10))
+            findings.append(
+                AuditFinding(
+                    "high",
+                    f"Configuración heredada: {point.ssid}",
+                    f"{point.bssid} anuncia un esquema WiFi heredado.",
+                    "Revise compatibilidad y migre a WPA2-AES o WPA3 cuando sea posible.",
+                    10,
+                )
+            )
 
     for ssid, kinds in sorted(by_ssid.items()):
         meaningful = {kind for kind in kinds if kind != "unknown"}
         if len(meaningful) > 1:
-            findings.append(AuditFinding("medium", f"Política inconsistente: {ssid}", f"El SSID aparece con perfiles de seguridad distintos: {', '.join(sorted(meaningful))}.", "Confirme que todos los BSSID pertenecen a la infraestructura esperada y aplican la misma política.", 8))
+            findings.append(
+                AuditFinding(
+                    "medium",
+                    f"Política inconsistente: {ssid}",
+                    f"El SSID aparece con perfiles de seguridad distintos: {', '.join(sorted(meaningful))}.",
+                    "Confirme que todos los BSSID pertenecen a la infraestructura esperada y aplican la misma política.",
+                    8,
+                )
+            )
 
     channels = Counter((point.band, point.channel) for point in points if point.channel is not None)
     for (band, channel), count in channels.items():
         if count >= 4:
-            findings.append(AuditFinding("medium", f"Canal concurrido: {band} canal {channel}", f"Se observan {count} BSSID en el mismo canal.", "Revise planificación de canal y ancho para reducir interferencia co-canal.", 4))
+            findings.append(
+                AuditFinding(
+                    "medium",
+                    f"Canal concurrido: {band} canal {channel}",
+                    f"Se observan {count} BSSID en el mismo canal.",
+                    "Revise planificación de canal y ancho para reducir interferencia co-canal.",
+                    4,
+                )
+            )
 
     if not points:
-        findings.append(AuditFinding("info", "Sin redes visibles", "Windows no devolvió BSSID en este snapshot.", "Compruebe el adaptador WiFi y vuelva a ejecutar el inventario.", 0))
+        findings.append(
+            AuditFinding(
+                "info",
+                "Sin redes visibles",
+                "Windows no devolvió BSSID en este snapshot.",
+                "Compruebe el adaptador WiFi y vuelva a ejecutar el inventario.",
+                0,
+            )
+        )
     return max(0, 100 - min(100, sum(item.penalty for item in findings))), findings
 
 
-def _payload(generated_at: str, score: int, points: list[AccessPoint], findings: list[AuditFinding]) -> dict[str, object]:
+def _payload(
+    generated_at: str,
+    score: int,
+    points: list[AccessPoint],
+    findings: list[AuditFinding],
+) -> dict[str, object]:
     return {
         "schema_version": REPORT_SCHEMA_VERSION,
         "generated_at": generated_at,
@@ -195,7 +248,12 @@ def _payload(generated_at: str, score: int, points: list[AccessPoint], findings:
 
 
 def _digest(payload: dict[str, object]) -> str:
-    raw = json.dumps(payload, ensure_ascii=False, sort_keys=True, separators=(",", ":")).encode("utf-8")
+    raw = json.dumps(
+        payload,
+        ensure_ascii=False,
+        sort_keys=True,
+        separators=(",", ":"),
+    ).encode("utf-8")
     return hashlib.sha256(raw).hexdigest()
 
 
@@ -203,7 +261,14 @@ def build_report(points: list[AccessPoint], generated_at: str | None = None) -> 
     timestamp = generated_at or datetime.now(timezone.utc).isoformat()
     score, findings = analyze_access_points(points)
     payload = _payload(timestamp, score, points, findings)
-    return AuditReport(timestamp, score, tuple(points), tuple(findings), LIMITATIONS, _digest(payload))
+    return AuditReport(
+        timestamp,
+        score,
+        tuple(points),
+        tuple(findings),
+        LIMITATIONS,
+        _digest(payload),
+    )
 
 
 def run_audit(cancel_event: threading.Event | None = None) -> AuditReport:
@@ -211,7 +276,12 @@ def run_audit(cancel_event: threading.Event | None = None) -> AuditReport:
 
 
 def report_to_dict(report: AuditReport) -> dict[str, object]:
-    data = _payload(report.generated_at, report.score, list(report.access_points), list(report.findings))
+    data = _payload(
+        report.generated_at,
+        report.score,
+        list(report.access_points),
+        list(report.findings),
+    )
     data["evidence_sha256"] = report.evidence_sha256
     return data
 
@@ -219,7 +289,29 @@ def report_to_dict(report: AuditReport) -> dict[str, object]:
 def export_report(path: str | Path, report: AuditReport) -> Path:
     destination = Path(path)
     destination.parent.mkdir(parents=True, exist_ok=True)
-    destination.write_text(json.dumps(report_to_dict(report), ensure_ascii=False, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+    data = json.dumps(
+        report_to_dict(report),
+        ensure_ascii=False,
+        indent=2,
+        sort_keys=True,
+    ) + "\n"
+    descriptor, temp_name = tempfile.mkstemp(
+        prefix=f".{destination.name}.",
+        suffix=".tmp",
+        dir=destination.parent,
+    )
+    try:
+        with os.fdopen(descriptor, "w", encoding="utf-8", newline="\n") as handle:
+            handle.write(data)
+            handle.flush()
+            os.fsync(handle.fileno())
+        os.replace(temp_name, destination)
+    except Exception:
+        try:
+            os.unlink(temp_name)
+        except OSError:
+            pass
+        raise
     return destination
 
 
