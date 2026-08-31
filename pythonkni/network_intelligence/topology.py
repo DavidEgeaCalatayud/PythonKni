@@ -62,8 +62,7 @@ def build_logical_topology(assets: list[AssetRecord]) -> NetworkTopology:
     online_routers = [
         asset for asset in ordered_assets if asset.is_online and asset.kind == DeviceKind.ROUTER
     ]
-    offline_routers = [asset for asset in ordered_assets if asset.kind == DeviceKind.ROUTER]
-    primary_router = online_routers[0] if online_routers else (offline_routers[0] if offline_routers else None)
+    primary_router = online_routers[0] if online_routers else None
 
     internet = TopologyNode(
         node_id="synthetic:internet",
