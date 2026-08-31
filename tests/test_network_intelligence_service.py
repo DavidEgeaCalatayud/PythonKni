@@ -294,7 +294,7 @@ def test_analyze_hosts_pre_cancelled_skips_discovery_and_work():
     assert results == []
 
 
-def test_analyze_hosts_tolerates_inspection_failure_and_none_result():
+def test_analyze_hosts_retains_discovered_hosts_when_inspection_fails_or_returns_none():
     checked = []
 
     def discovery(_network, **_kwargs):
@@ -312,7 +312,9 @@ def test_analyze_hosts_tolerates_inspection_failure_and_none_result():
         inspect_func=raising_inspect,
         on_checked=checked.append,
     )
-    assert results == []
+    assert [item.host.ip for item in results] == ["192.168.1.10", "192.168.1.11"]
+    assert all(item.kind == DeviceKind.UNKNOWN for item in results)
+    assert all("se conserva como Unknown" in item.evidence[0] for item in results)
     assert sorted(item.ip for item in checked) == ["192.168.1.10", "192.168.1.11"]
 
 
