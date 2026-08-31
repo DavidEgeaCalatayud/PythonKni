@@ -308,7 +308,9 @@ def test_process_terminate_blocks_own_pid_and_unavailable_process(monkeypatch):
 
 def test_process_terminate_rejects_not_running_process(monkeypatch):
     details = process_service.ProcessDetails(99, "gone.exe", "C:/gone", "me", 10.0)
-    proc = SimpleNamespace(is_running=lambda: False, create_time=lambda: 10.0, terminate=lambda: None)
+    proc = SimpleNamespace(
+        is_running=lambda: False, create_time=lambda: 10.0, terminate=lambda: None
+    )
     monkeypatch.setattr(process_service.psutil, "Process", lambda _pid: proc)
 
     with pytest.raises(process_service.ProcessIdentityChangedError):
