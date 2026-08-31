@@ -316,9 +316,7 @@ def test_analysis_results_not_found_and_http_error(qtbot, monkeypatch):
         lambda *args: warnings.append(args),
     )
 
-    tool._analysis_result(
-        process_window.VirusTotalResult("not_found", "demo.exe", "abc")
-    )
+    tool._analysis_result(process_window.VirusTotalResult("not_found", "demo.exe", "abc"))
     assert warnings[-1][1] == "VirusTotal"
     assert "abc" in warnings[-1][2]
 
