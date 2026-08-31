@@ -41,15 +41,23 @@ COMPUTER_PORTS = frozenset({22, 3389})
 ROUTER_HOSTNAME_HINTS = ("router", "gateway", "fritz", "livebox", "homebox")
 NAS_HOSTNAME_HINTS = ("nas", "synology", "qnap", "diskstation")
 PRINTER_HOSTNAME_HINTS = ("printer", "epson", "brother", "canon", "hp-", "xerox")
-CAMERA_HOSTNAME_HINTS = ("camera", "cam", "hikvision", "reolink", "dahua", "axis")
+CAMERA_HOSTNAME_HINTS = (
+    "camera",
+    "ipcam",
+    "webcam",
+    "hikvision",
+    "reolink",
+    "dahua",
+    "axis",
+)
 
 
 def _is_local_ip(value: str) -> bool:
     try:
-        ip = ipaddress.ip_address(value)
+        parse_camera_scope(f"{value}/32")
     except ValueError:
         return False
-    return ip.is_private or ip.is_loopback or ip.is_link_local
+    return True
 
 
 def _probe_port(
