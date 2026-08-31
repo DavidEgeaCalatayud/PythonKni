@@ -65,7 +65,9 @@ class RelationshipStore:
             connection.execute("DELETE FROM network_relationships WHERE scope = ?", (scope,))
             for relationship in relationships:
                 if relationship.scope != scope:
-                    raise ValueError("Relationship scope does not match the requested snapshot scope.")
+                    raise ValueError(
+                        "Relationship scope does not match the requested snapshot scope."
+                    )
                 connection.execute(
                     """
                     INSERT INTO network_relationships(
