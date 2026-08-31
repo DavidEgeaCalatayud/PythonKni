@@ -9,6 +9,7 @@ from tools.base_tool import BaseTool
 ROOT = Path(__file__).resolve().parents[1]
 DOMAINS = {
     "archive": "archive_tool.py",
+    "camera_auditor": "camera_auditor_tool.py",
     "config": "config_window_tool.py",
     "converter": "converter_tool.py",
     "disk_analyzer": "disk_analyzer_tool.py",
