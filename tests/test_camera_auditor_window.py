@@ -219,7 +219,8 @@ def test_progress_upserts_sorts_updates_selection_and_results(tool):
     assert "1 candidatos" in tool.status_label.text()
 
 
-def test_selection_and_worker_terminal_states(tool):
+def test_selection_and_worker_terminal_states(tool, monkeypatch):
+    monkeypatch.setattr(window, "show_error", lambda *args, **kwargs: None)
     assert tool._selected_ip() is None
     assert tool._selected_device() is None
     tool._selection_changed()
