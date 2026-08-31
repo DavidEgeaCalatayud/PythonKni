@@ -18,7 +18,6 @@ from pythonkni.network_intelligence.relationship_store import RelationshipStore
 from pythonkni.network_intelligence.relationships import INTERNET_NODE_ID, lan_node_id
 from pythonkni.network_intelligence.topology import build_logical_topology
 
-
 NOW = datetime(2026, 9, 1, 0, 0, tzinfo=timezone.utc)
 SCOPE = "192.168.1.0/24"
 
