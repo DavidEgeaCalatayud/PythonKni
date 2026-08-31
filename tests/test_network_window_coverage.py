@@ -365,9 +365,7 @@ def test_history_export_cancel_and_unsupported_format(qtbot, monkeypatch, tmp_pa
         (".csv", "one,two\nthree,four\n", "one,two\nthree,four"),
     ],
 )
-def test_history_import_supported_formats(
-    qtbot, monkeypatch, tmp_path, suffix, content, expected
-):
+def test_history_import_supported_formats(qtbot, monkeypatch, tmp_path, suffix, content, expected):
     history = _history(qtbot, monkeypatch, tmp_path)
     source = tmp_path / f"source{suffix}"
     source.write_text(content, encoding="utf-8")
