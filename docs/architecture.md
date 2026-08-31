@@ -1,10 +1,10 @@
 # Architecture
 
-PythonKni is a PyQt5 desktop application with a dynamic tool loader. User-facing domains follow a layered structure so domain rules and operating-system integration remain testable without constructing Qt widgets. Build and dependency integrity are treated as part of the architecture rather than as external release chores.
+PythonKni is a PyQt5 Windows desktop application with a dynamic tool loader and an explicitly layered first-party codebase. Domain behavior and operating-system integration are kept independently testable from Qt, while dependency integrity, packaging and the frozen executable are treated as part of the architecture rather than as afterthoughts.
 
 ## Dependency rule
 
-The main application dependency direction is:
+The enforced application direction is:
 
 ```text
 pythonkni/core + pythonkni/infrastructure
@@ -18,37 +18,42 @@ pythonkni/core + pythonkni/infrastructure
          tools/*_tool.py adapter
 ```
 
-- `models.py` contains framework-independent value objects. It must not import PyQt or `tools` modules.
-- `service.py` owns domain rules, operating-system integration, persistence, parsing and transformations. It must not import PyQt, `tools.worker` or a window module.
-- `window.py` owns PyQt widgets, dialogs, user confirmation and background-thread orchestration. It delegates state-changing OS operations to services.
-- `pythonkni/infrastructure/` contains framework-independent technical building blocks shared by multiple domains.
-- `tools/*_tool.py` remains only as the dynamic-loader/legacy compatibility edge.
+Responsibilities:
 
-This keeps business and operating-system behavior independently testable and prevents presentation modules from becoming alternate service layers.
+- `models.py` contains framework-independent values and must not import PyQt or presentation helpers.
+- `service.py` owns domain rules, persistence, parsing, transformations and OS integration. It must not import PyQt or a window module.
+- `window.py` owns widgets, dialogs, confirmations and background-worker orchestration. It delegates domain/OS mutations to services.
+- `pythonkni/core/` and `pythonkni/infrastructure/` contain reusable framework-independent primitives.
+- `tools/*_tool.py` is the dynamic-loader / legacy-compatibility edge, not an alternate service layer.
+
+`tests/test_architecture_boundaries.py` enforces these rules in CI.
 
 ## Domain layout
 
-The layered domains are:
+First-party domains currently follow the same structure:
 
-- `pythonkni/archive/`
-- `pythonkni/config/`
-- `pythonkni/converter/`
-- `pythonkni/disk_analyzer/`
-- `pythonkni/duplicate/`
-- `pythonkni/event_viewer/`
-- `pythonkni/network/`
-- `pythonkni/pdf/`
-- `pythonkni/process_manager/`
-- `pythonkni/startup/`
-- `pythonkni/system_report/`
-- `pythonkni/temp_cleaner/`
-- `pythonkni/wifi/`
+```text
+pythonkni/
+├─ archive/
+├─ config/
+├─ converter/
+├─ disk_analyzer/
+├─ duplicate/
+├─ event_viewer/
+├─ network/
+├─ pdf/
+├─ process_manager/
+├─ startup/
+├─ system_report/
+├─ temp_cleaner/
+└─ wifi/
+```
 
-Each domain exposes `models.py`, `service.py` and `window.py`. A domain that currently has no custom value object still keeps an explicit framework-independent `models.py` boundary rather than moving future data structures into its UI.
+Each domain exposes `models.py`, `service.py` and `window.py`, even when a domain currently has only minimal custom model state. This keeps future data structures from drifting into presentation code.
 
 ## Core and infrastructure
 
-Framework-independent shared code lives below the domain/UI boundary:
+Framework-independent shared code sits below the domain/UI boundary:
 
 ```text
 pythonkni/
@@ -59,78 +64,77 @@ pythonkni/
    └─ paths.py
 ```
 
-`pythonkni/core/tasks.py` contains cooperative cancellation primitives.
+- `core/tasks.py` defines cooperative cancellation primitives.
+- `infrastructure/archives.py` owns archive path validation, extraction limits, staging/publication and ZIP/7Z safety rules.
+- `infrastructure/paths.py` owns application runtime/data locations.
 
-`pythonkni/infrastructure/archives.py` owns archive path validation, extraction limits, staging/publication and ZIP/7Z extraction safety. It deliberately has no Qt dependency. The Archive service consumes this module directly instead of reaching back into `tools/`.
+Legacy modules such as `tools.app_paths` and `tools.zip_7zip_utils` remain compatibility facades where required, but first-party services depend on framework-independent infrastructure directly.
 
-`pythonkni/infrastructure/paths.py` owns application runtime/data paths. The old `tools.app_paths` path remains as a small compatibility alias so legacy imports continue to resolve while first-party code uses the infrastructure path.
+Cross-cutting Qt/runtime helpers remain at the application edge:
 
-Cross-cutting Qt/runtime infrastructure remains at the application edge:
+- `tools/base_tool.py` — common tool-window lifecycle and managed-worker contract;
+- `tools/worker.py` — reusable Qt worker/signal adapter;
+- `tools/ui_feedback.py` — structured technical feedback renderer;
+- `tools/theme_manager.py` / `tools/language_manager.py` — UI runtime managers;
+- `tools/csv_utils.py` — spreadsheet-safe CSV presentation/export helper.
 
-- `tools/base_tool.py`: common Qt tool-window lifecycle contract.
-- `tools/worker.py`: reusable Qt worker and signal adapter.
-- `tools/ui_feedback.py`: structured Qt feedback renderer that separates user-facing summaries from optional expandable technical details.
-- `tools/theme_manager.py` and `tools/language_manager.py`: UI runtime managers.
-- `tools/csv_utils.py`: spreadsheet-safe CSV helper used by presentation/export paths.
-- `assets/`: static UI assets.
+## Structured technical feedback boundary
 
-## Structured UI feedback boundary
-
-Technical failures should not force raw exception text into the primary message shown to a user. `tools/ui_feedback.py` provides a presentation-only model and renderer for information, warnings and errors:
+Technical failures should not force raw exception text into normal user-facing copy:
 
 ```text
-service/worker exception
-        ↓
-window.py chooses actionable summary
-        ↓
+service / worker exception
+          ↓
+window chooses actionable summary
+          ↓
 tools/ui_feedback.py
-        ├─ primary text: concise user-facing message
-        └─ detailed text: exception type/message or diagnostics
+   ├─ primary text: concise user-facing state/action
+   └─ details: original exception type/message or diagnostics
 ```
 
-The helper is intentionally kept at the Qt/application edge rather than under `pythonkni/infrastructure`, because it depends on `QMessageBox`. Domain services remain unaware of how errors are rendered.
+The renderer stays under `tools/` because it depends on Qt. Services remain completely unaware of dialog rendering.
 
-The first migration tranche covers loader discovery failures, configuration persistence failures, Archive background-task failures and Process Manager refresh/VirusTotal worker failures. Domain confirmations, destructive-operation warnings and other business-specific dialogs keep their existing flows. Remaining windows can migrate technical failures incrementally without changing service contracts.
+The current migration covers loader/configuration failures and technical error paths across Archive, Process Manager, Converter, PDF, Network, System Report, Disk Analyzer, Startup Manager, Temp Cleaner, WiFi, Event Viewer and Duplicate Finder. Input validation, destructive confirmations and domain warnings intentionally remain domain-specific rather than being forced through a generic abstraction.
 
 ## Configuration boundary
 
-Configuration persistence is split from UI runtime application:
+Configuration persistence is split from runtime UI application:
 
 ```text
 config/models.py
       ↑
 config/service.py      # normalization + atomic persistence, no Qt/tools
       ↑
-config/runtime.py      # applies values to ThemeManager/LanguageManager
+config/runtime.py      # applies values to UI managers
       ↑
 config/window.py
 ```
 
-This keeps file-format and persistence rules testable without the UI while retaining the current global theme/language manager behavior.
+A failed persistence operation therefore does not require service code to know how themes/languages are rendered.
 
 ## Process Manager boundary
 
-Process inspection and termination are owned by `process_manager/service.py`. The window obtains a validated `ProcessDetails` snapshot, presents the required confirmation dialogs and then delegates termination back to the service.
+`process_manager/service.py` owns process inspection, identity validation and termination. The window presents the confirmation flow and delegates the final mutation.
 
-The service revalidates both PID liveness and process `create_time` immediately before calling `terminate()`. This prevents PID reuse between user confirmation and the destructive operation from targeting a different process.
+Immediately before `terminate()`, the service revalidates PID liveness and process `create_time`. This protects against targeting a different process if Windows reuses the PID after the user originally selected it.
 
-The window is explicitly prevented by architecture tests from importing `psutil`.
+Architecture tests prevent `psutil` from drifting back into `process_manager/window.py`.
 
 ## PDF boundary
 
-PDF document reading/writing is based on the maintained `pypdf` backend. `pythonkni/pdf/service.py` owns the PDF business operations and keeps the UI independent from backend implementation details.
+PDF reading/writing is based on maintained `pypdf`. `pdf/service.py` owns document operations; the window does not depend on backend implementation details.
 
-Other libraries retain narrower roles where needed: PyMuPDF supports rendering/text-oriented operations, ReportLab supports generated PDF output, and `pdf2image`/Tesseract participate in optional OCR flows. `PythonKni.spec` collects `pypdf`, not the retired `PyPDF2` package, so source and frozen-package dependency graphs remain aligned.
+PyMuPDF, ReportLab, `pdf2image` and Tesseract retain narrower rendering/report/OCR roles where needed. `PythonKni.spec` collects `pypdf`, keeping source and frozen dependency graphs aligned.
 
-## Compatibility adapters
+## Compatibility and plugin boundary
 
-The dynamic loader still discovers `tools/*_tool.py`, so the architecture changes do not alter the plugin contract or menu behavior. Migrated tool modules are thin adapters that expose the corresponding `pythonkni.<domain>.window` module.
+`main.py` discovers modules ending in `tools/*_tool.py`. A loader-compatible module exposes a valid `Tool` inheriting `BaseTool`, overrides `setup_ui()` and declares non-empty `name`, `description` and `category` metadata.
 
-Legacy compatibility modules that must continue to exist, such as `tools.app_paths` and `tools.zip_7zip_utils`, delegate to the new implementation. `tools.zip_7zip_utils` keeps only its old dialog-oriented helpers and forwards the archive security API to `pythonkni.infrastructure.archives`, including legacy monkeypatch behavior used by regression tests.
+First-party adapters are intentionally thin. This preserves the dynamic plugin/menu contract while allowing application logic to live under `pythonkni/<domain>/`.
 
 ## Dependency and supply-chain architecture
 
-PythonKni separates **dependency policy** from the exact dependency graph used for Windows builds:
+Dependency policy is separated from the exact graph used for validated Windows builds:
 
 ```text
 requirements.in      ──pip-tools──► requirements.txt
@@ -138,22 +142,19 @@ requirements-dev.in  ──pip-tools──► requirements-dev.txt
        ranges                    exact versions + SHA-256 hashes
 ```
 
-The canonical resolver/build environment is Windows with CPython 3.10.11. `pyproject.toml` declares Python `>=3.10` and the package-level dependency ranges; the `.in` files are the operational source of truth for direct runtime/development ranges, while the `.txt` files are committed reproducible locks.
+The canonical environment is Windows / CPython 3.10.11.
 
-The lock contract is deliberately strict:
+The lock contract requires:
 
-- every resolved package uses an exact `==` version;
-- every package entry carries one or more valid SHA-256 hashes;
-- runtime/development duplicates must resolve to compatible identical versions;
-- every direct dependency declared by an `.in` file must appear in its lock and satisfy the requested range;
-- installation in CI/release uses `pip --require-hashes` rather than accepting arbitrary artifacts for a pinned version;
-- `scripts/check_dependency_locks.py` and dedicated regressions enforce the structure.
+- exact `==` pins;
+- one or more valid SHA-256 hashes for each resolved entry;
+- all direct `.in` requirements to be present and satisfy their policy range;
+- compatible identical pins where runtime/development graphs overlap;
+- CI/release installation through `pip --require-hashes`.
 
-CI then performs `pip check`, audits both locks with `pip-audit`, and generates a CycloneDX JSON SBOM. A dependency advisory therefore fails the build instead of being silently recorded. During this hardening phase the development audit exposed `PYSEC-2026-3447` in `setuptools 80.10.2`; the policy and lock were moved to patched `setuptools 84.0.0` rather than suppressing the finding.
+`scripts/check_dependency_locks.py` and dedicated tests enforce this structure. CI additionally runs `pip check`, strict runtime/development `pip-audit` gates and a CycloneDX JSON SBOM generation step.
 
-GitHub Actions references are pinned to immutable commit SHAs. Dependabot checks Python dependencies and Actions weekly, but dependency changes still pass through the same lock, audit, test, build and smoke-test gates.
-
-These controls protect repeatability and artifact integrity, but they do not prove that an upstream package is benign and do not cover external executables such as Tesseract or Poppler.
+GitHub Actions references are pinned to immutable commit SHAs. Dependabot proposes Python/Action updates weekly, but every resulting change must still pass the same lock, audit, test, build and smoke gates.
 
 ## CI and release path
 
@@ -168,9 +169,11 @@ lock validation + pip check
           ↓
 runtime/dev pip-audit + CycloneDX SBOM
           ↓
-compileall + pytest + branch coverage
+compileall
           ↓
-coverage ratchets
+578 pytest tests + branch coverage
+          ↓
+repository/service/priority coverage ratchets
           ↓
 Ruff check + format
           ↓
@@ -181,79 +184,94 @@ frozen PythonKni.exe --smoke-test
 ZIP + SHA-256 + coverage.xml + SBOM + locks
 ```
 
-The release workflow repeats the same integrity gates before publishing a tag-driven GitHub Release. This avoids treating a source-only test pass as sufficient evidence that the shipped Windows bundle is valid.
+Release validation mirrors the same quality gates before publishing a tag-driven GitHub Release.
 
 ## Architecture enforcement
 
-`tests/test_architecture_boundaries.py` turns application-layer rules into CI-enforced checks. It verifies that:
+Architecture regressions verify, among other rules, that:
 
 - every declared domain has `models.py`, `service.py` and `window.py`;
 - models do not depend on Qt or `tools`;
-- services do not depend on Qt, `tools.worker` or window modules;
-- shared `pythonkni.infrastructure` modules do not depend on PyQt or `tools`;
-- Archive consumes the framework-independent archive infrastructure;
-- configuration persistence stays framework-independent;
+- services do not depend on Qt, `tools.worker` or windows;
+- `pythonkni.infrastructure` stays framework-independent;
+- archive services consume framework-independent archive infrastructure;
+- configuration persistence remains framework-independent;
 - Process Manager presentation does not import `psutil`;
-- loader-facing tool modules remain thin compatibility adapters;
-- every domain window still implements the `BaseTool` contract.
+- loader-facing modules remain thin adapters;
+- every domain window still satisfies the `BaseTool` contract.
 
-Dependency-lock behavior has its own focused regressions covering valid locks, missing hashes, malformed SHA-256 values and direct-version policy violations. Structured-feedback regressions verify severity/icon mapping, expandable diagnostics and that migrated windows keep raw technical errors out of their primary user-facing message.
+Other focused suites protect archive extraction safety, Temp Cleaner path identity, startup rollback, duplicate revalidation/manifests, process PID identity, CSV injection, worker lifecycle, dependency locks and structured feedback behavior.
 
-## Coverage ratchet
+## Coverage model
 
-The first full branch-coverage measurement of `pythonkni` + `tools` established an initial repository baseline of **58.85%** with 289 tests passing, while aggregated `pythonkni/*/service.py` coverage measured **64.7%**.
+Coverage is a non-regression guardrail, not a target to game.
 
-Behavior-driven coverage hardening then raised the repository to **84.7% branch coverage** and the aggregated service layer to **91.5%**. The current suite contains **545 tests** after the first structured-feedback regressions. The new feedback tests cover presentation behavior rather than changing service-layer metrics.
-
-Key measured service coverage:
+Historical progression:
 
 ```text
-pythonkni/archive/service.py        95.7%
-pythonkni/converter/service.py      94.5%
-pythonkni/network/service.py        96.7%
-pythonkni/pdf/service.py            95.3%
-pythonkni/startup/service.py        87.7%
-pythonkni/event_viewer/service.py   95.4%
-pythonkni/system_report/service.py  97.2%
-pythonkni/temp_cleaner/service.py   86.4%
+Initial measured baseline
+289 tests
+58.85% repository branch coverage
+64.7% aggregated services
+
+Current hardened baseline
+578 tests
+86.4% repository branch coverage
+93.2% aggregated services
 ```
 
-Priority Qt windows:
+Current service measurements:
 
 ```text
-pythonkni/startup/window.py         95.8%
-pythonkni/event_viewer/window.py    98.9%
-pythonkni/pdf/window.py             93.4%
+Archive service                 95.7%
+Config service                  96.2%
+Converter service               94.5%
+Disk Analyzer service           95.0%
+Duplicate service               90.5%
+Event Viewer service            95.4%
+Network service                 96.7%
+PDF service                     95.3%
+Process Manager service         99.3%
+Startup service                 87.7%
+System Report service           97.2%
+Temp Cleaner service            86.4%
+WiFi service                    96.0%
 ```
 
-Additional windows improved by the structured-feedback tranche:
+The latest service-hardening work intentionally focused on the previous bottom of the service layer without changing production service implementation:
 
 ```text
-pythonkni/archive/window.py         70.2%
-pythonkni/config/window.py          85.0%
-pythonkni/process_manager/window.py 74.6%
-tools/ui_feedback.py                80.0%
+Disk Analyzer       81.7% → 95.0%
+Duplicate Finder    83.6% → 90.5%
+Process Manager     84.0% → 99.3%
+WiFi                82.8% → 96.0%
 ```
 
-PythonKni uses a ratchet: CI must not fall below measured floors, while focused services/windows keep their own gates so a regression cannot be hidden by gains in another module. Floors intentionally leave a small margin below the measured results.
+These gains come from behavior/failure-path tests: unreadable/symlink disk entries, WiFi XML/timeouts/cancellation, process disappearance/PID safety/VirusTotal responses and duplicate hashing/comparison/manifests.
+
+### Enforced ratchets
 
 ```text
-repository-wide branch coverage                   >= 84.0%
-all pythonkni/*/service.py coverage                >= 91.0%
+repository-wide branch coverage                   >= 86.0%
+all pythonkni/*/service.py coverage                >= 93.0%
 Archive service coverage                           >= 95.0%
 Converter service coverage                         >= 94.0%
+Disk Analyzer service coverage                     >= 94.5%
+Duplicate service coverage                         >= 90.0%
 Network service coverage                           >= 96.0%
 PDF service coverage                               >= 95.0%
+Process Manager service coverage                   >= 99.0%
 Startup service coverage                           >= 87.5%
 Event Viewer service coverage                      >= 95.0%
 System Report service coverage                     >= 97.0%
 Temp Cleaner service coverage                      >= 86.0%
+WiFi service coverage                              >= 95.5%
 Startup window coverage                            >= 95.0%
 Event Viewer window coverage                       >= 98.0%
 PDF window coverage                                >= 93.0%
-refactored process/config/infrastructure coverage  >= 84.0%
+process/config/infrastructure aggregate             >= 88.5%
 ```
 
-Future coverage work is selective rather than target-chasing. Lower-coverage presentation modules such as Converter, Temp Cleaner, Network and System Report remain useful candidates when additional tests validate meaningful behavior.
+The floors deliberately retain a small margin below measured values while making a return to the old 81–84% service baseline impossible without a visible CI failure.
 
-Coverage is a guardrail rather than a substitute for behavioral assertions. Security, rollback, cancellation, process identity, dependency integrity, user-feedback and destructive-operation behavior continue to have dedicated regressions.
+Presentation coverage is intentionally less uniform than services. Converter and Network remain the clearest behavior-driven UI-testing candidates; improving them is preferable to adding superficial assertions across already well-protected services.
