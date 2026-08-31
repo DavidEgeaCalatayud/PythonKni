@@ -117,7 +117,10 @@ def test_cancelled_scan_keeps_previous_relationship_snapshot(qtbot, monkeypatch,
     tool._scan_cancelled()
 
     assert tool.relationship_store.list(scope=scope) == [relation]
-    assert "no se reemplaza" in tool.status_label.text()
+    status = tool.status_label.text().casefold()
+    assert "cancelado" in status
+    assert "evidencia de relaciones" in status
+    assert "escaneo incompleto" in status
 
 
 def test_relationship_persistence_failure_is_reported_without_losing_inventory(
