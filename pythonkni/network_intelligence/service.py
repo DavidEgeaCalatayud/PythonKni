@@ -9,6 +9,7 @@ from pythonkni.camera_auditor.models import CameraDevice, OnvifDiscoveryMatch, R
 from pythonkni.camera_auditor.service import (
     PROBE_TIMEOUT_SECONDS,
     discover_onvif_devices,
+    parse_camera_scope,
     probe_camera_host,
 )
 from pythonkni.network.models import DiscoveredHost
@@ -51,7 +52,11 @@ def _is_local_ip(value: str) -> bool:
     return ip.is_private or ip.is_loopback or ip.is_link_local
 
 
-def _probe_port(ip: str, port: int, timeout: float = INTELLIGENCE_PORT_TIMEOUT_SECONDS) -> bool:
+def _probe_port(
+    ip: str,
+    port: int,
+    timeout: float = INTELLIGENCE_PORT_TIMEOUT_SECONDS,
+) -> bool:
     try:
         with socket.create_connection((ip, port), timeout=timeout):
             return True
@@ -68,9 +73,7 @@ def probe_intelligence_ports(
     if not _is_local_ip(ip):
         raise ValueError("Network Intelligence solo admite direcciones IP locales.")
     probe_func = probe_func or _probe_port
-    open_ports = [
-        port for port in INTELLIGENCE_PORTS if probe_func(ip, port, timeout)
-    ]
+    open_ports = [port for port in INTELLIGENCE_PORTS if probe_func(ip, port, timeout)]
     return tuple(sorted(open_ports))
 
 
@@ -99,7 +102,11 @@ def classify_device(
     evidence: list[str] = []
     risk = RiskLevel.LOW
 
-    if camera is not None or 554 in ports or _hostname_contains(host.hostname, CAMERA_HOSTNAME_HINTS):
+    if (
+        camera is not None
+        or 554 in ports
+        or _hostname_contains(host.hostname, CAMERA_HOSTNAME_HINTS)
+    ):
         evidence.append("Señales compatibles con cámara IP (ONVIF/RTSP/vendor/hostname).")
         if camera is not None:
             evidence.extend(camera.risk_reasons)
@@ -108,7 +115,9 @@ def classify_device(
             evidence.append("RTSP :554 accesible en la LAN.")
             risk = RiskLevel.MEDIUM
         kind = DeviceKind.CAMERA
-    elif ports & PRINTER_PORTS or _hostname_contains(host.hostname, PRINTER_HOSTNAME_HINTS):
+    elif ports & PRINTER_PORTS or _hostname_contains(
+        host.hostname, PRINTER_HOSTNAME_HINTS
+    ):
         kind = DeviceKind.PRINTER
         evidence.append("Servicios o hostname compatibles con impresora.")
         if 515 in ports or 9100 in ports:
@@ -120,9 +129,8 @@ def classify_device(
         if 5000 in ports or 2049 in ports:
             risk = RiskLevel.MEDIUM
             evidence.append("Servicio NAS sin TLS o NFS accesible en la LAN.")
-    elif (
-        _hostname_contains(host.hostname, ROUTER_HOSTNAME_HINTS)
-        or (_gateway_style_address(host.ip) and 53 in ports and bool(ports & WEB_PORTS))
+    elif _hostname_contains(host.hostname, ROUTER_HOSTNAME_HINTS) or (
+        _gateway_style_address(host.ip) and 53 in ports and bool(ports & WEB_PORTS)
     ):
         kind = DeviceKind.ROUTER
         evidence.append("Hostname o combinación DNS+Web en dirección típica de gateway.")
@@ -134,9 +142,13 @@ def classify_device(
         evidence.append("Servicios interactivos/SMB compatibles con estación o servidor.")
     else:
         kind = DeviceKind.UNKNOWN
-        evidence.append("No hay señales suficientes para clasificar el dispositivo con confianza.")
+        evidence.append(
+            "No hay señales suficientes para clasificar el dispositivo con confianza."
+        )
 
-    services = tuple(INTELLIGENCE_PORTS[port] for port in open_ports if port in INTELLIGENCE_PORTS)
+    services = tuple(
+        INTELLIGENCE_PORTS[port] for port in open_ports if port in INTELLIGENCE_PORTS
+    )
     return NetworkIntelligenceDevice(
         host=host,
         kind=kind,
@@ -187,25 +199,25 @@ def analyze_hosts(
     discovery_func=discover_onvif_devices,
     inspect_func=inspect_host,
 ) -> list[NetworkIntelligenceDevice]:
-    network = ipaddress.ip_network(cidr, strict=False)
-    if not isinstance(network, ipaddress.IPv4Network):
-        raise ValueError("Network Intelligence admite actualmente redes IPv4.")
-    if not (network.is_private or network.is_loopback or network.is_link_local):
-        raise ValueError("Network Intelligence solo admite redes IPv4 locales.")
-
+    network = parse_camera_scope(cidr)
     stop_event = stop_event or threading.Event()
     onvif_matches = []
     if not stop_event.is_set():
         onvif_matches = discovery_func(network, stop_event=stop_event)
     onvif_by_ip = {match.ip: match for match in onvif_matches}
 
-    candidates = [host for host in hosts if _is_local_ip(host.ip) and ipaddress.ip_address(host.ip) in network]
+    candidates = [
+        host
+        for host in hosts
+        if _is_local_ip(host.ip) and ipaddress.ip_address(host.ip) in network
+    ]
     workers = max(1, min(max_workers, len(candidates) or 1))
     pending = {}
     results: list[NetworkIntelligenceDevice] = []
     iterator = iter(candidates)
 
     with ThreadPoolExecutor(max_workers=workers) as executor:
+
         def fill_pending():
             while not stop_event.is_set() and len(pending) < workers * 2:
                 try:
