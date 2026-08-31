@@ -299,7 +299,7 @@ def test_export_results_warns_when_empty_or_dialog_cancelled(tool, monkeypatch):
 
 
 def test_export_results_writes_json_and_csv_safely(tool, monkeypatch, tmp_path):
-    dangerous = make_device(vendor="=WEBSERVICE(\"https://example.invalid\")")
+    dangerous = make_device(vendor='=WEBSERVICE("https://example.invalid")')
     tool.devices = [dangerous]
 
     json_path = tmp_path / "audit"

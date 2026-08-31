@@ -281,7 +281,9 @@ class Tool(BaseTool):
         try:
             self.inventory.record_scan(scope, self.devices, complete=True)
         except Exception as error:
-            show_error(self, self.name, "No se pudo actualizar el inventario persistente.", error=error)
+            show_error(
+                self, self.name, "No se pudo actualizar el inventario persistente.", error=error
+            )
         self.refresh_inventory(keep_status=True)
         counts = {}
         for asset in self.assets:

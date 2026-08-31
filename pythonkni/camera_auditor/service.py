@@ -152,15 +152,15 @@ def build_ws_discovery_probe(message_id: str | None = None) -> bytes:
         'xmlns:w="http://schemas.xmlsoap.org/ws/2004/08/addressing" '
         'xmlns:d="http://schemas.xmlsoap.org/ws/2005/04/discovery" '
         'xmlns:dn="http://www.onvif.org/ver10/network/wsdl">'
-        '<e:Header>'
-        f'<w:MessageID>{message_id}</w:MessageID>'
+        "<e:Header>"
+        f"<w:MessageID>{message_id}</w:MessageID>"
         '<w:To e:mustUnderstand="true">urn:schemas-xmlsoap-org:ws:2005:04:discovery</w:To>'
         '<w:Action e:mustUnderstand="true">'
-        'http://schemas.xmlsoap.org/ws/2005/04/discovery/Probe'
-        '</w:Action>'
-        '</e:Header>'
-        '<e:Body><d:Probe><d:Types>dn:NetworkVideoTransmitter</d:Types></d:Probe></e:Body>'
-        '</e:Envelope>'
+        "http://schemas.xmlsoap.org/ws/2005/04/discovery/Probe"
+        "</w:Action>"
+        "</e:Header>"
+        "<e:Body><d:Probe><d:Types>dn:NetworkVideoTransmitter</d:Types></d:Probe></e:Body>"
+        "</e:Envelope>"
     ).encode("utf-8")
 
 
@@ -497,7 +497,9 @@ def audit_camera_exposure(
     onvif_matches = []
     if "ONVIF" in protocols and not stop_event.is_set():
         if on_progress is not None:
-            on_progress(AuditProgress("status", 0, _usable_host_count(network), "Buscando ONVIF..."))
+            on_progress(
+                AuditProgress("status", 0, _usable_host_count(network), "Buscando ONVIF...")
+            )
         onvif_matches = discovery_func(network, stop_event=stop_event)
     onvif_by_ip = {match.ip: match for match in onvif_matches}
 

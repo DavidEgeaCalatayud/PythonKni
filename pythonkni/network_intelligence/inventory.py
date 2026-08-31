@@ -379,7 +379,9 @@ class InventoryStore:
             ).fetchone()
         return self._asset_from_row(row) if row is not None else None
 
-    def list_assets(self, *, scope: str | None = None, online_only: bool = False) -> list[AssetRecord]:
+    def list_assets(
+        self, *, scope: str | None = None, online_only: bool = False
+    ) -> list[AssetRecord]:
         clauses = []
         params = []
         if scope:
