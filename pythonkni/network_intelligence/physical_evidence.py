@@ -106,10 +106,7 @@ def _normalize_evidence(value) -> tuple[str, ...]:
         raise ValueError("evidence must be a JSON array of strings.")
     if len(value) > _MAX_EVIDENCE_ITEMS:
         raise ValueError(f"evidence accepts at most {_MAX_EVIDENCE_ITEMS} entries per link.")
-    return tuple(
-        _clean_text(item, field="evidence item", allow_empty=False)
-        for item in value
-    )
+    return tuple(_clean_text(item, field="evidence item", allow_empty=False) for item in value)
 
 
 def _asset_indexes(assets: list[AssetRecord]):
@@ -149,9 +146,7 @@ def _resolve_endpoint(endpoint, *, indexes, label: str):
     resolved = {asset.asset_id: asset for _, asset in matches if asset is not None}
     missing = [kind for kind, asset in matches if asset is None]
     if missing:
-        raise ValueError(
-            f"{label} could not resolve supplied identifier(s): {', '.join(missing)}."
-        )
+        raise ValueError(f"{label} could not resolve supplied identifier(s): {', '.join(missing)}.")
     if len(resolved) != 1:
         raise ValueError(f"{label} identifiers resolve to different inventory assets.")
 
