@@ -72,9 +72,7 @@ class NetworkTopologyView(QGraphicsView):
             if edge.protocol:
                 details.append(f"Protocol: {edge.protocol}")
             if edge.source_port or edge.target_port:
-                details.append(
-                    f"Ports: {edge.source_port or '?'} -> {edge.target_port or '?'}"
-                )
+                details.append(f"Ports: {edge.source_port or '?'} -> {edge.target_port or '?'}")
             details.extend(edge.evidence)
             detail_text = "\n".join(details)
             line.setToolTip(
