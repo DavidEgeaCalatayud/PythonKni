@@ -98,7 +98,8 @@ def test_start_conversion_wires_worker_progress_result_and_finish(qtbot, monkeyp
 
 def test_start_conversion_and_batch_reject_overlapping_worker(qtbot, monkeypatch):
     tool = _tool(qtbot)
-    running = SimpleNamespace(isRunning=lambda: True)
+    running = FakeWorker(parent=tool)
+    running.running = True
     tool._worker = running
     calls = []
     monkeypatch.setattr(
@@ -113,6 +114,8 @@ def test_start_conversion_and_batch_reject_overlapping_worker(qtbot, monkeypatch
     assert len(calls) == 2
     assert all("curso" in call[2] for call in calls)
     assert tool._worker is running
+    running.running = False
+    tool._worker = None
 
 
 def test_start_batch_conversion_uses_batch_task(qtbot, monkeypatch):
@@ -201,6 +204,8 @@ def test_cancel_and_close_request_running_worker(qtbot):
     assert worker.cancel_requested
     assert tool._close_when_worker_finishes
     assert tool.task_status.text() == "Cancelando antes de cerrar..."
+    worker.running = False
+    tool._worker = None
 
 
 def test_finished_preserves_cancelled_status_and_schedules_deferred_close(qtbot, monkeypatch):
