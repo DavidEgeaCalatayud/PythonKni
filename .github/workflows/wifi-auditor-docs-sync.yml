@@ -1,0 +1,111 @@
+name: WiFi Auditor Docs Sync
+
+on:
+  push:
+    branches:
+      - feat/wifi-auditor-safe
+
+permissions:
+  contents: write
+
+jobs:
+  sync:
+    runs-on: windows-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          fetch-depth: 0
+
+      - name: Synchronize documentation
+        shell: powershell
+        run: |
+          @'
+          from pathlib import Path
+
+          def replace(path, old, new):
+              p = Path(path)
+              text = p.read_text(encoding="utf-8")
+              if old not in text:
+                  raise SystemExit(f"Expected text not found in {path}: {old[:80]!r}")
+              p.write_text(text.replace(old, new), encoding="utf-8", newline="\n")
+
+          replace("README.md", "tests-731%20pytest", "tests-745%20pytest")
+          replace("README.md", "branch%20coverage-93.1%25", "branch%20coverage-93.2%25")
+          replace(
+              "README.md",
+              "| **WiFi Auditor** | One-click defensive visible-network inventory, security/channel findings, score and SHA-256 evidence reporting |",
+              "| **WiFi Auditor** | One-click defensive inventory, ranked audit plan, offline PCAP/PCAPNG protocol metadata inspection, score and SHA-256 evidence reporting |",
+          )
+          replace("README.md", "The current behavior-driven suite contains **731 tests**.", "The current behavior-driven suite contains **745 tests**.")
+          replace("README.md", "Repository-wide                 93.1%", "Repository-wide                 93.2%")
+          replace("README.md", "WiFi Auditor service            99.1%", "WiFi Auditor service            98.5%")
+          replace("README.md", "WiFi Auditor window             99.2%", "WiFi Auditor window             99.0%")
+          replace(
+              "README.md",
+              "WiFi Auditor adds deterministic parsing/scoring, cancellation, evidence integrity and UI/export regressions while keeping offensive credential-acquisition behavior out of scope.",
+              "WiFi Auditor adds deterministic parsing/scoring, target-aware defensive planning, offline PCAP/PCAPNG inspection, cancellation, evidence integrity and UI/export regressions while keeping credential-acquisition behavior out of scope.",
+          )
+          replace(
+              "README.md",
+              "- WiFi Auditor uses Windows visible-network enumeration only: it does not enable monitor mode, actively probe WPS, capture authentication material, validate passwords, crack PSKs or create deceptive access points.",
+              "- WiFi Auditor uses Windows visible-network enumeration plus optional offline PCAP/PCAPNG inspection. It can count EAPOL/RSN frames through a locally installed `tshark`, but it does not enable monitor mode, actively probe WPS, capture authentication material from live targets, extract password-recovery material, validate passwords, crack PSKs or create deceptive access points. `tshark` remains an optional external executable outside the Python lock/SBOM.",
+          )
+
+          replace("docs/architecture.md", "686 pytest tests + branch coverage", "745 pytest tests + branch coverage")
+          replace(
+              "docs/architecture.md",
+              "Current presentation-hardened baseline\n686 tests\n92.9% repository branch coverage\n93.2% aggregated services",
+              "Current WiFi-Auditor baseline\n745 tests\n93.2% repository branch coverage\n93.6% aggregated services",
+          )
+          replace("docs/architecture.md", "WiFi service                    96.0%\n```", "WiFi service                    96.0%\nWiFi Auditor service            98.5%\n```")
+          replace("docs/architecture.md", "WiFi window                     95.0%\n```", "WiFi window                     95.0%\nWiFi Auditor window             99.0%\n```")
+          replace(
+              "docs/architecture.md",
+              "WiFi service coverage                              >= 95.5%\nArchive window coverage",
+              "WiFi service coverage                              >= 95.5%\nWiFi Auditor service coverage                      >= 98.0%\nArchive window coverage",
+          )
+          replace(
+              "docs/architecture.md",
+              "WiFi window coverage                               >= 94.5%\nprocess/config/infrastructure aggregate",
+              "WiFi window coverage                               >= 94.5%\nWiFi Auditor window coverage                       >= 98.0%\nprocess/config/infrastructure aggregate",
+          )
+          replace(
+              "docs/architecture.md",
+              "Other focused suites protect archive extraction safety, Temp Cleaner path identity, startup rollback, duplicate revalidation/manifests, process PID identity, CSV injection, worker lifecycle, dependency locks and structured feedback behavior.",
+              "Other focused suites protect archive extraction safety, Temp Cleaner path identity, startup rollback, duplicate revalidation/manifests, process PID identity, CSV injection, worker lifecycle, dependency locks, structured feedback behavior and WiFi Auditor planning/offline-capture integrity contracts.",
+          )
+
+          replace(
+              "docs/usage.md",
+              "## Disk Analyzer",
+              "## WiFi Auditor\n\n**Menu name:** `WiFi Auditor`\n\nUse **Escanear redes visibles** for a Windows-visible defensive inventory. The tool normalizes SSID/BSSID, band, channel, signal, authentication and encryption, then calculates a deterministic score, findings and a ranked defensive audit plan.\n\nUse **Analizar captura offline** to inspect an existing authorized PCAP/PCAPNG file without interacting with a live target. PythonKni records format, size and SHA-256; when a local `tshark` executable is available it can also count EAPOL and RSN frames. If `tshark` is unavailable or fails, the tool degrades to built-in metadata-only inspection. It does not extract password hashes, PMKID material, keys or credentials from the capture.\n\nBoth operations use managed workers and cooperative cancellation. Exported audit JSON uses schema version 2 and includes the ranked `plan[]` in the SHA-256-protected canonical payload. See [`wifi-auditor.md`](wifi-auditor.md) for the complete workflow and scope boundaries.\n\n## Disk Analyzer",
+          )
+          replace("docs/usage.md", "suite contains **686 tests**", "suite contains **745 tests**")
+          replace("docs/usage.md", "**92.9% repository-wide branch coverage**", "**93.2% repository-wide branch coverage**")
+          replace("docs/usage.md", "**93.2% aggregate service coverage**", "**93.6% aggregate service coverage**")
+          replace(
+              "docs/usage.md",
+              "WiFi             >= 94.5%\n```",
+              "WiFi             >= 94.5%      WiFi Auditor     >= 98.0%\n```",
+          )
+
+          replace(
+              "docs/security.md",
+              "The current feature deliberately excludes monitor mode, frame injection, active WPS probing, authentication-material capture, password-list generation, password cracking and deceptive/clone access points. An inconsistent SSID/security observation is surfaced as a manual-review indicator and is not treated as proof that a BSSID is malicious.",
+              "The current feature deliberately excludes monitor mode, frame injection, active WPS probing, live authentication-material capture, password-list generation, password cracking and deceptive/clone access points. An inconsistent SSID/security observation is surfaced as a manual-review indicator and is not treated as proof that a BSSID is malicious.\n\nWiFi Auditor can inspect an existing PCAP/PCAPNG file offline. The built-in path validates the capture header and hashes the file; an optional local `tshark` installation can count EAPOL/RSN frames. It does not extract password hashes, PMKID material, keys or credentials. Capture files remain untrusted structured input to packet parsers, so analyze only intentionally obtained evidence and use isolation where appropriate. `tshark` is an external executable outside PythonKni's Python dependency lock and SBOM.",
+          )
+          '@ | python -
+
+      - name: Commit documentation if required
+        shell: powershell
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add README.md docs/architecture.md docs/usage.md docs/security.md
+          if (git diff --cached --quiet) {
+            Write-Host "No documentation changes required."
+          } else {
+            git commit -m "Sync extended WiFi Auditor documentation"
+            git push origin HEAD:feat/wifi-auditor-safe
+          }
