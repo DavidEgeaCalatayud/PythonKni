@@ -4,8 +4,8 @@
 ![PyQt5](https://img.shields.io/badge/UI-PyQt5-41CD52)
 ![Platform](https://img.shields.io/badge/platform-Windows-blue)
 ![Build](https://img.shields.io/badge/build-PyInstaller-orange)
-![Tests](https://img.shields.io/badge/tests-578%20pytest-green)
-![Coverage](https://img.shields.io/badge/branch%20coverage-86.4%25-green)
+![Tests](https://img.shields.io/badge/tests-686%20pytest-green)
+![Coverage](https://img.shields.io/badge/branch%20coverage-92.9%25-green)
 ![Services](https://img.shields.io/badge/service%20coverage-93.2%25-green)
 ![Dependencies](https://img.shields.io/badge/dependencies-SHA--256%20locked-blueviolet)
 ![Audit](https://img.shields.io/badge/security-pip--audit-success)
@@ -285,12 +285,12 @@ See [`docs/security.md`](docs/security.md).
 
 ## Testing and coverage
 
-The current behavior-driven suite contains **578 tests**.
+The current behavior-driven suite contains **686 tests**.
 
 Measured branch coverage on the canonical Windows CI environment:
 
 ```text
-Repository-wide                 86.4%
+Repository-wide                 92.9%
 All service.py modules          93.2%
 ```
 
@@ -312,23 +312,32 @@ Temp Cleaner service            86.4%
 WiFi service                    96.0%
 ```
 
-The latest service-hardening pass deliberately targeted the weakest real services without changing their production implementation:
+Presentation coverage now has dedicated behavioral regression suites around worker lifecycle, stale/current callbacks, cancellation, dialog flows, imports/exports, confirmation paths and technical-error rendering:
 
 ```text
-Disk Analyzer       81.7% → 95.0%
-Duplicate Finder    83.6% → 90.5%
-Process Manager     84.0% → 99.3%
-WiFi                82.8% → 96.0%
+Archive window                  97.2%
+Config window                   90.7%
+Converter window                86.9%
+Disk Analyzer window            96.9%
+Duplicate Finder window         97.4%
+Event Viewer window             98.9%
+Network window                  91.5%
+PDF window                      93.1%
+Process Manager window          98.0%
+Startup window                  95.3%
+System Report window            94.7%
+Temp Cleaner window             94.2%
+WiFi window                     95.0%
 ```
 
-The added regressions cover behavior such as unreadable/symlink disk entries, malformed WiFi XML and cancellation, disappearing/reused processes and VirusTotal response paths, duplicate hash/comparison failures, collision grouping and restoration-manifest failure state.
+The presentation-hardening pass deliberately targets real orchestration contracts rather than changing production behavior just to increase coverage. Converter and Network include worker overlap/cancellation and I/O flows; Process Manager covers termination/VirusTotal orchestration; Archive, Duplicate, Disk Analyzer, Temp Cleaner, Config, WiFi and System Report cover their corresponding state, dialog and error paths.
 
 ### Coverage ratchets
 
-CI/release protect the achieved baseline rather than lowering thresholds when a regression appears:
+CI and release protect the achieved baseline rather than lowering thresholds when a regression appears:
 
 ```text
-repository-wide branch coverage                   >= 86.0%
+repository-wide branch coverage                   >= 92.5%
 all pythonkni/*/service.py coverage                >= 93.0%
 Archive service coverage                           >= 95.0%
 Converter service coverage                         >= 94.0%
@@ -342,9 +351,19 @@ Event Viewer service coverage                      >= 95.0%
 System Report service coverage                     >= 97.0%
 Temp Cleaner service coverage                      >= 86.0%
 WiFi service coverage                              >= 95.5%
-Startup window coverage                            >= 95.0%
+Archive window coverage                            >= 96.5%
+Config window coverage                             >= 90.0%
+Converter window coverage                          >= 86.0%
+Disk Analyzer window coverage                      >= 96.0%
+Duplicate Finder window coverage                   >= 97.0%
 Event Viewer window coverage                       >= 98.0%
+Network window coverage                            >= 91.0%
 PDF window coverage                                >= 93.0%
+Process Manager window coverage                    >= 97.5%
+Startup window coverage                            >= 95.0%
+System Report window coverage                      >= 94.0%
+Temp Cleaner window coverage                       >= 93.5%
+WiFi window coverage                               >= 94.5%
 process/config/infrastructure aggregate             >= 88.5%
 ```
 
@@ -359,7 +378,7 @@ python -m pip_audit -r requirements.txt --no-deps --strict --progress-spinner=of
 python -m pip_audit -r requirements-dev.txt --no-deps --strict --progress-spinner=off
 python -m compileall .
 python -m pytest --cov=pythonkni --cov=tools --cov-branch --cov-report=term-missing --cov-report=xml
-python -m coverage report --fail-under=86.0
+python -m coverage report --fail-under=92.5
 python -m coverage report --include="pythonkni/*/service.py" --fail-under=93.0
 python -m ruff check .
 python -m ruff format --check .
@@ -432,7 +451,7 @@ Business/OS logic belongs in `service.py`; Qt orchestration belongs in `window.p
 - OCR depends on local Tesseract/Poppler installation and document quality.
 - DOCX → PDF conversion is intentionally simplified and cannot reproduce every Microsoft Word layout feature.
 - Network/system capabilities depend on Windows permissions, topology, firewall policy and available OS utilities.
-- Service coverage is now consistently strong, but several presentation modules remain materially lower than the best-covered Qt windows; Converter and Network are the clearest next UI-testing targets.
+- Presentation coverage is materially stronger and now protected per window, but Converter remains the lowest measured first-party window at 86.9%; further tests should continue to protect meaningful orchestration/failure contracts rather than chase uniform percentages.
 - Localization infrastructure exists, but not every user-visible string is extracted/translated.
 - Windows code signing and installer generation remain release-engineering work.
 
@@ -442,7 +461,7 @@ Business/OS logic belongs in `service.py`; Qt orchestration belongs in `window.p
 
 ### Reliability and code quality
 
-- [ ] Continue behavior-driven coverage for lower-coverage **presentation** modules, especially Converter, Network, Archive, System Report, Process Manager and Duplicate Finder.
+- [ ] Continue behavior-driven coverage where uncovered branches represent real failure, cancellation or OS-integration contracts; avoid percentage-only tests.
 - [ ] Audit remaining long-running operations for consistent progress/cancellation semantics.
 - [ ] Migrate deprecated PyMuPDF `fitz` imports to the current `pymupdf` API where applicable and review avoidable PyInstaller collection warnings.
 - [ ] Expand static analysis beyond the current Ruff `F + I` baseline when the repository is ready for a stricter rule set/type-checking gate.

@@ -131,30 +131,13 @@ The PDF backend uses maintained **`pypdf`** for PDF reading/writing. PyMuPDF, Re
 - Optionally include page headers.
 - Enable OCR when required, with an option to OCR only pages that appear empty.
 
-### Split
+### Split, extract, reorder and merge
 
-Two modes are available:
-
-- one PDF per page;
-- custom ranges such as `1-3,5,8-10`.
-
-### Extract pages
-
-Select a source PDF and page specification to create a new PDF containing only those pages.
-
-### Reorder
-
-Load a PDF, change page order in the graphical list and save the reordered document as a new PDF.
-
-### Merge
-
-Add multiple PDFs, arrange them in the desired order and write the combined result to a new PDF.
-
-PDF operations run in the background and expose cancellation. OCR additionally requires local Tesseract/Poppler support.
+The toolkit can split a PDF per page or by ranges, extract selected pages, reorder pages and merge multiple PDFs. Operations run in the background and expose cancellation. OCR additionally requires local Tesseract/Poppler support.
 
 ## Duplicate Finder
 
-The duplicate workflow scans a selected directory recursively and identifies duplicate content in stages:
+Duplicate discovery works in stages:
 
 1. file size;
 2. quick edge hash;
@@ -169,13 +152,9 @@ When duplicate copies are moved, PythonKni keeps the first verified file in plac
 <selected-folder>\DuplicadosEncontrados\
 ```
 
-Before each move the candidate is rehashed and compared again against the retained original. A JSON restoration manifest records completed, failed or cancelled moves. Cancellation can therefore leave a partial but documented result rather than pretending the whole operation was atomic.
-
-Review duplicate groups before moving files and keep the restoration manifest until you are satisfied with the result.
+Before each move the candidate is rehashed and compared again against the retained original. A JSON restoration manifest records completed, failed or cancelled moves. Review duplicate groups before moving files and keep the restoration manifest until you are satisfied with the result.
 
 ## Network Explorer
-
-The network tool works with IPv4 interfaces and TCP port probes.
 
 Typical workflow:
 
@@ -189,7 +168,7 @@ CIDR input is bounded to at most **4096 usable hosts per scan**. Port ranges mus
 
 Host discovery uses local `ping`, reverse DNS and ARP information. A host that ignores ICMP can therefore appear absent even when reachable by another protocol. Port scanning reports TCP connection results only; it is not a vulnerability scanner.
 
-Use network scanning only on networks and systems where you have explicit authorization.
+Network and port scans expose cancellation. Scan history supports persisted loading, clearing, import and export where available. Use network scanning only on networks and systems where you have explicit authorization.
 
 ## Process Manager
 
@@ -197,11 +176,7 @@ Use network scanning only on networks and systems where you have explicit author
 
 The process table shows PID, process name, CPU usage and memory usage. CPU and memory thresholds can reduce the list.
 
-Available actions include:
-
-- refresh the process list;
-- inspect/analyze a process executable;
-- terminate the selected process.
+Available actions include refreshing the process list, analyzing a process executable and terminating the selected process.
 
 PythonKni refuses to terminate its own process. Termination requires confirmation with the selected process identity. Processes classified conservatively as Windows/system processes receive a second warning because terminating them may cause instability, logoff or restart.
 
@@ -209,11 +184,7 @@ Immediately before termination, the service revalidates process liveness and `cr
 
 ### VirusTotal process analysis
 
-If `VIRUSTOTAL_API_KEY` is configured, PythonKni can:
-
-1. read the selected executable locally;
-2. calculate its SHA-256 locally;
-3. query VirusTotal for an existing report for that hash.
+If `VIRUSTOTAL_API_KEY` is configured, PythonKni reads the selected executable locally, calculates its SHA-256 and queries VirusTotal for an existing report for that hash.
 
 The current implementation does **not upload the executable file**. A hash query still discloses the hash to the external service, so review `security.md` before using it with sensitive software.
 
@@ -221,15 +192,9 @@ The current implementation does **not upload the executable file**. A hash query
 
 The cleaner operates only on application-defined cleanup targets rather than accepting an arbitrary directory to erase.
 
-Current target classes include:
+Current target classes include user temporary directories from `TEMP`/`TMP`, supported browser cache locations and Windows Temp where available.
 
-- user temporary directories from `TEMP`/`TMP`;
-- supported browser cache locations for Chrome, Edge and Firefox profiles;
-- Windows Temp where available.
-
-Use preview before deleting data. Preview counts candidate items and estimates bytes without intentionally following symbolic links or Windows reparse points.
-
-The cleaner validates that a requested root is one of the exact known targets, rejects broad roots/containers and revalidates directory identity while traversing. Locked/inaccessible files are reported as failures rather than forcing deletion.
+Use preview before deleting data. Preview counts candidate items and estimates bytes without intentionally following symbolic links or Windows reparse points. The cleaner validates exact allowed roots and revalidates directory identity while traversing. Locked/inaccessible files are reported as failures rather than forcing deletion.
 
 ## WiFi Profiles
 
@@ -241,13 +206,13 @@ Because WiFi credentials are sensitive:
 - do not include captured passwords in public bug reports or screenshots;
 - close the tool when credentials no longer need to be visible.
 
-Each requested profile is exported with `key=clear` into an isolated temporary directory, matched to the correct XML profile and removed when the operation finishes. Windows permissions/policy can prevent credentials from being returned.
+Each requested profile is exported with `key=clear` into an isolated temporary directory, matched to the correct XML profile and removed when the operation finishes. Loading runs in a managed worker and can be cancelled. Windows permissions/policy can prevent credentials from being returned.
 
 ## Disk Analyzer
 
 **Menu name:** `Analizador de Disco`
 
-Select a directory and start analysis to rank files/directories consuming the most space. The scan runs outside the main UI flow and results can be exported for later review.
+Select a directory and start analysis to rank files/directories consuming the most space. The scan runs outside the main UI flow and results can be exported as CSV.
 
 Symlink entries are not followed by the service, and individual inaccessible entries are skipped rather than terminating the whole analysis. Reported sizes remain a point-in-time view because files can change while the system is running.
 
@@ -255,39 +220,17 @@ Symlink entries are not followed by the service, and individual inaccessible ent
 
 **Menu name:** `Gestor de Inicio de Windows`
 
-The startup manager collects supported entries from:
-
-- current-user `Run` registry entries;
-- machine `Run` registry entries;
-- the user's Startup folder;
-- the common Startup folder;
-- entries previously disabled by PythonKni.
+The startup manager collects supported entries from current-user and machine `Run` registry entries, user/common Startup folders and entries previously disabled by PythonKni.
 
 It displays active state, command/path, origin and a heuristic risk label. Risk labels are support hints, **not malware verdicts**.
 
-Disabling supported entries is designed to be recoverable:
-
-- registry entries are copied into PythonKni's disabled-startup backup area before removal from the active `Run` key;
-- Startup-folder entries are moved into PythonKni-managed backup storage with metadata;
-- disabled entries can later be re-enabled.
-
-Machine-level registry entries or protected locations may require elevated privileges. Do not disable entries whose purpose you do not understand.
+Disabling supported entries is designed to be recoverable: registry values and Startup-folder entries are backed up with metadata and can later be re-enabled. Machine-level registry entries or protected locations may require elevated privileges.
 
 ## Windows Event Viewer
 
 **Menu name:** `Visor de eventos de Windows`
 
-The viewer reads Windows event logs and presents a simplified support-oriented table.
-
-Available controls include:
-
-- `Application`, `System` and optional `Security` logs;
-- periods such as 24 hours, 7 days, 30 days or no time filter;
-- maximum event count;
-- event-level and heuristic risk filters;
-- free-text search by source, event ID, message or interpretation;
-- event detail/copy actions;
-- export/report actions.
+The viewer reads Windows event logs and presents a simplified support-oriented table. Controls include log selection, time periods, maximum event count, risk/level filters, free-text search, detail/copy actions and export/report actions.
 
 Reading the Security log can require administrator privileges. Risk classification and interpretation are heuristics intended to help triage events; they are not a replacement for Windows diagnostics expertise or incident-response analysis.
 
@@ -301,7 +244,7 @@ Diagnostic reports can contain hostnames, addresses, process information and oth
 
 ## Configuration
 
-The configuration tool manages implemented settings including theme and language selection.
+The configuration tool manages implemented theme and language settings.
 
 Configuration is normalized before saving and published atomically to `config.json`, so an interrupted write does not intentionally replace a previous valid configuration with a partial file. If persistence fails, PythonKni does not apply unsaved theme/language state.
 
@@ -314,6 +257,8 @@ Localization infrastructure exists, but not every user-visible string is fully t
 Many long-running tools use managed workers or domain-specific worker threads. Cancellation is cooperative: services check a cancellation signal at safe points and stop as soon as the underlying operation permits.
 
 Cancellation is not equivalent to forcibly killing a thread/subprocess. An already completed filesystem mutation can remain completed; tools that can partially mutate state report or record that state where practical.
+
+Presentation regressions explicitly protect worker overlap, stale/current callbacks, cancellation state and deferred-close behavior in the windows where those contracts apply.
 
 ## Structured technical errors
 
@@ -373,9 +318,9 @@ Do not bypass `--require-hashes`. A mismatch means the artifact is not one of th
 
 ## Development validation
 
-The current suite contains **578 tests**, with **86.4% repository-wide branch coverage** and **93.2% aggregate service coverage** on the canonical Windows CI environment.
+The current behavior-driven suite contains **686 tests**, with **92.9% repository-wide branch coverage** and **93.2% aggregate service coverage** on the canonical Windows CI environment.
 
-Run the core validation path with:
+The normal local validation path is:
 
 ```powershell
 python scripts/check_dependency_locks.py
@@ -384,7 +329,7 @@ python -m pip_audit -r requirements.txt --no-deps --strict --progress-spinner=of
 python -m pip_audit -r requirements-dev.txt --no-deps --strict --progress-spinner=off
 python -m compileall .
 python -m pytest --cov=pythonkni --cov=tools --cov-branch --cov-report=term-missing --cov-report=xml
-python -m coverage report --fail-under=86.0
+python -m coverage report --fail-under=92.5
 python -m coverage report --include="pythonkni/*/service.py" --fail-under=93.0
 python -m ruff check .
 python -m ruff format --check .
@@ -392,4 +337,16 @@ pyinstaller --noconfirm --clean PythonKni.spec
 .\dist\PythonKni\PythonKni.exe --smoke-test
 ```
 
-CI/release also enforce individual non-regression gates for the strongest and recently hardened services/windows. Current new service floors include Disk Analyzer `>=94.5%`, Duplicate `>=90.0%`, Process Manager `>=99.0%` and WiFi `>=95.5%`.
+CI and Release additionally enforce individual non-regression floors for every first-party service and for the 13 prioritized presentation windows. Current presentation floors are:
+
+```text
+Archive          >= 96.5%      Config           >= 90.0%
+Converter        >= 86.0%      Disk Analyzer    >= 96.0%
+Duplicate        >= 97.0%      Event Viewer     >= 98.0%
+Network          >= 91.0%      PDF              >= 93.0%
+Process Manager  >= 97.5%      Startup          >= 95.0%
+System Report    >= 94.0%      Temp Cleaner     >= 93.5%
+WiFi             >= 94.5%
+```
+
+These floors intentionally sit below the measured values. Coverage changes should protect real behavior, failure modes, cancellation, persistence or orchestration contracts rather than adding assertions whose only purpose is to increase a percentage.

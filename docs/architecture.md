@@ -1,6 +1,6 @@
 # Architecture
 
-PythonKni is a PyQt5 Windows desktop application with a dynamic tool loader and an explicitly layered first-party codebase. Domain behavior and operating-system integration are kept independently testable from Qt, while dependency integrity, packaging and the frozen executable are treated as part of the architecture rather than as afterthoughts.
+PythonKni is a PyQt5 Windows desktop application with a dynamic tool loader and an explicitly layered first-party codebase. Domain behavior and operating-system integration are independently testable from Qt, while dependency integrity, presentation orchestration, packaging and the frozen executable are treated as architectural concerns rather than afterthoughts.
 
 ## Dependency rule
 
@@ -49,7 +49,7 @@ pythonkni/
 └─ wifi/
 ```
 
-Each domain exposes `models.py`, `service.py` and `window.py`, even when a domain currently has only minimal custom model state. This keeps future data structures from drifting into presentation code.
+Each domain exposes `models.py`, `service.py` and `window.py`, even when a domain currently has only minimal custom model state. This prevents future data structures from drifting into presentation code.
 
 ## Core and infrastructure
 
@@ -77,6 +77,28 @@ Cross-cutting Qt/runtime helpers remain at the application edge:
 - `tools/ui_feedback.py` — structured technical feedback renderer;
 - `tools/theme_manager.py` / `tools/language_manager.py` — UI runtime managers;
 - `tools/csv_utils.py` — spreadsheet-safe CSV presentation/export helper.
+
+## Presentation boundary and worker lifecycle
+
+Qt windows are orchestration layers, not passive views. They own contracts that are now explicitly regression-tested:
+
+```text
+user action
+   ↓
+validation / confirmation
+   ↓
+worker creation + signal wiring
+   ↓
+service operation
+   ↓
+progress / result / error / cancellation
+   ↓
+UI state restoration + safe close
+```
+
+Coverage suites exercise overlapping-work rejection, stale/current callback handling, cooperative cancellation, deferred close, progress and result rendering, file/folder dialogs, import/export paths and structured technical errors. Production code is not altered merely to satisfy coverage; tests protect existing observable behavior.
+
+`BaseTool` centralizes managed-worker ownership where applicable so active `QThread` instances are not destroyed while native work is still running. Domain windows with specialized workers retain equivalent lifecycle guarantees.
 
 ## Structured technical feedback boundary
 
@@ -110,7 +132,7 @@ config/runtime.py      # applies values to UI managers
 config/window.py
 ```
 
-A failed persistence operation therefore does not require service code to know how themes/languages are rendered.
+A failed persistence operation therefore does not require service code to know how themes/languages are rendered. Presentation regressions cover valid load, invalid-file fallback, normalized save and runtime UI refresh.
 
 ## Process Manager boundary
 
@@ -118,7 +140,7 @@ A failed persistence operation therefore does not require service code to know h
 
 Immediately before `terminate()`, the service revalidates PID liveness and process `create_time`. This protects against targeting a different process if Windows reuses the PID after the user originally selected it.
 
-Architecture tests prevent `psutil` from drifting back into `process_manager/window.py`.
+Architecture tests prevent `psutil` from drifting back into `process_manager/window.py`. Presentation regressions separately protect process-refresh worker state, confirmation/error paths and VirusTotal orchestration.
 
 ## PDF boundary
 
@@ -171,9 +193,9 @@ runtime/dev pip-audit + CycloneDX SBOM
           ↓
 compileall
           ↓
-578 pytest tests + branch coverage
+686 pytest tests + branch coverage
           ↓
-repository/service/priority coverage ratchets
+repository/service/priority-window coverage ratchets
           ↓
 Ruff check + format
           ↓
@@ -184,7 +206,7 @@ frozen PythonKni.exe --smoke-test
 ZIP + SHA-256 + coverage.xml + SBOM + locks
 ```
 
-Release validation mirrors the same quality gates before publishing a tag-driven GitHub Release.
+Release validation mirrors the same quality gates before publishing a tag-driven GitHub Release. CI and Release use the same coverage floors so distribution cannot bypass a regression rejected on normal pushes.
 
 ## Architecture enforcement
 
@@ -214,9 +236,14 @@ Initial measured baseline
 58.85% repository branch coverage
 64.7% aggregated services
 
-Current hardened baseline
+Service-hardening baseline
 578 tests
 86.4% repository branch coverage
+93.2% aggregated services
+
+Current presentation-hardened baseline
+686 tests
+92.9% repository branch coverage
 93.2% aggregated services
 ```
 
@@ -238,21 +265,30 @@ Temp Cleaner service            86.4%
 WiFi service                    96.0%
 ```
 
-The latest service-hardening work intentionally focused on the previous bottom of the service layer without changing production service implementation:
+Current presentation measurements:
 
 ```text
-Disk Analyzer       81.7% → 95.0%
-Duplicate Finder    83.6% → 90.5%
-Process Manager     84.0% → 99.3%
-WiFi                82.8% → 96.0%
+Archive window                  97.2%
+Config window                   90.7%
+Converter window                86.9%
+Disk Analyzer window            96.9%
+Duplicate Finder window         97.4%
+Event Viewer window             98.9%
+Network window                  91.5%
+PDF window                      93.1%
+Process Manager window          98.0%
+Startup window                  95.3%
+System Report window            94.7%
+Temp Cleaner window             94.2%
+WiFi window                     95.0%
 ```
 
-These gains come from behavior/failure-path tests: unreadable/symlink disk entries, WiFi XML/timeouts/cancellation, process disappearance/PID safety/VirusTotal responses and duplicate hashing/comparison/manifests.
+The latest presentation-hardening work added behavior/failure-path tests without changing production implementation: worker overlap and cancellation, stale/current results, deferred close behavior, conversion/dialog flows, Network history I/O, Process Manager/VirusTotal states, archive/duplicate operations, Disk Analyzer export paths, Temp Cleaner confirmation/error handling, Config load/save application, WiFi loading states and System Report generation/export orchestration.
 
 ### Enforced ratchets
 
 ```text
-repository-wide branch coverage                   >= 86.0%
+repository-wide branch coverage                   >= 92.5%
 all pythonkni/*/service.py coverage                >= 93.0%
 Archive service coverage                           >= 95.0%
 Converter service coverage                         >= 94.0%
@@ -266,12 +302,20 @@ Event Viewer service coverage                      >= 95.0%
 System Report service coverage                     >= 97.0%
 Temp Cleaner service coverage                      >= 86.0%
 WiFi service coverage                              >= 95.5%
-Startup window coverage                            >= 95.0%
+Archive window coverage                            >= 96.5%
+Config window coverage                             >= 90.0%
+Converter window coverage                          >= 86.0%
+Disk Analyzer window coverage                      >= 96.0%
+Duplicate Finder window coverage                   >= 97.0%
 Event Viewer window coverage                       >= 98.0%
+Network window coverage                            >= 91.0%
 PDF window coverage                                >= 93.0%
+Process Manager window coverage                    >= 97.5%
+Startup window coverage                            >= 95.0%
+System Report window coverage                      >= 94.0%
+Temp Cleaner window coverage                       >= 93.5%
+WiFi window coverage                               >= 94.5%
 process/config/infrastructure aggregate             >= 88.5%
 ```
 
-The floors deliberately retain a small margin below measured values while making a return to the old 81–84% service baseline impossible without a visible CI failure.
-
-Presentation coverage is intentionally less uniform than services. Converter and Network remain the clearest behavior-driven UI-testing candidates; improving them is preferable to adding superficial assertions across already well-protected services.
+The floors deliberately retain margin below measured values. Converter remains the lowest measured first-party window, so future coverage work should focus only on meaningful uncovered orchestration/failure contracts rather than forcing every module toward an arbitrary identical percentage.
