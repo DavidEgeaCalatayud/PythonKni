@@ -50,6 +50,22 @@ CAMERA_HOSTNAME_HINTS = (
     "dahua",
     "axis",
 )
+VENDOR_HOSTNAME_HINTS = (
+    ("synology", "Synology"),
+    ("diskstation", "Synology"),
+    ("qnap", "QNAP"),
+    ("reolink", "Reolink"),
+    ("hikvision", "Hikvision"),
+    ("dahua", "Dahua"),
+    ("axis", "Axis"),
+    ("epson", "Epson"),
+    ("brother", "Brother"),
+    ("canon", "Canon"),
+    ("xerox", "Xerox"),
+    ("hp-", "HP"),
+    ("fritz", "AVM"),
+    ("livebox", "Orange"),
+)
 
 
 def _is_local_ip(value: str) -> bool:
@@ -95,6 +111,16 @@ def probe_intelligence_ports(
 def _hostname_contains(hostname: str, hints: tuple[str, ...]) -> bool:
     lowered = (hostname or "").casefold()
     return any(hint in lowered for hint in hints)
+
+
+def infer_device_vendor(host: DiscoveredHost, camera: CameraDevice | None = None) -> str:
+    if camera is not None and camera.vendor and camera.vendor != "Unknown":
+        return camera.vendor
+    lowered = (host.hostname or "").casefold()
+    for hint, vendor in VENDOR_HOSTNAME_HINTS:
+        if hint in lowered:
+            return vendor
+    return "Unknown"
 
 
 def _gateway_style_address(ip: str) -> bool:
@@ -166,6 +192,7 @@ def classify_device(
         evidence=tuple(dict.fromkeys(evidence)),
         risk=risk,
         camera=camera,
+        vendor=infer_device_vendor(host, camera),
     )
 
 
