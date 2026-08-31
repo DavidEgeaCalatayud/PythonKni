@@ -52,7 +52,7 @@ jobs:
         run: python -m pytest --cov=pythonkni --cov=tools --cov-branch --cov-report=term-missing --cov-report=xml
 
       - name: Enforce repository coverage ratchet
-        run: python -m coverage report --fail-under=92.0
+        run: python -m coverage report --fail-under=92.5
 
       - name: Enforce service-layer coverage ratchet
         run: python -m coverage report --include="pythonkni/*/service.py" --fail-under=93.0
@@ -75,7 +75,9 @@ jobs:
       - name: Enforce priority-window coverage ratchets
         run: |
           python -m coverage report --include="pythonkni/archive/window.py" --fail-under=96.5
+          python -m coverage report --include="pythonkni/config/window.py" --fail-under=90.0
           python -m coverage report --include="pythonkni/converter/window.py" --fail-under=86.0
+          python -m coverage report --include="pythonkni/disk_analyzer/window.py" --fail-under=96.0
           python -m coverage report --include="pythonkni/duplicate/window.py" --fail-under=97.0
           python -m coverage report --include="pythonkni/event_viewer/window.py" --fail-under=98.0
           python -m coverage report --include="pythonkni/network/window.py" --fail-under=91.0
@@ -83,6 +85,8 @@ jobs:
           python -m coverage report --include="pythonkni/process_manager/window.py" --fail-under=97.5
           python -m coverage report --include="pythonkni/startup/window.py" --fail-under=95.0
           python -m coverage report --include="pythonkni/system_report/window.py" --fail-under=94.0
+          python -m coverage report --include="pythonkni/temp_cleaner/window.py" --fail-under=93.5
+          python -m coverage report --include="pythonkni/wifi/window.py" --fail-under=94.5
 
       - name: Enforce refactored critical-code coverage
         run: python -m coverage report --include="pythonkni/process_manager/service.py,pythonkni/config/service.py,pythonkni/infrastructure/*.py" --fail-under=88.5
