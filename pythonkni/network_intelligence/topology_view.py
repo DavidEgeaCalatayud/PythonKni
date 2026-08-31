@@ -10,7 +10,7 @@ from PyQt5.QtWidgets import (
     QGraphicsView,
 )
 
-from .models import AssetRecord
+from .models import AssetRecord, NetworkRelationship, RelationshipConfidence
 from .topology import NetworkTopology, TopologyNode, build_logical_topology
 
 _NODE_WIDTH = 190.0
@@ -29,8 +29,12 @@ class NetworkTopologyView(QGraphicsView):
         self.graph: NetworkTopology | None = None
         self.setAlignment(Qt.AlignCenter)
 
-    def set_assets(self, assets: list[AssetRecord]) -> None:
-        self.graph = build_logical_topology(assets)
+    def set_assets(
+        self,
+        assets: list[AssetRecord],
+        relationships: list[NetworkRelationship] | tuple[NetworkRelationship, ...] | None = None,
+    ) -> None:
+        self.graph = build_logical_topology(assets, relationships)
         scene = QGraphicsScene(self)
         scene.selectionChanged.connect(self._selection_changed)
         self.setScene(scene)
@@ -59,28 +63,61 @@ class NetworkTopologyView(QGraphicsView):
                 target_rect.center().x(),
                 target_rect.top(),
             )
+            pen = line.pen()
+            pen.setWidth(2 if edge.confidence == RelationshipConfidence.CONFIRMED else 1)
+            pen.setStyle(self._confidence_line_style(edge.confidence))
+            line.setPen(pen)
             line.setZValue(-1)
-            line.setToolTip(edge.relationship)
+            evidence = "\n".join(edge.evidence)
+            line.setToolTip(
+                f"{edge.relationship} · {edge.confidence.value}"
+                + (f"\n{evidence}" if evidence else "")
+            )
             scene.addItem(line)
 
         bounds = scene.itemsBoundingRect()
         scene.setSceneRect(bounds.adjusted(-40, -40, 40, 40))
 
+    @staticmethod
+    def _confidence_line_style(confidence: RelationshipConfidence):
+        if confidence == RelationshipConfidence.CONFIRMED:
+            return Qt.SolidLine
+        if confidence == RelationshipConfidence.INFERRED:
+            return Qt.DashLine
+        return Qt.DotLine
+
     def _layout_positions(self, graph: NetworkTopology) -> dict[str, tuple[float, float]]:
         positions: dict[str, tuple[float, float]] = {}
         internet = next(node for node in graph.nodes if node.node_id == "synthetic:internet")
-        gateway = next(node for node in graph.nodes if node.node_id == graph.gateway_node_id)
-        children = [
-            node for node in graph.nodes if node.node_id not in {internet.node_id, gateway.node_id}
-        ]
+        lan = next(
+            (node for node in graph.nodes if node.node_id.startswith("synthetic:lan:")),
+            None,
+        )
+        gateway = next(
+            (node for node in graph.nodes if node.node_id == graph.gateway_node_id),
+            lan,
+        )
+        excluded = {internet.node_id}
+        if lan is not None:
+            excluded.add(lan.node_id)
+        if gateway is not None:
+            excluded.add(gateway.node_id)
+        children = [node for node in graph.nodes if node.node_id not in excluded]
 
         columns = min(_MAX_COLUMNS, max(1, len(children)))
         total_width = columns * _NODE_WIDTH + max(0, columns - 1) * _HORIZONTAL_GAP
         root_x = (total_width - _NODE_WIDTH) / 2
         positions[internet.node_id] = (root_x, 0.0)
-        positions[gateway.node_id] = (root_x, _NODE_HEIGHT + _VERTICAL_GAP)
 
-        start_y = (_NODE_HEIGHT + _VERTICAL_GAP) * 2
+        level = 1
+        if gateway is not None and (lan is None or gateway.node_id != lan.node_id):
+            positions[gateway.node_id] = (root_x, level * (_NODE_HEIGHT + _VERTICAL_GAP))
+            level += 1
+        if lan is not None:
+            positions[lan.node_id] = (root_x, level * (_NODE_HEIGHT + _VERTICAL_GAP))
+            level += 1
+
+        start_y = level * (_NODE_HEIGHT + _VERTICAL_GAP)
         for index, node in enumerate(children):
             row, column = divmod(index, _MAX_COLUMNS)
             row_count = min(_MAX_COLUMNS, len(children) - row * _MAX_COLUMNS)
