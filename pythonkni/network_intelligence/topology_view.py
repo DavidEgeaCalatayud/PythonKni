@@ -27,8 +27,6 @@ class NetworkTopologyView(QGraphicsView):
     def __init__(self, parent=None):
         super().__init__(parent)
         self.graph: NetworkTopology | None = None
-        self.setRenderHints(self.renderHints())
-        self.setDragMode(QGraphicsView.ScrollHandDrag)
         self.setAlignment(Qt.AlignCenter)
 
     def set_assets(self, assets: list[AssetRecord]) -> None:
