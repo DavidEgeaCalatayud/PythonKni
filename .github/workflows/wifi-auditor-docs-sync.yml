@@ -27,7 +27,7 @@ jobs:
               p = Path(path)
               text = p.read_text(encoding="utf-8")
               if old not in text:
-                  raise SystemExit(f"Expected text not found in {path}: {old[:80]!r}")
+                  raise SystemExit(f"Expected text not found in {path}: {old[:100]!r}")
               p.write_text(text.replace(old, new), encoding="utf-8", newline="\n")
 
           replace("README.md", "tests-731%20pytest", "tests-745%20pytest")
@@ -52,23 +52,18 @@ jobs:
               "- WiFi Auditor uses Windows visible-network enumeration plus optional offline PCAP/PCAPNG inspection. It can count EAPOL/RSN frames through a locally installed `tshark`, but it does not enable monitor mode, actively probe WPS, capture authentication material from live targets, extract password-recovery material, validate passwords, crack PSKs or create deceptive access points. `tshark` remains an optional external executable outside the Python lock/SBOM.",
           )
 
-          replace("docs/architecture.md", "686 pytest tests + branch coverage", "745 pytest tests + branch coverage")
+          replace("docs/architecture.md", "731 pytest tests + branch coverage", "745 pytest tests + branch coverage")
           replace(
               "docs/architecture.md",
-              "Current presentation-hardened baseline\n686 tests\n92.9% repository branch coverage\n93.2% aggregated services",
+              "Current WiFi-Auditor baseline\n731 tests\n93.1% repository branch coverage\n93.6% aggregated services",
               "Current WiFi-Auditor baseline\n745 tests\n93.2% repository branch coverage\n93.6% aggregated services",
           )
-          replace("docs/architecture.md", "WiFi service                    96.0%\n```", "WiFi service                    96.0%\nWiFi Auditor service            98.5%\n```")
-          replace("docs/architecture.md", "WiFi window                     95.0%\n```", "WiFi window                     95.0%\nWiFi Auditor window             99.0%\n```")
+          replace("docs/architecture.md", "WiFi Auditor service            99.1%", "WiFi Auditor service            98.5%")
+          replace("docs/architecture.md", "WiFi Auditor window             99.2%", "WiFi Auditor window             99.0%")
           replace(
               "docs/architecture.md",
-              "WiFi service coverage                              >= 95.5%\nArchive window coverage",
-              "WiFi service coverage                              >= 95.5%\nWiFi Auditor service coverage                      >= 98.0%\nArchive window coverage",
-          )
-          replace(
-              "docs/architecture.md",
-              "WiFi window coverage                               >= 94.5%\nprocess/config/infrastructure aggregate",
-              "WiFi window coverage                               >= 94.5%\nWiFi Auditor window coverage                       >= 98.0%\nprocess/config/infrastructure aggregate",
+              "`wifi_auditor.service` owns Windows visible-network parsing, deterministic configuration findings, scoring and SHA-256 evidence generation. `wifi_auditor.window` owns the one-click managed-worker flow, cancellation, result rendering and export dialogs. The service never imports Qt.\n\nThe live scan is intentionally limited to information Windows exposes through `netsh wlan show networks mode=bssid`; no monitor-mode or credential-validation behavior is delegated to the service. Docker support is separated from live scanning and is limited to offline verification of exported evidence. The SHA-256 field is an integrity checksum over canonical report data, not a digital signature or provenance proof.",
+              "`wifi_auditor.service` owns Windows visible-network parsing, deterministic findings/scoring, ranked defensive audit planning, offline PCAP/PCAPNG inspection and SHA-256 evidence generation. `wifi_auditor.window` owns the managed-worker flows, cancellation, result rendering, capture selection and export dialogs. The service never imports Qt.\n\nThe live scan is intentionally limited to information Windows exposes through `netsh wlan show networks mode=bssid`. Offline capture inspection validates existing files, hashes them and can optionally ask a local `tshark` executable to count EAPOL/RSN frames; it does not extract password-recovery material. Docker support is separated from live scanning and is limited to offline verification of exported report evidence. The SHA-256 field is an integrity checksum over canonical report data, not a digital signature or provenance proof.",
           )
           replace(
               "docs/architecture.md",
@@ -78,17 +73,11 @@ jobs:
 
           replace(
               "docs/usage.md",
-              "## Disk Analyzer",
-              "## WiFi Auditor\n\n**Menu name:** `WiFi Auditor`\n\nUse **Escanear redes visibles** for a Windows-visible defensive inventory. The tool normalizes SSID/BSSID, band, channel, signal, authentication and encryption, then calculates a deterministic score, findings and a ranked defensive audit plan.\n\nUse **Analizar captura offline** to inspect an existing authorized PCAP/PCAPNG file without interacting with a live target. PythonKni records format, size and SHA-256; when a local `tshark` executable is available it can also count EAPOL and RSN frames. If `tshark` is unavailable or fails, the tool degrades to built-in metadata-only inspection. It does not extract password hashes, PMKID material, keys or credentials from the capture.\n\nBoth operations use managed workers and cooperative cancellation. Exported audit JSON uses schema version 2 and includes the ranked `plan[]` in the SHA-256-protected canonical payload. See [`wifi-auditor.md`](wifi-auditor.md) for the complete workflow and scope boundaries.\n\n## Disk Analyzer",
+              "Press **Escanear redes visibles** to run one managed defensive pipeline: Windows visible-network inventory → SSID/BSSID normalization → band/channel/signal/security review → deterministic findings/score → exportable SHA-256 evidence. The operation supports cooperative cancellation and rejects overlapping scans.\n\nThe live scan uses `netsh wlan show networks mode=bssid`. It does not require stored WiFi passwords and does not enable monitor mode. The tool does not actively probe WPS, capture authentication exchanges, validate WiFi passwords, generate target password lists, crack PSKs or create clone/deceptive access points.\n\nExported JSON reports include the observed access points, findings, score, declared limitations and an integrity digest. Report publication uses same-directory temporary output, flush/`fsync` and `os.replace` before the destination becomes visible. The SHA-256 digest detects report changes; it is not a digital signature.",
+              "Press **Escanear redes visibles** to run one managed defensive pipeline: Windows visible-network inventory → SSID/BSSID normalization → band/channel/signal/security review → deterministic findings/score → ranked defensive audit plan → exportable SHA-256 evidence. The operation supports cooperative cancellation and rejects overlapping work.\n\nPress **Analizar captura offline** to inspect an existing authorized PCAP/PCAPNG without interacting with a live target. PythonKni records format, size and SHA-256; when a local `tshark` executable is available it also counts EAPOL and RSN frames. If `tshark` is unavailable or fails, inspection degrades to built-in metadata only. It does not extract password hashes, PMKID material, keys or credentials.\n\nThe live scan uses `netsh wlan show networks mode=bssid`. It does not require stored WiFi passwords and does not enable monitor mode. The tool does not actively probe WPS, capture authentication exchanges from live targets, validate WiFi passwords, generate target password lists, crack PSKs or create clone/deceptive access points.\n\nExported schema-v2 JSON reports include observed access points, findings, the ranked `plan[]`, score, declared limitations and an integrity digest. Report publication uses same-directory temporary output, flush/`fsync` and `os.replace` before the destination becomes visible. The SHA-256 digest detects report changes; it is not a digital signature.",
           )
-          replace("docs/usage.md", "suite contains **686 tests**", "suite contains **745 tests**")
-          replace("docs/usage.md", "**92.9% repository-wide branch coverage**", "**93.2% repository-wide branch coverage**")
-          replace("docs/usage.md", "**93.2% aggregate service coverage**", "**93.6% aggregate service coverage**")
-          replace(
-              "docs/usage.md",
-              "WiFi             >= 94.5%\n```",
-              "WiFi             >= 94.5%      WiFi Auditor     >= 98.0%\n```",
-          )
+          replace("docs/usage.md", "suite contains **731 tests**", "suite contains **745 tests**")
+          replace("docs/usage.md", "**93.1% repository-wide branch coverage**", "**93.2% repository-wide branch coverage**")
 
           replace(
               "docs/security.md",
