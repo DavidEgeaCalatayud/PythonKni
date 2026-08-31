@@ -145,7 +145,9 @@ def test_relationship_persistence_failure_is_reported_without_losing_inventory(
     assert any(asset.ip == "192.168.1.30" for asset in tool.assets)
 
 
-def test_relationship_endpoint_labels_cover_synthetic_missing_and_asset(qtbot, monkeypatch, tmp_path):
+def test_relationship_endpoint_labels_cover_synthetic_missing_and_asset(
+    qtbot, monkeypatch, tmp_path
+):
     monkeypatch.setattr(window, "_default_scope", lambda: "192.168.1.0/24")
     monkeypatch.setattr(window, "NETWORK_INTELLIGENCE_DB", tmp_path / "network.sqlite3")
     tool = window.Tool()
