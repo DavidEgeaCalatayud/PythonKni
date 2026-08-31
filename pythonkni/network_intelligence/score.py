@@ -39,17 +39,13 @@ def calculate_security_score(
 
     findings: list[str] = []
     if cameras_with_rtsp:
-        findings.append(
-            f"{len(cameras_with_rtsp)} camera(s) expose RTSP on the local network."
-        )
+        findings.append(f"{len(cameras_with_rtsp)} camera(s) expose RTSP on the local network.")
     if cleartext_http:
         findings.append(
             f"{len(cleartext_http)} device(s) expose clear-text HTTP on the local network."
         )
     if new_unknown_today:
-        findings.append(
-            f"{len(new_unknown_today)} unknown device(s) appeared today."
-        )
+        findings.append(f"{len(new_unknown_today)} unknown device(s) appeared today.")
     if risk_counts[RiskLevel.HIGH]:
         findings.append(f"{risk_counts[RiskLevel.HIGH]} high-risk device(s) require review.")
     if not findings:

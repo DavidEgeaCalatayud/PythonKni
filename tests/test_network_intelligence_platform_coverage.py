@@ -161,9 +161,7 @@ def test_score_clamps_at_zero_for_many_high_risk_assets():
 
 
 def test_audit_dialog_renders_report(qtbot):
-    dialog = DeviceAuditorDialog(
-        make_asset(kind=DeviceKind.NAS, ports=(445,), services=("SMB",))
-    )
+    dialog = DeviceAuditorDialog(make_asset(kind=DeviceKind.NAS, ports=(445,), services=("SMB",)))
     qtbot.addWidget(dialog)
     assert dialog.windowTitle() == "NAS Security Auditor"
     areas = dialog.findChildren(QTextEdit)
