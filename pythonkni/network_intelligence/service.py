@@ -4,6 +4,7 @@ import ipaddress
 import socket
 import threading
 from concurrent.futures import FIRST_COMPLETED, ThreadPoolExecutor, wait
+from dataclasses import replace
 
 from pythonkni.camera_auditor.models import CameraDevice, OnvifDiscoveryMatch, RiskLevel
 from pythonkni.camera_auditor.service import (
@@ -228,6 +229,17 @@ def inspect_host(
     return classify_device(host, open_ports, camera=camera)
 
 
+def _fallback_unknown(host: DiscoveredHost) -> NetworkIntelligenceDevice:
+    fallback = classify_device(host, ())
+    return replace(
+        fallback,
+        evidence=(
+            "Host descubierto correctamente, pero el enriquecimiento de servicios no pudo completarse; "
+            "se conserva como Unknown para no perder el activo.",
+        ),
+    )
+
+
 def analyze_hosts(
     cidr: str,
     hosts: list[DiscoveredHost],
@@ -280,13 +292,14 @@ def analyze_hosts(
                 try:
                     device = future.result()
                 except Exception:
-                    device = None
+                    device = _fallback_unknown(host)
+                if device is None:
+                    device = _fallback_unknown(host)
                 if on_checked is not None:
                     on_checked(host)
-                if device is not None:
-                    results.append(device)
-                    if on_device is not None:
-                        on_device(device)
+                results.append(device)
+                if on_device is not None:
+                    on_device(device)
                 fill_pending()
             if stop_event.is_set():
                 for future in pending:
