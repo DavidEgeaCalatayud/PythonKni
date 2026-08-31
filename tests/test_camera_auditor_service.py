@@ -94,7 +94,7 @@ def test_ws_probe_targets_network_video_transmitter_without_credentials():
 
 
 def _probe_match_xml(ip="192.168.1.21", *, suffix=""):
-    return f'''<?xml version="1.0"?>
+    return f"""<?xml version="1.0"?>
     <s:Envelope xmlns:s="http://www.w3.org/2003/05/soap-envelope"
       xmlns:d="http://schemas.xmlsoap.org/ws/2005/04/discovery"
       xmlns:a="http://schemas.xmlsoap.org/ws/2004/08/addressing">
@@ -105,7 +105,7 @@ def _probe_match_xml(ip="192.168.1.21", *, suffix=""):
           onvif://www.onvif.org/hardware/Reolink_RLC</d:Scopes>
         <d:XAddrs>http://{ip}/onvif/device_service</d:XAddrs>
       </d:ProbeMatch></d:ProbeMatches></s:Body>
-    </s:Envelope>'''.encode()
+    </s:Envelope>""".encode()
 
 
 def test_parse_ws_discovery_extracts_fields_and_ignores_invalid_xml():
@@ -186,7 +186,9 @@ def test_parse_headers_and_read_response_handle_headers_and_timeout():
 
 def test_probe_http_detects_status_auth_and_cleartext():
     fake = FakeSocket(
-        [b"HTTP/1.0 401 Unauthorized\r\nWWW-Authenticate: Digest realm=cam\r\nServer: Hikvision\r\n\r\n"]
+        [
+            b"HTTP/1.0 401 Unauthorized\r\nWWW-Authenticate: Digest realm=cam\r\nServer: Hikvision\r\n\r\n"
+        ]
     )
     finding = service.probe_http_service(
         "192.168.1.21",
@@ -255,7 +257,9 @@ def test_probe_http_handles_connection_errors():
 
 def test_probe_rtsp_uses_options_and_detects_authentication():
     fake = FakeSocket(
-        [b"RTSP/1.0 401 Unauthorized\r\nWWW-Authenticate: Digest realm=cam\r\nServer: Reolink\r\n\r\n"]
+        [
+            b"RTSP/1.0 401 Unauthorized\r\nWWW-Authenticate: Digest realm=cam\r\nServer: Reolink\r\n\r\n"
+        ]
     )
     finding = service.probe_rtsp_service(
         "192.168.1.21",
@@ -337,9 +341,7 @@ def test_risk_classification_reports_transport_exposure_and_low_case():
     assert risk is RiskLevel.MEDIUM
     assert len(reasons) == 3
 
-    risk, reasons = service.classify_risk(
-        (CameraServiceFinding("HTTPS", 443, cleartext=False),)
-    )
+    risk, reasons = service.classify_risk((CameraServiceFinding("HTTPS", 443, cleartext=False),))
     assert risk is RiskLevel.LOW
     assert "No se detectaron" in reasons[0]
 
