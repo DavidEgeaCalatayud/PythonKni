@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from dataclasses import replace
 from datetime import datetime, timedelta, timezone
 
 import pytest
@@ -151,15 +152,8 @@ def test_device_auditor_emits_no_notable_exposure_for_quiet_pc():
 
 
 def test_score_clamps_at_zero_for_many_high_risk_assets():
-    assets = [
-        AssetRecord(
-            **{
-                **make_asset(risk=RiskLevel.HIGH).__dict__,
-                "asset_id": f"asset-{index}",
-            }
-        )
-        for index in range(10)
-    ]
+    base = make_asset(risk=RiskLevel.HIGH)
+    assets = [replace(base, asset_id=f"asset-{index}") for index in range(10)]
     score = calculate_security_score(assets)
     assert score.score == 0
     assert score.high_risk == 10
