@@ -4,8 +4,8 @@ import threading
 
 import pytest
 
+import pythonkni.wifi_auditor.service as service
 from pythonkni.core.tasks import WorkerCancelled
-from pythonkni.wifi_auditor import service
 from pythonkni.wifi_auditor.models import AccessPoint
 
 
