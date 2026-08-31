@@ -1,6 +1,6 @@
 # WiFi Auditor
 
-`WiFi Auditor` is PythonKni's defensive wireless-configuration auditing tool. It turns the WiFi information that Windows can enumerate into one reviewable workflow:
+`WiFi Auditor` is PythonKni's defensive wireless-security auditing tool. It combines a Windows-visible network inventory, deterministic security findings, an automatically ranked defensive review plan, optional offline PCAP/PCAPNG inspection and verifiable evidence reporting in one menu.
 
 ```text
 Windows visible-network snapshot
@@ -11,14 +11,18 @@ band / channel / signal / security inventory
              ↓
 configuration findings + score
              ↓
+ranked defensive audit plan
+             ↓
+optional offline capture inspection
+             ↓
 JSON evidence report + SHA-256 integrity digest
 ```
 
 The tool is intended for systems and wireless environments you own or are explicitly authorized to assess.
 
-## What the menu action does
+## Full Auto defensive workflow
 
-Choose **WiFi Auditor** from the `Red` category and press **Escanear redes visibles**. One managed background task performs the complete defensive workflow; no manual chaining with other PythonKni tools is required.
+Choose **WiFi Auditor** from the `Red` category and press **Escanear redes visibles**. One managed background task performs discovery, normalization, analysis, scoring and plan generation; no manual chaining with other PythonKni tools is required.
 
 The table records the information exposed by Windows for each visible BSSID:
 
@@ -35,10 +39,10 @@ The parser accepts the English and Spanish labels currently produced by `netsh w
 
 ## Findings and score
 
-The first implementation intentionally keeps the rules deterministic and explainable. It can flag:
+The rules are deterministic and explainable. They can flag:
 
 - open wireless networks;
-- legacy WiFi security configurations;
+- legacy WiFi security configurations, including WEP/TKIP;
 - the same SSID appearing with inconsistent visible security policies across BSSID;
 - a channel with a high number of simultaneously visible BSSID;
 - an empty snapshot when Windows exposes no visible access points.
@@ -47,15 +51,46 @@ The score starts at `100` and applies documented penalties for findings. It is a
 
 SSID-policy inconsistencies are deliberately described as items for manual verification. They can be caused by legitimate mixed deployments, migration states, guest infrastructure or misconfiguration; the tool does not attribute a BSSID as a rogue access point solely from that observation.
 
+## Ranked defensive audit plan
+
+The audit report contains a deterministic `plan[]` ordered by priority. The plan is inspired by the useful orchestration idea of target-aware wireless tooling, but the actions are defensive review steps rather than password-recovery strategies.
+
+Depending on the visible inventory, the plan can prioritize:
+
+1. encryption/security-policy review;
+2. SSID/BSSID consistency and authorized-inventory review;
+3. completion of unknown security capabilities;
+4. RF/channel-planning review;
+5. offline inspection of an already existing authorized capture;
+6. preservation of a SHA-256-verifiable baseline.
+
+Every plan item contains a stable code, priority, title, rationale and recommended action. The plan is part of the canonical report payload and therefore covered by the report integrity digest.
+
+## Offline PCAP/PCAPNG inspection
+
+Press **Analizar captura offline** to inspect an existing capture file without interacting with the wireless interface or target network.
+
+The inspection:
+
+- accepts recognized PCAP/PCAPNG file headers;
+- records file size and SHA-256;
+- supports cooperative cancellation while hashing large files;
+- optionally uses a locally installed `tshark` executable to count EAPOL and RSN frames;
+- degrades to built-in metadata-only inspection when `tshark` is unavailable or fails.
+
+This is protocol/evidence inspection only. PythonKni does not extract password hashes, PMKID material, keys or credentials from the capture and does not submit the capture to a cracking engine.
+
+`tshark` is an optional external executable and is outside PythonKni's Python dependency lock/SBOM. Capture files are untrusted parser input, so only analyze files from a trusted or intentionally isolated assessment workflow.
+
 ## Cancellation and errors
 
-The scan runs through PythonKni's managed `Worker` lifecycle and supports cooperative cancellation. A second audit cannot replace an audit that is already running.
+Both visible-network inventory and offline capture inspection run through PythonKni's managed `Worker` lifecycle and support cooperative cancellation. A second operation cannot replace one that is already running.
 
 Technical failures use the shared structured-feedback contract: the primary message remains actionable while the original exception is retained in expandable diagnostic details.
 
 ## Evidence report
 
-The current report format is JSON and includes:
+The current report schema (`schema_version = 2`) includes:
 
 ```text
 schema_version
@@ -63,6 +98,7 @@ generated_at
 score
 access_points[]
 findings[]
+plan[]
 limitations[]
 evidence_sha256
 ```
@@ -85,13 +121,7 @@ A report can be verified directly from the repository:
 python scripts/verify_wifi_audit_report.py .\wifi-audit.json
 ```
 
-The command returns:
-
-```text
-VALID
-```
-
-with exit code `0` when the stored digest matches the canonical payload, `INVALID` with exit code `1` when it does not, and exit code `2` for file/JSON errors.
+The command returns `VALID` with exit code `0` when the stored digest matches the canonical payload, `INVALID` with exit code `1` when it does not, and exit code `2` for file/JSON errors.
 
 ## Docker verification
 
@@ -113,21 +143,21 @@ The report directory is mounted read-only.
 
 ## Explicit scope boundaries
 
-The current WiFi Auditor does **not**:
+WiFi Auditor does **not**:
 
 - enable wireless monitor mode;
 - inject management/data frames;
-- perform active WPS probing;
-- capture authentication exchanges for password recovery;
+- force clients to reconnect or send deauthentication frames;
+- perform active WPS attacks or PIN guessing;
+- capture authentication exchanges from a live target for password recovery;
+- extract PMKID/EAPOL material for cracking;
 - obtain or validate WiFi passwords;
-- generate target-specific password lists;
+- generate target-specific password lists or personal-data wordlists;
 - run password cracking;
-- create deceptive/clone access points;
-- force clients to reconnect or interact with a target network.
+- create deceptive/clone access points or captive portals that collect credentials;
+- verify submitted passwords against a real target PSK.
 
-WPS can only be discussed when passive information is available from the operating-system-visible inventory; no active WPS test is performed.
-
-These boundaries are intentional. They keep WiFi Auditor useful for defensive configuration review, inventory and evidence generation without turning the application into an automated credential-acquisition pipeline.
+These boundaries are intentional. They preserve the useful security-engineering aspects of inventory, protocol analysis, target-aware prioritization, evidence integrity, worker orchestration and reporting without creating an automated credential-acquisition pipeline.
 
 ## Platform limitations
 
