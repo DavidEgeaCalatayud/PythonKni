@@ -80,8 +80,9 @@ def test_save_changes_applies_normalized_config_and_refreshes_ui(qtbot, monkeypa
     monkeypatch.setattr(
         config_window,
         "save_runtime_config",
-        lambda path, config: saved.append((path, dict(config)))
-        or {"theme": "Claro", "language": "Español"},
+        lambda path, config: (
+            saved.append((path, dict(config))) or {"theme": "Claro", "language": "Español"}
+        ),
     )
     themed = []
     monkeypatch.setattr(
