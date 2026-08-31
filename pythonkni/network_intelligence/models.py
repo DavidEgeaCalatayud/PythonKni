@@ -27,6 +27,7 @@ class RelationshipKind(str, Enum):
     DEFAULT_GATEWAY = "Default gateway"
     LAN_MEMBERSHIP = "LAN membership"
     SAME_SCOPE = "Same local scope"
+    PHYSICAL_LINK = "Physical link"
 
 
 @dataclass(frozen=True, slots=True)
@@ -73,6 +74,9 @@ class NetworkRelationship:
     confidence: RelationshipConfidence
     evidence: tuple[str, ...]
     observed_at: datetime
+    source_port: str = ""
+    target_port: str = ""
+    protocol: str = ""
 
 
 @dataclass(frozen=True, slots=True)
