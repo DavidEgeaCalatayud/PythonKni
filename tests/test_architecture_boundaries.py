@@ -16,6 +16,7 @@ DOMAINS = {
     "duplicate": "duplicate_tool.py",
     "event_viewer": "event_viewer_tool.py",
     "network": "network_tool.py",
+    "network_intelligence": "network_intelligence_tool.py",
     "pdf": "pdf_merge_tool.py",
     "process_manager": "process_manager_tool.py",
     "startup": "startup_manager_tool.py",
