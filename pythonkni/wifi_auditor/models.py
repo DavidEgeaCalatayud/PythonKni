@@ -29,6 +29,26 @@ class AuditFinding:
 
 
 @dataclass(frozen=True, slots=True)
+class AuditPlanItem:
+    priority: int
+    code: str
+    title: str
+    rationale: str
+    action: str
+
+
+@dataclass(frozen=True, slots=True)
+class CaptureInspection:
+    path: str
+    format: str
+    size_bytes: int
+    sha256: str
+    eapol_frames: int | None = None
+    rsn_frames: int | None = None
+    analyzer: str = "builtin"
+
+
+@dataclass(frozen=True, slots=True)
 class AuditReport:
     generated_at: str
     score: int
@@ -36,3 +56,4 @@ class AuditReport:
     findings: tuple[AuditFinding, ...]
     limitations: tuple[str, ...]
     evidence_sha256: str
+    plan: tuple[AuditPlanItem, ...] = ()
