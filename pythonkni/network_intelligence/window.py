@@ -483,7 +483,9 @@ class Tool(BaseTool):
         asset = next((item for item in self.assets if item.asset_id == endpoint_id), None)
         if asset is None:
             return endpoint_id
-        label = asset.hostname if asset.hostname and asset.hostname != "Unknown" else asset.kind.value
+        label = (
+            asset.hostname if asset.hostname and asset.hostname != "Unknown" else asset.kind.value
+        )
         return f"{label} ({asset.ip})"
 
     def _render_relationships(self) -> None:
