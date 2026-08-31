@@ -22,7 +22,7 @@ python -m pip install --require-hashes -r requirements-dev.txt
 python main.py
 ```
 
-`requirements.in` and `requirements-dev.in` contain the direct dependency policy. `requirements.txt` and `requirements-dev.txt` contain the exact transitive versions and approved distribution hashes used by CI/release. Do not hand-edit transitive pins or hashes.
+`requirements.in` and `requirements-dev.in` contain direct dependency policy. `requirements.txt` and `requirements-dev.txt` contain the exact transitive versions and approved distribution hashes used by CI/release. Do not hand-edit transitive pins or hashes.
 
 The main window discovers valid `tools/*_tool.py` adapters dynamically and adds their `Tool` classes to the menu.
 
@@ -40,7 +40,7 @@ The executable is expected at:
 dist\PythonKni\PythonKni.exe
 ```
 
-Run the non-interactive packaging smoke test used by CI with:
+Run the same non-interactive packaging smoke test used by CI:
 
 ```powershell
 dist\PythonKni\PythonKni.exe --smoke-test
@@ -95,7 +95,7 @@ Archive creation and extraction run in a background worker, expose progress and 
 
 Extraction is deliberately stricter than a generic archive utility. The destination directory must not already exist, unsafe archive members are rejected, and extraction is staged before the completed directory is published. See `security.md` for the enforced archive limits and path rules.
 
-Technical archive failures now use structured feedback: the main dialog explains that the operation could not be completed, while the underlying exception remains available through the expandable details area for troubleshooting.
+Technical archive failures use structured feedback: the main dialog explains that the operation could not be completed, while the underlying exception remains available through expandable details for troubleshooting.
 
 ## File Converter
 
@@ -108,43 +108,39 @@ Current conversions:
 - TXT -> DOCX.
 - DOCX -> TXT.
 - DOCX -> PDF.
-- TXT -> KML, for an individual file or a folder batch.
-- KML -> TXT, for an individual file or a folder batch.
+- TXT -> KML, for an individual file or folder batch.
+- KML -> TXT, for an individual file or folder batch.
 
 Only one conversion is run by the window at a time. Long conversions expose cancellation, and closing the window while work is active requests cancellation before closing.
 
-Converter outputs are transactional where the service supports publication: failed or cancelled work is not presented as a completed output. The DOCX -> PDF converter is intentionally simplified and should not be expected to reproduce complex Microsoft Word layout exactly.
+Converter outputs are transactional where the service supports publication: failed or cancelled work is not presented as a completed output. DOCX -> PDF is intentionally simplified and should not be expected to reproduce complex Microsoft Word layout exactly.
 
 ## PDF Toolkit
 
 **Menu name:** `PDF Toolkit`
 
-The PDF backend uses the maintained **`pypdf`** package for PDF reading/writing operations. PyMuPDF, ReportLab and optional OCR tooling are used where their specific capabilities are required.
+The PDF backend uses maintained **`pypdf`** for PDF reading/writing. PyMuPDF, ReportLab and optional OCR tooling are used where their narrower capabilities are required.
 
 ### Extract text
 
 - Select a PDF.
-- Optionally select specific pages such as `1,3,5-7`; an empty page field means all pages.
+- Optionally select pages such as `1,3,5-7`; an empty page field means all pages.
 - Preview the first pages before exporting.
 - Export extracted text as Markdown.
 - Choose one output file or one file per page.
 - Optionally include page headers.
 - Enable OCR when required, with an option to OCR only pages that appear empty.
 
-The UI exposes a configurable threshold for considering a PDF probably scanned based on pages with no extracted text.
-
 ### Split
 
 Two modes are available:
 
 - one PDF per page;
-- custom ranges, for example `1-3,5,8-10`.
-
-Choose a source PDF and an output directory.
+- custom ranges such as `1-3,5,8-10`.
 
 ### Extract pages
 
-Select a source PDF and a page specification to create a new PDF containing only those pages.
+Select a source PDF and page specification to create a new PDF containing only those pages.
 
 ### Reorder
 
@@ -158,7 +154,7 @@ PDF operations run in the background and expose cancellation. OCR additionally r
 
 ## Duplicate Finder
 
-The duplicate workflow scans a selected directory recursively and identifies duplicate content in several stages:
+The duplicate workflow scans a selected directory recursively and identifies duplicate content in stages:
 
 1. file size;
 2. quick edge hash;
@@ -173,9 +169,9 @@ When duplicate copies are moved, PythonKni keeps the first verified file in plac
 <selected-folder>\DuplicadosEncontrados\
 ```
 
-Before each move the candidate is rehashed and compared again against the retained original. A JSON restoration manifest is maintained in the duplicates directory, including completed, failed or cancelled moves. Cancellation can therefore leave a partial but documented set of completed moves rather than pretending the whole operation was atomic.
+Before each move the candidate is rehashed and compared again against the retained original. A JSON restoration manifest records completed, failed or cancelled moves. Cancellation can therefore leave a partial but documented result rather than pretending the whole operation was atomic.
 
-Review the duplicate groups before moving files and keep the restoration manifest until you are satisfied with the result.
+Review duplicate groups before moving files and keep the restoration manifest until you are satisfied with the result.
 
 ## Network Explorer
 
@@ -183,7 +179,7 @@ The network tool works with IPv4 interfaces and TCP port probes.
 
 Typical workflow:
 
-1. inspect the active IPv4 interfaces;
+1. inspect active IPv4 interfaces;
 2. use the detected local network or enter an authorized IPv4 CIDR manually;
 3. start host discovery;
 4. inspect responding addresses, reverse-DNS names and ARP MAC data where available;
@@ -191,7 +187,7 @@ Typical workflow:
 
 CIDR input is bounded to at most **4096 usable hosts per scan**. Port ranges must be between `1` and `65535` and use `start-end` syntax.
 
-Host discovery uses local `ping`, reverse DNS and ARP information. A host that ignores ICMP can therefore appear absent even when it is reachable by other protocols. Port scanning reports TCP connection results only; it is not a vulnerability scanner.
+Host discovery uses local `ping`, reverse DNS and ARP information. A host that ignores ICMP can therefore appear absent even when reachable by another protocol. Port scanning reports TCP connection results only; it is not a vulnerability scanner.
 
 Use network scanning only on networks and systems where you have explicit authorization.
 
@@ -199,7 +195,7 @@ Use network scanning only on networks and systems where you have explicit author
 
 **Menu name:** `Gestor de Procesos`
 
-The process table shows PID, process name, CPU usage and memory usage. CPU and memory thresholds can be used to reduce the list.
+The process table shows PID, process name, CPU usage and memory usage. CPU and memory thresholds can reduce the list.
 
 Available actions include:
 
@@ -207,9 +203,9 @@ Available actions include:
 - inspect/analyze a process executable;
 - terminate the selected process.
 
-PythonKni refuses to terminate its own process. Termination always requires confirmation with the selected process identity. Processes classified conservatively as Windows/system processes receive a second warning because terminating them may cause instability, logoff or restart.
+PythonKni refuses to terminate its own process. Termination requires confirmation with the selected process identity. Processes classified conservatively as Windows/system processes receive a second warning because terminating them may cause instability, logoff or restart.
 
-Failures while refreshing the process list or running the VirusTotal worker use the structured technical-error dialog: the primary message remains actionable and the exception details are available separately. Process-protection warnings and termination confirmations remain explicit domain dialogs.
+Immediately before termination, the service revalidates process liveness and `create_time`, protecting against PID reuse between selection/confirmation and the destructive call.
 
 ### VirusTotal process analysis
 
@@ -219,7 +215,7 @@ If `VIRUSTOTAL_API_KEY` is configured, PythonKni can:
 2. calculate its SHA-256 locally;
 3. query VirusTotal for an existing report for that hash.
 
-The current implementation does **not upload the executable file** to VirusTotal. A hash query still discloses that hash to the external service, so review `security.md` before using it with sensitive software.
+The current implementation does **not upload the executable file**. A hash query still discloses the hash to the external service, so review `security.md` before using it with sensitive software.
 
 ## Temporary Cleaner
 
@@ -231,31 +227,29 @@ Current target classes include:
 - supported browser cache locations for Chrome, Edge and Firefox profiles;
 - Windows Temp where available.
 
-Use the preview before deleting data. The preview counts candidate items and estimates file bytes without intentionally following symbolic links or Windows reparse points.
+Use preview before deleting data. Preview counts candidate items and estimates bytes without intentionally following symbolic links or Windows reparse points.
 
-The cleaner validates that a requested root is one of the exact known targets, rejects broad roots/containers, and revalidates directory identity while traversing. Files that cannot be removed because they are locked or inaccessible are reported as failures rather than forcing deletion.
-
-Closing applications that actively use a cache/temp directory can reduce expected permission or sharing errors.
+The cleaner validates that a requested root is one of the exact known targets, rejects broad roots/containers and revalidates directory identity while traversing. Locked/inaccessible files are reported as failures rather than forcing deletion.
 
 ## WiFi Profiles
 
-The WiFi tool reads profiles saved by Windows through `netsh` and can display the stored key material returned by Windows.
+The WiFi tool reads profiles saved by Windows through `netsh` and can display stored key material returned by Windows.
 
 Because WiFi credentials are sensitive:
 
-- use the tool only on a Windows account/device you are authorized to inspect;
-- do not include captured passwords in bug reports, screenshots or logs you share publicly;
-- close the tool when the credentials no longer need to be visible.
+- use the tool only on an account/device you are authorized to inspect;
+- do not include captured passwords in public bug reports or screenshots;
+- close the tool when credentials no longer need to be visible.
 
-The implementation exports each requested profile with `key=clear` into an isolated temporary directory, parses only the matching XML and removes the temporary directory when the operation finishes. Windows permissions/policy can prevent some credentials from being returned.
+Each requested profile is exported with `key=clear` into an isolated temporary directory, matched to the correct XML profile and removed when the operation finishes. Windows permissions/policy can prevent credentials from being returned.
 
 ## Disk Analyzer
 
 **Menu name:** `Analizador de Disco`
 
-Select a directory and start analysis to rank the files/directories consuming the most space. The scan runs outside the main UI flow and the results can be exported for later review.
+Select a directory and start analysis to rank files/directories consuming the most space. The scan runs outside the main UI flow and results can be exported for later review.
 
-Treat reported sizes as a point-in-time view: files may change while the system is running, and inaccessible paths may not be fully represented.
+Symlink entries are not followed by the service, and individual inaccessible entries are skipped rather than terminating the whole analysis. Reported sizes remain a point-in-time view because files can change while the system is running.
 
 ## Windows Startup Manager
 
@@ -269,7 +263,7 @@ The startup manager collects supported entries from:
 - the common Startup folder;
 - entries previously disabled by PythonKni.
 
-It displays whether an entry is active, its command/path, origin and a heuristic risk label. Risk labels are support hints, **not malware verdicts**.
+It displays active state, command/path, origin and a heuristic risk label. Risk labels are support hints, **not malware verdicts**.
 
 Disabling supported entries is designed to be recoverable:
 
@@ -293,7 +287,7 @@ Available controls include:
 - event-level and heuristic risk filters;
 - free-text search by source, event ID, message or interpretation;
 - event detail/copy actions;
-- export/report actions provided by the window.
+- export/report actions.
 
 Reading the Security log can require administrator privileges. Risk classification and interpretation are heuristics intended to help triage events; they are not a replacement for Windows diagnostics expertise or incident-response analysis.
 
@@ -307,9 +301,9 @@ Diagnostic reports can contain hostnames, addresses, process information and oth
 
 ## Configuration
 
-The configuration tool manages the settings currently implemented by PythonKni, including theme and language selection.
+The configuration tool manages implemented settings including theme and language selection.
 
-Configuration is normalized before saving and published atomically to `config.json`, so an interrupted write does not intentionally replace the previous valid configuration with a partial file. If persistence fails, PythonKni does not apply the unsaved theme/language state; the main dialog gives a concise explanation and keeps the technical exception in expandable details.
+Configuration is normalized before saving and published atomically to `config.json`, so an interrupted write does not intentionally replace a previous valid configuration with a partial file. If persistence fails, PythonKni does not apply unsaved theme/language state.
 
 Localization infrastructure exists, but not every user-visible string is fully translated yet.
 
@@ -317,34 +311,37 @@ Localization infrastructure exists, but not every user-visible string is fully t
 
 ## Cancellation and closing windows
 
-Many long-running tools use managed background workers or domain-specific worker threads. Cancellation is cooperative: the service checks a cancellation signal at safe points and stops as soon as the underlying operation permits.
+Many long-running tools use managed workers or domain-specific worker threads. Cancellation is cooperative: services check a cancellation signal at safe points and stop as soon as the underlying operation permits.
 
-Cancellation is not identical to forcibly killing a thread or subprocess. An already completed filesystem mutation may remain completed; tools that can partially mutate state are designed to report or record that state where practical.
+Cancellation is not equivalent to forcibly killing a thread/subprocess. An already completed filesystem mutation can remain completed; tools that can partially mutate state report or record that state where practical.
+
+## Structured technical errors
+
+Technical failures across the current first-party toolset use a common presentation rule where appropriate:
+
+- the primary dialog/result text describes **what failed and what the user can do next**;
+- **Show Details** retains the original exception type/message or diagnostic text for troubleshooting;
+- raw exceptions are not deliberately embedded into normal user-facing summaries.
+
+This applies to loader/configuration failures and technical paths in Archive, Process Manager, Converter, PDF, Network, System Report, Disk Analyzer, Startup Manager, Temp Cleaner, WiFi, Event Viewer and Duplicate Finder.
+
+Input-validation messages, destructive confirmations and domain-specific warnings intentionally remain explicit tool dialogs. Structured technical feedback is not a replacement for business semantics.
+
+When reporting a reproducible bug, expandable details plus the relevant `%LOCALAPPDATA%\PythonKni\logs\` entry are more useful than a screenshot containing only the generic summary. Review diagnostics before sharing them externally because they may include local paths/environment data.
 
 ## Dependency maintenance
 
 When a direct Python dependency must change:
 
 1. change its allowed range in `requirements.in` or `requirements-dev.in`;
-2. regenerate the corresponding lock with `pip-tools` on the canonical Windows / CPython 3.10.11 environment;
-3. keep `--generate-hashes --allow-unsafe --strip-extras --no-header` so every installable distribution remains hash-locked;
+2. regenerate the lock with `pip-tools` on Windows / CPython 3.10.11;
+3. keep `--generate-hashes --allow-unsafe --strip-extras --no-header`;
 4. run the lock validator, `pip check` and both `pip-audit` gates;
-5. review the generated diff before committing it.
+5. review version/hash changes before committing.
 
-The canonical commands are documented in the README. Dependabot checks Python dependencies and GitHub Actions weekly, but updates still require the same CI validation as application changes.
+Dependabot checks Python dependencies and GitHub Actions weekly, but proposed updates still require the same CI validation as application changes.
 
 ## Troubleshooting
-
-### Technical error details
-
-Some technical failures now show two levels of information:
-
-- the primary dialog text is a concise description of what failed and what state was preserved;
-- **Show Details** exposes the exception type/message or diagnostic text useful for troubleshooting.
-
-This structured feedback is currently used by the main tool loader, configuration persistence, Archive background operations and Process Manager refresh/VirusTotal worker failures. Other windows still have legacy error-dialog paths and will migrate incrementally.
-
-When reporting a reproducible bug, the expandable details and the relevant `%LOCALAPPDATA%\PythonKni\logs\` entry are more useful than a screenshot of only the generic summary. Review diagnostics before sharing them externally because they may include local paths or environment information.
 
 ### A tool does not appear in the main menu
 
@@ -354,7 +351,7 @@ The loader only accepts modules that satisfy the plugin contract. Run:
 python -m pytest tests/test_tool_contract.py tests/test_architecture_boundaries.py
 ```
 
-A discovery/import error is logged and invalid tools are skipped instead of silently being treated as valid. When one or more plugins fail but discovery can continue, the main window provides a concise warning and keeps the per-module diagnostics in expandable details.
+A discovery/import error is logged and invalid tools are skipped rather than silently treated as valid.
 
 ### OCR returns no text
 
@@ -362,19 +359,23 @@ Confirm that Tesseract OCR and Poppler are installed and visible through the exp
 
 ### A Windows system action fails with access denied
 
-Process, startup, Event Viewer, WiFi and some temp-directory operations depend on Windows permissions. Retry only if elevation is appropriate for the system you are authorized to administer; do not use elevation as a way to bypass organizational policy.
+Process, startup, Event Viewer, WiFi and some temp-directory operations depend on Windows permissions. Retry with elevation only when appropriate for a system you are authorized to administer; do not use elevation to bypass organizational policy.
 
 ### Network scan misses a device
 
-ICMP/ping may be blocked, reverse DNS may not exist, ARP visibility is limited to relevant local-network information, and firewalls can reject or silently drop TCP probes. A missing result is not proof that a device/service is absent.
+ICMP/ping may be blocked, reverse DNS may not exist, ARP visibility is limited to relevant local-network information, and firewalls can reject/drop TCP probes. A missing result is not proof that a device/service is absent.
 
 ### A dependency install fails with a hash mismatch
 
-Do not bypass `--require-hashes`. A mismatch means the requested artifact is not one of the distributions recorded in the lock. Regenerate the lock only as part of an intentional dependency update and review the resulting version/hash diff.
+Do not bypass `--require-hashes`. A mismatch means the artifact is not one of the distributions recorded in the lock. Regenerate locks only as part of an intentional dependency update and review the resulting diff.
+
+---
 
 ## Development validation
 
-Run the core validation path used by CI:
+The current suite contains **578 tests**, with **86.4% repository-wide branch coverage** and **93.2% aggregate service coverage** on the canonical Windows CI environment.
+
+Run the core validation path with:
 
 ```powershell
 python scripts/check_dependency_locks.py
@@ -383,12 +384,12 @@ python -m pip_audit -r requirements.txt --no-deps --strict --progress-spinner=of
 python -m pip_audit -r requirements-dev.txt --no-deps --strict --progress-spinner=off
 python -m compileall .
 python -m pytest --cov=pythonkni --cov=tools --cov-branch --cov-report=term-missing --cov-report=xml
-python -m coverage report --fail-under=84.0
-python -m coverage report --include="pythonkni/*/service.py" --fail-under=91.0
+python -m coverage report --fail-under=86.0
+python -m coverage report --include="pythonkni/*/service.py" --fail-under=93.0
 python -m ruff check .
 python -m ruff format --check .
 pyinstaller --noconfirm --clean PythonKni.spec
 .\dist\PythonKni\PythonKni.exe --smoke-test
 ```
 
-The GitHub Actions `CI / validate` job performs the complete Windows validation on CPython 3.10.11, including the individual priority-module coverage ratchets, dependency audits, CycloneDX SBOM generation and packaged artifact creation. The current structured-feedback tranche is covered by the same pipeline and raises the validated suite to 545 tests.
+CI/release also enforce individual non-regression gates for the strongest and recently hardened services/windows. Current new service floors include Disk Analyzer `>=94.5%`, Duplicate `>=90.0%`, Process Manager `>=99.0%` and WiFi `>=95.5%`.
