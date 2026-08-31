@@ -71,9 +71,7 @@ class NetworkTopologyView(QGraphicsView):
         internet = next(node for node in graph.nodes if node.node_id == "synthetic:internet")
         gateway = next(node for node in graph.nodes if node.node_id == graph.gateway_node_id)
         children = [
-            node
-            for node in graph.nodes
-            if node.node_id not in {internet.node_id, gateway.node_id}
+            node for node in graph.nodes if node.node_id not in {internet.node_id, gateway.node_id}
         ]
 
         columns = min(_MAX_COLUMNS, max(1, len(children)))
