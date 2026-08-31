@@ -60,7 +60,7 @@ class Tool(BaseTool):
         self.capture_details = QTextEdit()
         self.capture_details.setReadOnly(True)
         self.capture_details.setPlaceholderText(
-            "La inspección de capturas offline mostrará formato, integridad y metadatos de protocolo."
+            "La inspección offline de PCAP/PCAPNG mostrará formato, integridad y metadatos de protocolo."
         )
         self.capture_details.setMaximumHeight(150)
 
