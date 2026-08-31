@@ -29,6 +29,7 @@ The project has not published a tagged release for the work below yet, so the cu
 - Added `scripts/check_dependency_locks.py` plus regressions that reject missing hashes, malformed SHA-256 values, non-exact pins, missing direct dependencies and direct versions outside the declared policy range. (PR #36)
 - Added CycloneDX runtime SBOM generation and retention alongside Windows CI/release artifacts, plus weekly Dependabot checks for Python dependencies and GitHub Actions. (PR #36)
 - Added `tools/ui_feedback.py`, a reusable Qt feedback renderer that keeps concise user-facing summaries separate from optional expandable technical diagnostics. (PR #39)
+- Added domain-specific service regression suites for Disk Analyzer, WiFi, Process Manager and Duplicate Finder, covering real error, cancellation, identity, parsing and recovery paths without changing production service behavior. (PR #41)
 
 ### Changed
 
@@ -58,6 +59,8 @@ The project has not published a tagged release for the work below yet, so the cu
 - CI and release now install the committed dependency graphs with `pip --require-hashes`, validate the resulting graph with `pip check`, and publish both dependency locks with validated build/release artifacts. (PR #36)
 - GitHub Actions used by CI/release are pinned to immutable commit SHAs rather than mutable version tags. (PR #36)
 - Tool-loader failures, configuration persistence failures, Archive worker failures and Process Manager refresh/VirusTotal worker failures now show actionable primary text while preserving exception/diagnostic data in expandable details. Domain confirmations and business-specific warnings remain unchanged. (PR #39)
+- Completed the structured technical-feedback migration across the remaining first-party windows, keeping actionable primary text separate from expandable diagnostics while preserving explicit validation, confirmation and domain-warning flows. (PR #40)
+- Raised CI/release coverage ratchets to **86.0% repository-wide** and **93.0% across services**, added dedicated floors for Disk Analyzer, Duplicate Finder, Process Manager and WiFi, and raised the Process/config/infrastructure aggregate floor to **88.5%**. (PR #41)
 
 ### Fixed
 
@@ -115,6 +118,8 @@ The project has not published a tagged release for the work below yet, so the cu
 - Expanded the suite to **535 tests** with PDF migration/dependency-lock regressions while preserving the established **84.6% repository-wide / 91.5% service-layer** application coverage baseline. (PR #36)
 - The canonical Windows pipeline now validates hash-locked installation, lock structure, `pip check`, runtime/development vulnerability audits and SBOM generation before compile/test/lint/build/smoke/package stages. (PR #36)
 - Expanded the suite to **545 tests** for structured feedback behavior, raising repository-wide branch coverage to **84.7%** while preserving **91.5%** service-layer coverage. Archive, Config and Process Manager windows now measure **70.2%**, **85.0%** and **74.6%** respectively, and the shared feedback helper measures **80.0%**. (PR #39)
+- Completed the structured-feedback coverage tranche at **555 tests** and **85.6% repository-wide branch coverage**, while preserving **91.5% aggregate service coverage** and validating the complete migrated window set through the frozen Windows bundle. (PR #40)
+- Expanded the suite from **555 to 578 tests**, raising repository-wide branch coverage from **85.6% to 86.4%** and aggregate service coverage from **91.5% to 93.2%**. Disk Analyzer now measures **95.0%**, Duplicate **90.5%**, Process Manager **99.3%** and WiFi **96.0%**. (PR #41)
 
 ### Documentation
 
@@ -130,7 +135,9 @@ The project has not published a tagged release for the work below yet, so the cu
 - Updated README and architecture documentation with the final **530-test / 84.6% global / 91.5% service** coverage baseline and removed the now-completed 80%/85% coverage target from the active roadmap. (PR #35)
 - Synchronized README, architecture, usage and security documentation with the `pypdf` backend, Python 3.10+ support contract, hashed dependency locks, vulnerability audits, SBOM artifacts and the 535-test CI path; removed the completed PDF/dependency-hardening items from the active roadmap. (PR #36)
 - Documented the first structured-feedback tranche, its presentation-layer boundary, troubleshooting flow, exact coverage/test metrics and the remaining incremental migration roadmap. (PR #39)
+- Updated the first-party documentation to reflect the completed structured-feedback migration rather than the earlier partial rollout. (PR #40)
+- Rebuilt README coverage/status sections around the **578-test / 86.4% global / 93.2% service** baseline, restored the regression-tested plugin example, synchronized architecture/usage guidance and redirected the active coverage roadmap toward lower-covered presentation modules. (PR #41)
 
 ### Development cycle covered
 
-This Unreleased section consolidates the major merged hardening/refactoring work from **PR #2 through PR #36** and the current structured-feedback work in **PR #39** during the August 2026 development cycle. PR #1 was intentionally not merged and was superseded by the later Temp Cleaner work in PRs #21 and #26.
+This Unreleased section consolidates the major merged hardening/refactoring work from **PR #2 through PR #41** during the August 2026 development cycle. PR #1 was intentionally not merged and was superseded by the later Temp Cleaner work in PRs #21 and #26.
