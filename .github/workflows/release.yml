@@ -85,6 +85,7 @@ jobs:
           python -m coverage report --include="pythonkni/system_report/service.py" --fail-under=97.0
           python -m coverage report --include="pythonkni/temp_cleaner/service.py" --fail-under=86.0
           python -m coverage report --include="pythonkni/wifi/service.py" --fail-under=95.5
+          python -m coverage report --include="pythonkni/wifi_auditor/service.py" --fail-under=98.0
 
       - name: Enforce priority-window coverage ratchets
         run: |
@@ -101,6 +102,7 @@ jobs:
           python -m coverage report --include="pythonkni/system_report/window.py" --fail-under=94.0
           python -m coverage report --include="pythonkni/temp_cleaner/window.py" --fail-under=93.5
           python -m coverage report --include="pythonkni/wifi/window.py" --fail-under=94.5
+          python -m coverage report --include="pythonkni/wifi_auditor/window.py" --fail-under=98.0
 
       - name: Enforce refactored critical-code coverage
         run: python -m coverage report --include="pythonkni/process_manager/service.py,pythonkni/config/service.py,pythonkni/infrastructure/*.py" --fail-under=88.5
