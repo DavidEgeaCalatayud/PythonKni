@@ -2,8 +2,11 @@ from __future__ import annotations
 
 import ipaddress
 import platform
+import re
 import subprocess
 from datetime import datetime, timezone
+
+from pythonkni.camera_auditor.service import parse_camera_scope
 
 from .models import (
     AssetRecord,
@@ -14,6 +17,7 @@ from .models import (
 
 INTERNET_NODE_ID = "synthetic:internet"
 LAN_NODE_PREFIX = "synthetic:lan:"
+_MAC_PATTERN = re.compile(r"^[0-9A-Fa-f]{2}(?::[0-9A-Fa-f]{2}){5}$")
 
 
 def utc_now() -> datetime:
@@ -94,11 +98,14 @@ def _asset_in_scope(asset: AssetRecord, network: ipaddress.IPv4Network) -> bool:
     return isinstance(address, ipaddress.IPv4Address) and address in network
 
 
+def _has_neighbor_mac(asset: AssetRecord) -> bool:
+    return bool(_MAC_PATTERN.fullmatch((asset.mac or "").strip()))
+
+
 def _neighbor_evidence(asset: AssetRecord) -> tuple[str, ...]:
     evidence = [f"Asset IP {asset.ip} belongs to the audited scope {asset.scope}."]
-    mac = (asset.mac or "").strip()
-    if mac and mac.casefold() not in {"unknown", "n/a", "no disponible"}:
-        evidence.append(f"Local neighbor discovery associated {asset.ip} with MAC {mac}.")
+    if _has_neighbor_mac(asset):
+        evidence.append(f"Local neighbor discovery associated {asset.ip} with MAC {asset.mac}.")
     return tuple(evidence)
 
 
@@ -109,9 +116,7 @@ def build_relationships(
     gateway_ip: str | None = None,
     observed_at: datetime | None = None,
 ) -> tuple[NetworkRelationship, ...]:
-    network = ipaddress.ip_network(scope, strict=False)
-    if not isinstance(network, ipaddress.IPv4Network):
-        raise ValueError("Network relationships currently support IPv4 scopes only.")
+    network = parse_camera_scope(scope)
     observed_at = observed_at or utc_now()
     lan_id = lan_node_id(network.with_prefixlen)
     relationships: list[NetworkRelationship] = []
@@ -179,13 +184,21 @@ def build_relationships(
     for asset in scoped_assets:
         if gateway_asset is not None and asset.asset_id == gateway_asset.asset_id:
             continue
-        confidence = (
-            RelationshipConfidence.CONFIRMED if asset.is_online else RelationshipConfidence.UNKNOWN
-        )
+        if not asset.is_online:
+            confidence = RelationshipConfidence.UNKNOWN
+        elif _has_neighbor_mac(asset):
+            confidence = RelationshipConfidence.CONFIRMED
+        else:
+            confidence = RelationshipConfidence.INFERRED
+
         evidence = list(_neighbor_evidence(asset))
-        if asset.is_online:
+        if confidence == RelationshipConfidence.CONFIRMED:
             evidence.append(
-                "The asset was observed in the latest inventory snapshot; no physical attachment point is claimed."
+                "The online asset also has local neighbor/MAC evidence; no physical attachment point is claimed."
+            )
+        elif confidence == RelationshipConfidence.INFERRED:
+            evidence.append(
+                "The asset was observed online in the audited scope, but no valid neighbor MAC was available."
             )
         else:
             evidence.append(
