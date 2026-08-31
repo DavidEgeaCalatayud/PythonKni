@@ -2,12 +2,20 @@ from __future__ import annotations
 
 from datetime import datetime, timezone
 
-from PyQt5.QtWidgets import QGraphicsRectItem
+from PyQt5.QtWidgets import QGraphicsLineItem, QGraphicsRectItem
 
 from pythonkni.camera_auditor.models import RiskLevel
 from pythonkni.network.models import DiscoveredHost
 from pythonkni.network_intelligence import window
-from pythonkni.network_intelligence.models import AssetRecord, DeviceKind, NetworkIntelligenceDevice
+from pythonkni.network_intelligence.models import (
+    AssetRecord,
+    DeviceKind,
+    NetworkIntelligenceDevice,
+    NetworkRelationship,
+    RelationshipConfidence,
+    RelationshipKind,
+)
+from pythonkni.network_intelligence.relationships import lan_node_id
 from pythonkni.network_intelligence.topology import build_logical_topology
 from pythonkni.network_intelligence.topology_view import NetworkTopologyView
 
@@ -71,8 +79,9 @@ def test_topology_prefers_online_router_and_keeps_offline_assets():
     )
 
     graph = build_logical_topology([nas, pc, router])
+    lan_id = lan_node_id(router.scope)
 
-    assert graph.gateway_node_id == router.asset_id
+    assert graph.gateway_node_id == lan_id
     assert graph.physical_links_known is False
     assert {node.asset_id for node in graph.nodes if node.asset_id} == {
         router.asset_id,
@@ -81,18 +90,21 @@ def test_topology_prefers_online_router_and_keeps_offline_assets():
     }
     relationships = {(edge.source_id, edge.target_id) for edge in graph.edges}
     assert ("synthetic:internet", router.asset_id) in relationships
-    assert (router.asset_id, pc.asset_id) in relationships
-    assert (router.asset_id, nas.asset_id) in relationships
+    assert (router.asset_id, lan_id) in relationships
+    assert (lan_id, pc.asset_id) in relationships
+    assert (lan_id, nas.asset_id) in relationships
     assert "physical switch" in graph.note
 
 
 def test_topology_uses_synthetic_lan_when_router_is_not_classified():
-    graph = build_logical_topology([make_asset()])
+    asset = make_asset()
+    graph = build_logical_topology([asset])
+    lan_id = lan_node_id(asset.scope)
 
-    assert graph.gateway_node_id == "synthetic:lan"
-    assert any(node.node_id == "synthetic:lan" and node.synthetic for node in graph.nodes)
-    assert any(edge.target_id == "synthetic:lan" for edge in graph.edges)
-    assert any(edge.target_id == "mac:AA:BB:CC:DD:EE:30" for edge in graph.edges)
+    assert graph.gateway_node_id == lan_id
+    assert any(node.node_id == lan_id and node.synthetic for node in graph.nodes)
+    assert any(edge.target_id == lan_id for edge in graph.edges)
+    assert any(edge.target_id == asset.asset_id for edge in graph.edges)
 
 
 def test_topology_does_not_treat_offline_router_as_current_gateway_and_handles_invalid_ip():
@@ -105,10 +117,57 @@ def test_topology_does_not_treat_offline_router_as_current_gateway_and_handles_i
     )
     graph = build_logical_topology([router, make_asset()])
 
-    assert graph.gateway_node_id == "synthetic:lan"
+    assert graph.gateway_node_id == lan_node_id(router.scope)
     router_node = next(node for node in graph.nodes if node.asset_id == router.asset_id)
     assert router_node.is_online is False
     assert any(edge.target_id == router.asset_id for edge in graph.edges)
+
+
+def test_topology_uses_confirmed_relationship_gateway():
+    router = make_asset(
+        asset_id="mac:AA:BB:CC:DD:EE:01",
+        ip="192.168.1.1",
+        hostname="router.local",
+        kind=DeviceKind.ROUTER,
+    )
+    pc = make_asset()
+    now = router.last_seen
+    lan_id = lan_node_id(router.scope)
+    relationships = (
+        NetworkRelationship(
+            scope=router.scope,
+            source_id="synthetic:internet",
+            target_id=router.asset_id,
+            kind=RelationshipKind.DEFAULT_GATEWAY,
+            confidence=RelationshipConfidence.CONFIRMED,
+            evidence=("route table",),
+            observed_at=now,
+        ),
+        NetworkRelationship(
+            scope=router.scope,
+            source_id=router.asset_id,
+            target_id=lan_id,
+            kind=RelationshipKind.LAN_MEMBERSHIP,
+            confidence=RelationshipConfidence.CONFIRMED,
+            evidence=("gateway in scope",),
+            observed_at=now,
+        ),
+        NetworkRelationship(
+            scope=router.scope,
+            source_id=lan_id,
+            target_id=pc.asset_id,
+            kind=RelationshipKind.LAN_MEMBERSHIP,
+            confidence=RelationshipConfidence.CONFIRMED,
+            evidence=("observed host",),
+            observed_at=now,
+        ),
+    )
+
+    graph = build_logical_topology([router, pc], relationships)
+
+    assert graph.gateway_node_id == router.asset_id
+    assert all(edge.confidence == RelationshipConfidence.CONFIRMED for edge in graph.edges)
+    assert any(edge.evidence == ("route table",) for edge in graph.edges)
 
 
 def test_topology_view_renders_and_emits_asset_selection(qtbot):
@@ -142,13 +201,45 @@ def test_topology_view_renders_and_emits_asset_selection(qtbot):
     assert "MEDIUM" in child_text
 
 
+def test_topology_view_renders_confidence_styles_and_evidence(qtbot):
+    asset = make_asset()
+    lan_id = lan_node_id(asset.scope)
+    relationship = NetworkRelationship(
+        scope=asset.scope,
+        source_id=lan_id,
+        target_id=asset.asset_id,
+        kind=RelationshipKind.LAN_MEMBERSHIP,
+        confidence=RelationshipConfidence.UNKNOWN,
+        evidence=("historical asset",),
+        observed_at=asset.last_seen,
+    )
+    internet_relation = NetworkRelationship(
+        scope=asset.scope,
+        source_id="synthetic:internet",
+        target_id=lan_id,
+        kind=RelationshipKind.DEFAULT_GATEWAY,
+        confidence=RelationshipConfidence.UNKNOWN,
+        evidence=("gateway unavailable",),
+        observed_at=asset.last_seen,
+    )
+    view = NetworkTopologyView()
+    qtbot.addWidget(view)
+
+    view.set_assets([asset], [internet_relation, relationship])
+
+    lines = [item for item in view.scene().items() if isinstance(item, QGraphicsLineItem)]
+    assert len(lines) == 2
+    assert all(line.pen().style() == 3 for line in lines)
+    assert any("historical asset" in line.toolTip() for line in lines)
+
+
 def test_topology_view_handles_empty_inventory_and_cleared_selection(qtbot):
     view = NetworkTopologyView()
     qtbot.addWidget(view)
     view.set_assets([])
     assert view.graph is not None
-    assert view.graph.gateway_node_id == "synthetic:lan"
-    assert len(view.scene().items()) >= 3
+    assert view.graph.gateway_node_id == "synthetic:lan:unknown"
+    assert len(view.scene().items()) >= 4
     view._selection_changed()
 
 
@@ -168,6 +259,7 @@ def test_network_window_topology_selection_shows_device_profile(qtbot, monkeypat
     tool._topology_asset_selected(asset.asset_id)
 
     assert tool.tabs.tabText(1) == "Network Topology"
+    assert tool.tabs.tabText(2) == "Relationship Evidence"
     assert "diskstation" in tool.topology_detail.toPlainText()
     assert "NAS" in tool.topology_detail.toPlainText()
     assert tool.table.currentRow() == 0
