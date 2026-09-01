@@ -41,6 +41,8 @@ The project has not published a tagged release for the work below yet, so the cu
 - Added deterministic Network Intelligence snapshot reporting as JSON or ZIP evidence bundles containing inventory, relationships, timeline and security-score data with spreadsheet-safe CSV serialization. (PR #51)
 - Added fully offline MAC OUI/vendor enrichment using a bundled curated registry, privacy-aware MAC validation and conservative manufacturer-assisted classification without third-party lookups. (PR #52)
 - Added a reproducible Network Intelligence OUI benchmark smoke that records lookup throughput as a retained CI artifact while keeping correctness, rather than shared-runner timing, as the gate. (PR #52)
+- Added deterministic `0..100` Device Classification Confidence with explicit LOW/MEDIUM/HIGH bands and persisted weighted matched/unmatched signals, keeping classification certainty separate from security risk. (PR #53)
+- Added a confidence-aware Network Intelligence presentation layer that exposes the score and contributing evidence in Asset Inventory and Device Profile without changing the underlying conservative device-type precedence. (PR #53)
 
 ### Changed
 
@@ -73,6 +75,8 @@ The project has not published a tagged release for the work below yet, so the cu
 - Completed the structured technical-feedback migration across the remaining first-party windows, keeping actionable primary text separate from expandable diagnostics while preserving explicit validation, confirmation and domain-warning flows. (PR #40)
 - Raised CI/release coverage ratchets to **86.0% repository-wide** and **93.0% across services**, added dedicated floors for Disk Analyzer, Duplicate Finder, Process Manager and WiFi, and raised the Process/config/infrastructure aggregate floor to **88.5%**. (PR #41)
 - Raised the repository-wide CI/release branch-coverage ratchet to **92.5%** and expanded presentation non-regression floors to 13 first-party windows while keeping the service-layer floor at **93.0%**. (PR #42)
+- Network Intelligence snapshot reports now use schema version 2 and include classification confidence level plus structured signal contributions in JSON and spreadsheet-safe CSV output. (PR #53)
+- Existing Network Intelligence SQLite databases are migrated in place with neutral confidence defaults so previously persisted assets and timeline history remain intact. (PR #53)
 
 ### Fixed
 
@@ -135,6 +139,7 @@ The project has not published a tagged release for the work below yet, so the cu
 - Expanded the suite from **578 to 686 tests**, raising repository-wide branch coverage from **86.4% to 92.9%** while preserving **93.2% aggregate service coverage**. Presentation coverage now measures Archive **97.2%**, Config **90.7%**, Converter **86.9%**, Disk Analyzer **96.9%**, Duplicate Finder **97.4%**, Event Viewer **98.9%**, Network **91.5%**, PDF **93.1%**, Process Manager **98.0%**, Startup **95.3%**, System Report **94.7%**, Temp Cleaner **94.2%** and WiFi **95.0%**. (PR #42)
 - Expanded the Network Intelligence stack regression suite to **885 tests**, preserving **92.9% repository-wide branch coverage** and raising aggregate service coverage to **93.5%** on the validated OUI integration candidate. (PRs #43-#52)
 - The Windows CI pipeline now runs and retains the Network Intelligence OUI benchmark smoke alongside coverage, SBOM, checksum and packaged application artifacts. (PR #52)
+- Extended the retained Network Intelligence benchmark smoke to measure deterministic classification-scoring throughput as well as offline OUI lookup throughput, while keeping shared-runner timing informational rather than a pass/fail threshold. (PR #53)
 
 ### Documentation
 
@@ -154,7 +159,8 @@ The project has not published a tagged release for the work below yet, so the cu
 - Rebuilt README coverage/status sections around the **578-test / 86.4% global / 93.2% service** baseline, restored the regression-tested plugin example, synchronized architecture/usage guidance and redirected the active coverage roadmap toward lower-covered presentation modules. (PR #41)
 - Synchronized README, architecture, usage and roadmap guidance with the **686-test / 92.9% global / 93.2% service** presentation-hardened baseline and the **92.5%** repository coverage ratchet. (PR #42)
 - Added and synchronized `docs/network-intelligence.md` around the persistent asset, topology, relationship/physical-evidence, reporting and offline OUI layers, including their accuracy and authorization boundaries. (PRs #44-#52)
+- Extended Network Intelligence documentation with confidence scoring semantics, weighted evidence, SQLite migration behavior, risk/confidence separation and report-schema v2. (PR #53)
 
 ### Development cycle covered
 
-This Unreleased section consolidates the major merged hardening/refactoring and Network Intelligence work from **PR #2 through PR #52** across the August-September 2026 development cycle. PR #1 was intentionally not merged and was superseded by the later Temp Cleaner work in PRs #21 and #26.
+This Unreleased section consolidates the major merged hardening/refactoring and Network Intelligence work from **PR #2 through PR #53** across the August-September 2026 development cycle. PR #1 was intentionally not merged and was superseded by the later Temp Cleaner work in PRs #21 and #26.
