@@ -13,7 +13,7 @@ from pythonkni.infrastructure.paths import (
 )
 from tools.ui_feedback import show_error, show_warning
 
-from .automatic_snapshot import create_automatic_snapshot
+from .automatic_snapshot import AutomaticSnapshotResult, create_automatic_snapshot
 from .history_window import Tool as HistoryTool
 from .scheduler import (
     DEFAULT_INTERVAL_MINUTES,
@@ -227,6 +227,16 @@ class Tool(HistoryTool):
         self._scheduled_scan_active = False
         super().start_scan()
 
+    def _automatic_snapshot_published(
+        self,
+        *,
+        previous_snapshot: Path | None,
+        snapshot: AutomaticSnapshotResult,
+        generated_at: datetime,
+    ) -> str:
+        del previous_snapshot, snapshot, generated_at
+        return ""
+
     def _scan_finished(self, result) -> None:
         scheduled = self._scheduled_scan_active
         persistence_ok = super()._scan_finished(result)
@@ -243,6 +253,9 @@ class Tool(HistoryTool):
 
         generated_at = datetime.now(timezone.utc)
         scope = self.schedule_config.scope or self._active_scope()
+        previous_snapshot = (
+            Path(self.schedule_config.last_snapshot) if self.schedule_config.last_snapshot else None
+        )
         try:
             assets = self.inventory.list_assets(scope=scope)
             relationships = self.relationship_store.list(scope=scope)
@@ -274,14 +287,30 @@ class Tool(HistoryTool):
             self.schedule_config = candidate
             self._sync_schedule_controls()
 
+        try:
+            post_snapshot_status = self._automatic_snapshot_published(
+                previous_snapshot=previous_snapshot,
+                snapshot=snapshot,
+                generated_at=generated_at,
+            )
+        except Exception as error:
+            show_warning(
+                self,
+                self.name,
+                "El snapshot automático se publicó correctamente, pero falló el procesamiento "
+                "posterior asociado a esa publicación.",
+                details=str(error),
+            )
+            post_snapshot_status = " · procesamiento posterior no disponible"
+
         retention = (
             f" · {snapshot.pruned_count} snapshot(s) antiguo(s) eliminado(s)"
             if snapshot.pruned_count
             else ""
         )
         self.status_label.setText(
-            f"Ejecución programada completada · snapshot automático {snapshot.path}{retention} · "
-            f"próxima {_local_time(self.schedule_config.next_run_at)}."
+            f"Ejecución programada completada · snapshot automático {snapshot.path}{retention}"
+            f"{post_snapshot_status} · próxima {_local_time(self.schedule_config.next_run_at)}."
         )
 
     def _scan_failed(self, error) -> None:
