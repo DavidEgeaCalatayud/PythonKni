@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from datetime import datetime, timezone
+from pathlib import Path
 
 from PyQt5.QtCore import QTimer
 from PyQt5.QtWidgets import QCheckBox, QComboBox, QHBoxLayout, QLabel
@@ -108,13 +109,13 @@ class Tool(HistoryTool):
     def _schedule_summary(self) -> str:
         config = self.schedule_config
         if not config.enabled:
-            return "Desactivada · no se ejecutan scans en segundo plano ni con PythonKni cerrado."
+            return "Desactivada · no se ejecutan scans automáticos con esta ventana cerrada."
         summary = (
             f"Scope {config.scope} · próxima {_local_time(config.next_run_at)} · "
             f"último éxito {_local_time(config.last_success_at)}"
         )
         if config.last_snapshot:
-            summary += f" · snapshot {config.last_snapshot}"
+            summary += f" · snapshot {Path(config.last_snapshot).name}"
         return summary
 
     def _sync_schedule_controls(self) -> None:
@@ -164,8 +165,8 @@ class Tool(HistoryTool):
                 self.scope_input.setText(candidate.scope)
                 self.status_label.setText(
                     "Monitorización programada activada. PythonKni ejecutará el scope autorizado "
-                    "solo mientras la aplicación esté abierta y guardará un snapshot JSON tras "
-                    "cada ejecución programada completada."
+                    "mientras esta ventana de Network Intelligence permanezca abierta y guardará "
+                    "un snapshot JSON tras cada ejecución programada completada."
                 )
             return
 
