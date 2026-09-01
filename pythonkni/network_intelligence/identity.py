@@ -3,6 +3,9 @@ from __future__ import annotations
 import sqlite3
 from datetime import datetime, timezone
 
+_GENERIC_HOSTNAMES = {"", "NO RESUELTO", "UNKNOWN", "N/A"}
+_GENERIC_VENDORS = {"", "UNKNOWN", "N/A"}
+
 
 def _instant(value: str) -> datetime:
     parsed = datetime.fromisoformat(value)
@@ -22,6 +25,7 @@ def _table_exists(connection: sqlite3.Connection, table: str) -> bool:
 def _repoint_relationships(
     connection: sqlite3.Connection,
     *,
+    scope: str,
     old_id: str,
     new_id: str,
 ) -> None:
@@ -32,19 +36,34 @@ def _repoint_relationships(
     # Any row that could not be moved because of the relationship primary key is
     # removed below together with the obsolete identity.
     connection.execute(
-        "UPDATE OR IGNORE network_relationships SET source_id = ? WHERE source_id = ?",
-        (new_id, old_id),
+        """
+        UPDATE OR IGNORE network_relationships
+        SET source_id = ?
+        WHERE scope = ? AND source_id = ?
+        """,
+        (new_id, scope, old_id),
     )
     connection.execute(
-        "UPDATE OR IGNORE network_relationships SET target_id = ? WHERE target_id = ?",
-        (new_id, old_id),
+        """
+        UPDATE OR IGNORE network_relationships
+        SET target_id = ?
+        WHERE scope = ? AND target_id = ?
+        """,
+        (new_id, scope, old_id),
     )
     connection.execute(
-        "DELETE FROM network_relationships WHERE source_id = ? OR target_id = ?",
-        (old_id, old_id),
+        """
+        DELETE FROM network_relationships
+        WHERE scope = ? AND (source_id = ? OR target_id = ?)
+        """,
+        (scope, old_id, old_id),
     )
     connection.execute(
-        "DELETE FROM network_relationships WHERE source_id = target_id",
+        """
+        DELETE FROM network_relationships
+        WHERE scope = ? AND source_id = ? AND target_id = ?
+        """,
+        (scope, new_id, new_id),
     )
 
 
@@ -54,6 +73,8 @@ def _deduplicate_new_device_event(
     fallback_row: sqlite3.Row,
     canonical_row: sqlite3.Row,
 ) -> None:
+    if fallback_row["scope"] != canonical_row["scope"]:
+        return
     fallback_first = _instant(fallback_row["first_seen"])
     canonical_first = _instant(canonical_row["first_seen"])
     if fallback_first <= canonical_first:
@@ -65,9 +86,10 @@ def _deduplicate_new_device_event(
     connection.execute(
         """
         DELETE FROM network_events
-        WHERE asset_id = ? AND event_type = 'new_device' AND created_at = ?
+        WHERE asset_id = ? AND scope = ?
+          AND event_type = 'new_device' AND created_at = ?
         """,
-        (asset_id, created_at),
+        (asset_id, fallback_row["scope"], created_at),
     )
 
 
@@ -81,6 +103,7 @@ def _merge_identity(
     remove_false_disappearance: bool = False,
 ) -> None:
     old_id = fallback_row["asset_id"]
+    scope = fallback_row["scope"]
     canonical_row = connection.execute(
         "SELECT * FROM assets WHERE asset_id = ?",
         (canonical_id,),
@@ -106,11 +129,11 @@ def _merge_identity(
             connection.execute(
                 """
                 DELETE FROM network_events
-                WHERE asset_id = ?
+                WHERE asset_id = ? AND scope = ?
                   AND event_type = 'device_disappeared'
                   AND created_at = ?
                 """,
-                (old_id, fallback_row["last_change"]),
+                (old_id, scope, fallback_row["last_change"]),
             )
         first_seen = min(
             (fallback_row["first_seen"], canonical_row["first_seen"]),
@@ -132,10 +155,15 @@ def _merge_identity(
         connection.execute("DELETE FROM assets WHERE asset_id = ?", (old_id,))
 
     connection.execute(
-        "UPDATE network_events SET asset_id = ? WHERE asset_id = ?",
-        (canonical_id, old_id),
+        "UPDATE network_events SET asset_id = ? WHERE asset_id = ? AND scope = ?",
+        (canonical_id, old_id, scope),
     )
-    _repoint_relationships(connection, old_id=old_id, new_id=canonical_id)
+    _repoint_relationships(
+        connection,
+        scope=scope,
+        old_id=old_id,
+        new_id=canonical_id,
+    )
     connection.execute(
         """
         INSERT INTO network_events(
@@ -144,7 +172,7 @@ def _merge_identity(
         """,
         (
             canonical_id,
-            fallback_row["scope"],
+            scope,
             reconciled_at,
             "Asset identity reconciled",
             f"{old_id} → {canonical_id}. {reason}",
@@ -153,21 +181,55 @@ def _merge_identity(
     )
 
 
+def _meaningful_equal(left: str, right: str, ignored: set[str]) -> bool:
+    normalized_left = (left or "").strip().upper()
+    normalized_right = (right or "").strip().upper()
+    return (
+        normalized_left == normalized_right
+        and normalized_left not in ignored
+    )
+
+
+def _profile_corrobates_identity(
+    fallback_row: sqlite3.Row,
+    canonical_row: sqlite3.Row,
+) -> bool:
+    same_hostname = _meaningful_equal(
+        fallback_row["hostname"],
+        canonical_row["hostname"],
+        _GENERIC_HOSTNAMES,
+    )
+    same_vendor = _meaningful_equal(
+        fallback_row["vendor"],
+        canonical_row["vendor"],
+        _GENERIC_VENDORS,
+    )
+    same_ports = (
+        fallback_row["ports_json"] == canonical_row["ports_json"]
+        and fallback_row["ports_json"] not in {"", "[]"}
+    )
+    return fallback_row["kind"] == canonical_row["kind"] and (
+        same_hostname or same_vendor or same_ports
+    )
+
+
 def _legacy_fingerprint_matches(
     fallback_row: sqlite3.Row,
     canonical_row: sqlite3.Row,
 ) -> bool:
     try:
-        timestamps_match = _instant(fallback_row["last_change"]) == _instant(
-            canonical_row["first_seen"]
-        )
+        fallback_first = _instant(fallback_row["first_seen"])
+        canonical_first = _instant(canonical_row["first_seen"])
+        timestamps_match = _instant(fallback_row["last_change"]) == canonical_first
     except (TypeError, ValueError):
         return False
     return (
         not bool(fallback_row["is_online"])
         and fallback_row["scope"] == canonical_row["scope"]
         and fallback_row["ip"] == canonical_row["ip"]
+        and fallback_first < canonical_first
         and timestamps_match
+        and _profile_corrobates_identity(fallback_row, canonical_row)
     )
 
 
