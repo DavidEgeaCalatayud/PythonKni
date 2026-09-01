@@ -2,9 +2,11 @@ from __future__ import annotations
 
 import json
 from datetime import datetime, timedelta, timezone
+from pathlib import Path
 
 import pytest
 
+from pythonkni.network_intelligence import automatic_snapshot, scheduler
 from pythonkni.network_intelligence.automatic_snapshot import create_automatic_snapshot
 from pythonkni.network_intelligence.scheduler import (
     MAX_AUTOMATIC_SNAPSHOTS_PER_SCOPE,
@@ -89,6 +91,43 @@ def test_schedule_load_rejects_invalid_schema_and_enabled_missing_next_run(tmp_p
         load_schedule(path)
 
 
+def test_schedule_load_rejects_truthy_non_boolean_enabled(tmp_path):
+    path = tmp_path / "schedule.json"
+    path.write_text(
+        json.dumps(
+            {
+                "schema_version": 1,
+                "enabled": "false",
+                "scope": SCOPE,
+                "interval_minutes": 60,
+                "next_run_at": "2026-09-01T21:00:00Z",
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    with pytest.raises(ValueError, match="enabled must be a boolean"):
+        load_schedule(path)
+
+
+def test_schedule_atomic_save_preserves_previous_valid_file(tmp_path, monkeypatch):
+    path = tmp_path / "schedule.json"
+    original = create_schedule(SCOPE, 60, now=NOW)
+    save_schedule(path, original)
+    replacement = change_schedule_interval(original, 30, now=NOW)
+
+    def fail_replace(_source, _destination):
+        raise OSError("replace failed")
+
+    monkeypatch.setattr(scheduler.os, "replace", fail_replace)
+
+    with pytest.raises(OSError, match="replace failed"):
+        save_schedule(path, replacement)
+
+    assert load_schedule(path) == original
+    assert not list(tmp_path.glob(".schedule.json.*.tmp"))
+
+
 def test_interval_change_resets_next_run_without_losing_history():
     config = create_schedule(SCOPE, 60, now=NOW)
     config = mark_schedule_started(config, now=NOW + timedelta(hours=1))
@@ -118,6 +157,20 @@ def test_automatic_snapshot_is_atomic_valid_report_and_history_compatible(tmp_pa
     assert payload["generated_at"] == "2026-09-01T20:00:00Z"
     assert payload["security_score"]["score"] == 100
     assert result.path.name.startswith("scheduled_192.168.1.0_24_")
+    assert not list(tmp_path.glob(".*.json"))
+
+
+def test_automatic_snapshot_failure_never_publishes_partial_report(tmp_path, monkeypatch):
+    def fail_export(path, _report):
+        Path(path).write_text("partial", encoding="utf-8")
+        raise OSError("serialization failed")
+
+    monkeypatch.setattr(automatic_snapshot, "export_network_report", fail_export)
+
+    with pytest.raises(OSError, match="serialization failed"):
+        create_automatic_snapshot(tmp_path, SCOPE, [], [], [], generated_at=NOW)
+
+    assert not list(tmp_path.glob("scheduled_*.json"))
     assert not list(tmp_path.glob(".*.json"))
 
 
