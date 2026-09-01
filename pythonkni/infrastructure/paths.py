@@ -22,10 +22,14 @@ DATA_DIR = APP_DIR / "data"
 LOG_DIR = APP_DIR / "logs"
 CAMERA_REPORTS_DIR = DATA_DIR / "camera_audits"
 NETWORK_INTELLIGENCE_REPORTS_DIR = DATA_DIR / "network_intelligence_reports"
+NETWORK_INTELLIGENCE_AUTOMATIC_SNAPSHOTS_DIR = (
+    NETWORK_INTELLIGENCE_REPORTS_DIR / "scheduled"
+)
 
 CONFIG_FILE = CONFIG_DIR / "config.json"
 SCAN_HISTORY_FILE = DATA_DIR / "scan_history.txt"
 NETWORK_INTELLIGENCE_DB = DATA_DIR / "network_intelligence.sqlite3"
+NETWORK_INTELLIGENCE_SCHEDULE_FILE = DATA_DIR / "network_intelligence_schedule.json"
 
 
 def ensure_app_dirs() -> None:
@@ -35,5 +39,6 @@ def ensure_app_dirs() -> None:
         LOG_DIR,
         CAMERA_REPORTS_DIR,
         NETWORK_INTELLIGENCE_REPORTS_DIR,
+        NETWORK_INTELLIGENCE_AUTOMATIC_SNAPSHOTS_DIR,
     ):
         path.mkdir(parents=True, exist_ok=True)
