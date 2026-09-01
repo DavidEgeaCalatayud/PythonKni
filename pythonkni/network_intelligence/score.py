@@ -39,9 +39,7 @@ def _contextual_deductions(
 
     for kind, weights in _ROLE_RISK_DEDUCTIONS.items():
         affected = [
-            asset
-            for asset in online
-            if asset.kind == kind and _risk_weight(asset.risk, weights)
+            asset for asset in online if asset.kind == kind and _risk_weight(asset.risk, weights)
         ]
         role_deduction = sum(_risk_weight(asset.risk, weights) for asset in affected)
         if not role_deduction:
