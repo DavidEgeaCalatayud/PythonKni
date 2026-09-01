@@ -59,7 +59,9 @@ def match_persisted_cameras(
         elif asset.asset_id.startswith("ip:"):
             if asset.asset_id != f"ip:{host.ip}":
                 continue
-            identity_evidence = "Camera inventory identity is IP-based and the current IPv4 address matches."
+            identity_evidence = (
+                "Camera inventory identity is IP-based and the current IPv4 address matches."
+            )
         else:
             continue
 
