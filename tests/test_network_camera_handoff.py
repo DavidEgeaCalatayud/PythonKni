@@ -13,7 +13,6 @@ from pythonkni.network.models import DiscoveredHost
 from pythonkni.network_intelligence.models import AssetRecord, DeviceKind
 from tools import network_tool as network
 
-
 NOW = datetime(2026, 9, 1, 7, 0, tzinfo=timezone.utc)
 SCOPE = "192.168.1.0/24"
 
