@@ -2,13 +2,19 @@ from __future__ import annotations
 
 import json
 from copy import deepcopy
+from dataclasses import replace
+from datetime import datetime
 
 import pytest
 
 from pythonkni.network_intelligence import notifications
 from pythonkni.network_intelligence.notifications import (
+    MAX_NOTIFICATION_FILE_BYTES,
+    MAX_NOTIFICATION_INBOX_ITEMS,
+    NOTIFICATION_SCHEMA_VERSION,
     NotificationSeverity,
     build_change_notifications,
+    format_notification_inbox,
     load_notification_inbox,
     mark_all_notifications_read,
     merge_notifications,
@@ -85,6 +91,15 @@ def report(
         "relationships": list(relationships or []),
         "timeline": [],
     }
+
+
+def one_notification():
+    device = asset("asset-1", "192.168.1.10", ports=[80])
+    opened = asset("asset-1", "192.168.1.10", ports=[80, 443])
+    return build_change_notifications(
+        report(BASELINE_TIME, [device]),
+        report(CURRENT_TIME, [opened]),
+    ).notifications[0]
 
 
 def test_engine_ignores_timestamp_status_and_non_security_discovery_churn():
@@ -175,6 +190,7 @@ def test_risk_reduction_and_relationship_removal_are_informational():
 
     assert by_category["risk_changed"].severity == NotificationSeverity.INFO
     assert by_category["relationships_changed"].severity == NotificationSeverity.INFO
+    assert batch.info_count == 2
 
 
 def test_relationship_evidence_change_is_aggregated_into_one_warning():
@@ -225,33 +241,40 @@ def test_merge_deduplicates_exact_snapshot_pair_but_keeps_future_recurrence():
     assert recurrent[0].event_id != recurrent[1].event_id
 
 
+def test_merge_rejects_invalid_capacity_and_enforces_requested_bound():
+    item = one_notification()
+    with pytest.raises(ValueError, match="at least 1"):
+        merge_notifications((), (item,), max_items=0)
+
+    later = replace(item, event_id="later", detected_at=item.detected_at.replace(hour=22))
+    merged, added = merge_notifications((item,), (later,), max_items=1)
+    assert added == 1
+    assert merged == (later,)
+
+
 def test_notification_inbox_round_trip_and_mark_read(tmp_path):
     path = tmp_path / "notifications.json"
-    device = asset("asset-1", "192.168.1.10", ports=[80])
-    opened = asset("asset-1", "192.168.1.10", ports=[80, 443])
-    batch = build_change_notifications(
-        report(BASELINE_TIME, [device]),
-        report(CURRENT_TIME, [opened]),
-    )
+    item = one_notification()
 
-    save_notification_inbox(path, batch.notifications)
+    save_notification_inbox(path, [item])
     loaded = load_notification_inbox(path)
-    assert loaded == batch.notifications
+    assert loaded == (item,)
     assert not loaded[0].read
 
     marked = mark_all_notifications_read(loaded)
     save_notification_inbox(path, marked)
     assert load_notification_inbox(path)[0].read
+    assert "leído" in format_notification_inbox(marked)
+
+
+def test_empty_notification_inbox_helpers_are_stable(tmp_path):
+    assert load_notification_inbox(tmp_path / "missing.json") == ()
+    assert format_notification_inbox(()) == "No hay cambios relevantes registrados."
 
 
 def test_notification_inbox_atomic_save_preserves_previous_file(tmp_path, monkeypatch):
     path = tmp_path / "notifications.json"
-    device = asset("asset-1", "192.168.1.10", ports=[80])
-    opened = asset("asset-1", "192.168.1.10", ports=[80, 443])
-    original = build_change_notifications(
-        report(BASELINE_TIME, [device]),
-        report(CURRENT_TIME, [opened]),
-    ).notifications
+    original = (one_notification(),)
     save_notification_inbox(path, original)
 
     def fail_replace(_source, _destination):
@@ -265,14 +288,15 @@ def test_notification_inbox_atomic_save_preserves_previous_file(tmp_path, monkey
     assert not list(tmp_path.glob(".notifications.json.*.tmp"))
 
 
+def test_notification_save_rejects_naive_detected_timestamp(tmp_path):
+    item = replace(one_notification(), detected_at=datetime(2026, 9, 1, 21, 0))
+    with pytest.raises(ValueError, match="timezone-aware"):
+        save_notification_inbox(tmp_path / "notifications.json", [item])
+
+
 def test_notification_inbox_rejects_invalid_boolean_and_duplicate_ids(tmp_path):
     path = tmp_path / "notifications.json"
-    device = asset("asset-1", "192.168.1.10", ports=[80])
-    opened = asset("asset-1", "192.168.1.10", ports=[80, 443])
-    item = build_change_notifications(
-        report(BASELINE_TIME, [device]),
-        report(CURRENT_TIME, [opened]),
-    ).notifications[0]
+    item = one_notification()
     save_notification_inbox(path, [item])
 
     payload = json.loads(path.read_text(encoding="utf-8"))
@@ -286,3 +310,102 @@ def test_notification_inbox_rejects_invalid_boolean_and_duplicate_ids(tmp_path):
     path.write_text(json.dumps(payload), encoding="utf-8")
     with pytest.raises(ValueError, match="duplicate event_id"):
         load_notification_inbox(path)
+
+
+def test_notification_inbox_rejects_root_schema_collection_and_size_errors(tmp_path):
+    path = tmp_path / "notifications.json"
+
+    path.write_text("[]", encoding="utf-8")
+    with pytest.raises(ValueError, match="root must be a JSON object"):
+        load_notification_inbox(path)
+
+    path.write_text(json.dumps({"schema_version": 99, "notifications": []}), encoding="utf-8")
+    with pytest.raises(ValueError, match="schema version"):
+        load_notification_inbox(path)
+
+    path.write_text(
+        json.dumps({"schema_version": NOTIFICATION_SCHEMA_VERSION, "notifications": {}}),
+        encoding="utf-8",
+    )
+    with pytest.raises(ValueError, match="JSON array"):
+        load_notification_inbox(path)
+
+    path.write_text(
+        json.dumps(
+            {
+                "schema_version": NOTIFICATION_SCHEMA_VERSION,
+                "notifications": [None] * (MAX_NOTIFICATION_INBOX_ITEMS + 1),
+            }
+        ),
+        encoding="utf-8",
+    )
+    with pytest.raises(ValueError, match="more than"):
+        load_notification_inbox(path)
+
+    path.write_bytes(b" " * (MAX_NOTIFICATION_FILE_BYTES + 1))
+    with pytest.raises(ValueError, match="2 MiB"):
+        load_notification_inbox(path)
+
+
+def test_notification_inbox_rejects_malformed_json_and_item_shape(tmp_path):
+    path = tmp_path / "notifications.json"
+    path.write_text("not-json", encoding="utf-8")
+    with pytest.raises(ValueError, match="Could not read notification inbox"):
+        load_notification_inbox(path)
+
+    path.write_text(
+        json.dumps({"schema_version": NOTIFICATION_SCHEMA_VERSION, "notifications": [42]}),
+        encoding="utf-8",
+    )
+    with pytest.raises(ValueError, match="must be a JSON object"):
+        load_notification_inbox(path)
+
+
+def test_notification_inbox_rejects_invalid_item_fields(tmp_path):
+    path = tmp_path / "notifications.json"
+    item = one_notification()
+    save_notification_inbox(path, [item])
+    valid = json.loads(path.read_text(encoding="utf-8"))
+
+    mutations = (
+        ("empty title", lambda payload: payload["notifications"][0].__setitem__("title", ""), "title"),
+        (
+            "non-string detected_at",
+            lambda payload: payload["notifications"][0].__setitem__("detected_at", 5),
+            "detected_at must be a string",
+        ),
+        (
+            "invalid detected_at",
+            lambda payload: payload["notifications"][0].__setitem__("detected_at", "later"),
+            "valid ISO-8601",
+        ),
+        (
+            "naive baseline",
+            lambda payload: payload["notifications"][0].__setitem__(
+                "baseline_generated_at", "2026-09-01T20:00:00"
+            ),
+            "include a timezone",
+        ),
+        (
+            "invalid severity",
+            lambda payload: payload["notifications"][0].__setitem__("severity", "SEVERE"),
+            "severity is invalid",
+        ),
+        (
+            "invalid subject",
+            lambda payload: payload["notifications"][0].__setitem__("subject_id", 7),
+            "subject_id must be a string",
+        ),
+        (
+            "invalid details",
+            lambda payload: payload["notifications"][0].__setitem__("details", ["ok", 7]),
+            "details must contain strings only",
+        ),
+    )
+
+    for _name, mutate, message in mutations:
+        payload = deepcopy(valid)
+        mutate(payload)
+        path.write_text(json.dumps(payload), encoding="utf-8")
+        with pytest.raises(ValueError, match=message):
+            load_notification_inbox(path)
