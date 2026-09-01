@@ -56,6 +56,21 @@ def _load_tuple(value: str, converter=str):
     return tuple(converter(item) for item in decoded)
 
 
+def _table_exists(connection, table_name: str) -> bool:
+    return (
+        connection.execute(
+            "SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = ?",
+            (table_name,),
+        ).fetchone()
+        is not None
+    )
+
+
+def _stronger_confidence(first: str, second: str) -> str:
+    ranking = {"CONFIRMED": 2, "INFERRED": 1}
+    return max((first, second), key=lambda value: ranking.get(value.upper(), 0))
+
+
 class InventoryStore:
     def __init__(self, path: str | Path):
         self.path = Path(path)
@@ -131,6 +146,202 @@ class InventoryStore:
             (asset_id, scope, _iso(created_at), event_type, summary, details, ip),
         )
 
+    def _migrate_relationship_references(
+        self,
+        connection,
+        *,
+        old_asset_id: str,
+        new_asset_id: str,
+    ) -> None:
+        if not _table_exists(connection, "network_relationships"):
+            return
+
+        columns = {
+            row["name"] for row in connection.execute("PRAGMA table_info(network_relationships)")
+        }
+        required_columns = {
+            "scope",
+            "source_id",
+            "target_id",
+            "kind",
+            "confidence",
+            "evidence_json",
+            "observed_at",
+            "source_port",
+            "target_port",
+            "protocol",
+        }
+        if not required_columns.issubset(columns):
+            return
+
+        rows = connection.execute(
+            """
+            SELECT scope, source_id, target_id, kind, confidence, evidence_json,
+                   observed_at, source_port, target_port, protocol
+            FROM network_relationships
+            WHERE source_id = ? OR target_id = ?
+            """,
+            (old_asset_id, old_asset_id),
+        ).fetchall()
+        if not rows:
+            return
+
+        for row in rows:
+            connection.execute(
+                """
+                DELETE FROM network_relationships
+                WHERE scope = ? AND source_id = ? AND target_id = ? AND kind = ?
+                """,
+                (row["scope"], row["source_id"], row["target_id"], row["kind"]),
+            )
+
+        for row in rows:
+            source_id = new_asset_id if row["source_id"] == old_asset_id else row["source_id"]
+            target_id = new_asset_id if row["target_id"] == old_asset_id else row["target_id"]
+            if source_id == target_id:
+                continue
+
+            existing = connection.execute(
+                """
+                SELECT confidence, evidence_json, observed_at, source_port, target_port, protocol
+                FROM network_relationships
+                WHERE scope = ? AND source_id = ? AND target_id = ? AND kind = ?
+                """,
+                (row["scope"], source_id, target_id, row["kind"]),
+            ).fetchone()
+            if existing is None:
+                connection.execute(
+                    """
+                    INSERT INTO network_relationships(
+                        scope, source_id, target_id, kind, confidence, evidence_json,
+                        observed_at, source_port, target_port, protocol
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    """,
+                    (
+                        row["scope"],
+                        source_id,
+                        target_id,
+                        row["kind"],
+                        row["confidence"],
+                        row["evidence_json"],
+                        row["observed_at"],
+                        row["source_port"],
+                        row["target_port"],
+                        row["protocol"],
+                    ),
+                )
+                continue
+
+            evidence = tuple(
+                dict.fromkeys(
+                    (*_load_tuple(existing["evidence_json"]), *_load_tuple(row["evidence_json"]))
+                )
+            )
+            connection.execute(
+                """
+                UPDATE network_relationships
+                SET confidence = ?, evidence_json = ?, observed_at = ?,
+                    source_port = ?, target_port = ?, protocol = ?
+                WHERE scope = ? AND source_id = ? AND target_id = ? AND kind = ?
+                """,
+                (
+                    _stronger_confidence(existing["confidence"], row["confidence"]),
+                    _json_tuple(evidence),
+                    max(existing["observed_at"], row["observed_at"]),
+                    existing["source_port"] or row["source_port"],
+                    existing["target_port"] or row["target_port"],
+                    existing["protocol"] or row["protocol"],
+                    row["scope"],
+                    source_id,
+                    target_id,
+                    row["kind"],
+                ),
+            )
+
+    def _reconcile_fallback_identity(
+        self,
+        connection,
+        *,
+        scope: str,
+        device: NetworkIntelligenceDevice,
+        asset_id: str,
+        observed_at: datetime,
+    ) -> tuple[sqlite3.Row | None, bool]:
+        canonical_row = connection.execute(
+            "SELECT * FROM assets WHERE asset_id = ?",
+            (asset_id,),
+        ).fetchone()
+        if not asset_id.startswith("mac:"):
+            return canonical_row, False
+
+        fallback_id = f"ip:{device.host.ip}"
+        fallback_row = connection.execute(
+            "SELECT * FROM assets WHERE asset_id = ? AND scope = ?",
+            (fallback_id, scope),
+        ).fetchone()
+        if fallback_row is None or _normalize_mac(fallback_row["mac"]):
+            return canonical_row, False
+
+        normalized_mac = _normalize_mac(device.host.mac)
+        if canonical_row is None:
+            connection.execute(
+                "UPDATE assets SET asset_id = ?, mac = ? WHERE asset_id = ?",
+                (asset_id, normalized_mac, fallback_id),
+            )
+        else:
+            first_seen = min(
+                _parse_datetime(canonical_row["first_seen"]),
+                _parse_datetime(fallback_row["first_seen"]),
+            )
+            last_seen = max(
+                _parse_datetime(canonical_row["last_seen"]),
+                _parse_datetime(fallback_row["last_seen"]),
+            )
+            last_change = max(
+                _parse_datetime(canonical_row["last_change"]),
+                _parse_datetime(fallback_row["last_change"]),
+            )
+            connection.execute(
+                """
+                UPDATE assets
+                SET first_seen = ?, last_seen = ?, last_change = ?, is_online = ?
+                WHERE asset_id = ?
+                """,
+                (
+                    _iso(first_seen),
+                    _iso(last_seen),
+                    _iso(last_change),
+                    int(bool(canonical_row["is_online"]) or bool(fallback_row["is_online"])),
+                    asset_id,
+                ),
+            )
+            connection.execute("DELETE FROM assets WHERE asset_id = ?", (fallback_id,))
+
+        connection.execute(
+            "UPDATE network_events SET asset_id = ? WHERE asset_id = ?",
+            (asset_id, fallback_id),
+        )
+        self._migrate_relationship_references(
+            connection,
+            old_asset_id=fallback_id,
+            new_asset_id=asset_id,
+        )
+        self._event(
+            connection,
+            asset_id=asset_id,
+            scope=scope,
+            created_at=observed_at,
+            event_type="identity_reconciled",
+            summary="Asset identity reconciled",
+            details=f"{fallback_id} → {asset_id}",
+            ip=device.host.ip,
+        )
+        row = connection.execute(
+            "SELECT * FROM assets WHERE asset_id = ?",
+            (asset_id,),
+        ).fetchone()
+        return row, True
+
     def _upsert_device(
         self,
         connection,
@@ -140,10 +351,13 @@ class InventoryStore:
     ) -> str:
         asset_id = asset_identity(device)
         mac = _normalize_mac(device.host.mac) or (device.host.mac or "Unknown")
-        row = connection.execute(
-            "SELECT * FROM assets WHERE asset_id = ?",
-            (asset_id,),
-        ).fetchone()
+        row, reconciled = self._reconcile_fallback_identity(
+            connection,
+            scope=scope,
+            device=device,
+            asset_id=asset_id,
+            observed_at=observed_at,
+        )
 
         services_json = _json_tuple(device.services)
         ports_json = _json_tuple(device.open_ports)
@@ -188,7 +402,7 @@ class InventoryStore:
             )
             return asset_id
 
-        changed = False
+        changed = reconciled
         old_ports = set(_load_tuple(row["ports_json"], int))
         new_ports = set(device.open_ports)
 
