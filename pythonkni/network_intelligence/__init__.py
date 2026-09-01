@@ -1,5 +1,17 @@
-"""Network Intelligence orchestration for local device classification."""
+"""Persistent local asset and exposure intelligence for PythonKni."""
 
-from .models import DeviceKind, NetworkIntelligenceDevice
+from .models import (
+    AssetRecord,
+    DeviceKind,
+    NetworkIntelligenceDevice,
+    NetworkSecurityScore,
+    TimelineEvent,
+)
 
-__all__ = ["DeviceKind", "NetworkIntelligenceDevice"]
+__all__ = [
+    "AssetRecord",
+    "DeviceKind",
+    "NetworkIntelligenceDevice",
+    "NetworkSecurityScore",
+    "TimelineEvent",
+]

@@ -4,6 +4,7 @@ import ipaddress
 import socket
 import threading
 from concurrent.futures import FIRST_COMPLETED, ThreadPoolExecutor, wait
+from dataclasses import replace
 
 from pythonkni.camera_auditor.models import CameraDevice, OnvifDiscoveryMatch, RiskLevel
 from pythonkni.camera_auditor.service import (
@@ -50,6 +51,22 @@ CAMERA_HOSTNAME_HINTS = (
     "dahua",
     "axis",
 )
+VENDOR_HOSTNAME_HINTS = (
+    ("synology", "Synology"),
+    ("diskstation", "Synology"),
+    ("qnap", "QNAP"),
+    ("reolink", "Reolink"),
+    ("hikvision", "Hikvision"),
+    ("dahua", "Dahua"),
+    ("axis", "Axis"),
+    ("epson", "Epson"),
+    ("brother", "Brother"),
+    ("canon", "Canon"),
+    ("xerox", "Xerox"),
+    ("hp-", "HP"),
+    ("fritz", "AVM"),
+    ("livebox", "Orange"),
+)
 
 
 def _is_local_ip(value: str) -> bool:
@@ -95,6 +112,16 @@ def probe_intelligence_ports(
 def _hostname_contains(hostname: str, hints: tuple[str, ...]) -> bool:
     lowered = (hostname or "").casefold()
     return any(hint in lowered for hint in hints)
+
+
+def infer_device_vendor(host: DiscoveredHost, camera: CameraDevice | None = None) -> str:
+    if camera is not None and camera.vendor and camera.vendor != "Unknown":
+        return camera.vendor
+    lowered = (host.hostname or "").casefold()
+    for hint, vendor in VENDOR_HOSTNAME_HINTS:
+        if hint in lowered:
+            return vendor
+    return "Unknown"
 
 
 def _gateway_style_address(ip: str) -> bool:
@@ -166,6 +193,7 @@ def classify_device(
         evidence=tuple(dict.fromkeys(evidence)),
         risk=risk,
         camera=camera,
+        vendor=infer_device_vendor(host, camera),
     )
 
 
@@ -199,6 +227,17 @@ def inspect_host(
             timeout=PROBE_TIMEOUT_SECONDS,
         )
     return classify_device(host, open_ports, camera=camera)
+
+
+def _fallback_unknown(host: DiscoveredHost) -> NetworkIntelligenceDevice:
+    fallback = classify_device(host, ())
+    return replace(
+        fallback,
+        evidence=(
+            "Host descubierto correctamente, pero el enriquecimiento de servicios no pudo completarse; "
+            "se conserva como Unknown para no perder el activo.",
+        ),
+    )
 
 
 def analyze_hosts(
@@ -253,13 +292,14 @@ def analyze_hosts(
                 try:
                     device = future.result()
                 except Exception:
-                    device = None
+                    device = _fallback_unknown(host)
+                if device is None:
+                    device = _fallback_unknown(host)
                 if on_checked is not None:
                     on_checked(host)
-                if device is not None:
-                    results.append(device)
-                    if on_device is not None:
-                        on_device(device)
+                results.append(device)
+                if on_device is not None:
+                    on_device(device)
                 fill_pending()
             if stop_event.is_set():
                 for future in pending:
