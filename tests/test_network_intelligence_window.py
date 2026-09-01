@@ -80,7 +80,8 @@ def test_initial_state_has_inventory_score_and_timeline(tool):
     assert not tool.stop_button.isEnabled()
     assert not tool.camera_button.isEnabled()
     assert not tool.device_audit_button.isEnabled()
-    assert tool.table.columnCount() == 9
+    assert tool.table.columnCount() == 10
+    assert tool.table.horizontalHeaderItem(4).text() == "Confidence"
     assert tool.timeline_table.columnCount() == 4
     assert "100/100" in tool.score_label.text()
 
