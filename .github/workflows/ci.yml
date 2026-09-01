@@ -92,7 +92,7 @@ jobs:
         run: python -m coverage report --include="pythonkni/process_manager/service.py,pythonkni/config/service.py,pythonkni/infrastructure/*.py" --fail-under=88.5
 
       - name: Run Network Intelligence benchmark smoke
-        run: python scripts/benchmark_network_intelligence.py | Tee-Object -FilePath network-intelligence-benchmark.json
+        run: python -m scripts.benchmark_network_intelligence | Tee-Object -FilePath network-intelligence-benchmark.json
 
       - name: Ruff check
         run: python -m ruff check .
