@@ -9,7 +9,7 @@ from pathlib import Path
 
 from pythonkni.camera_auditor.models import RiskLevel
 
-from .identity import repair_legacy_identity_duplicates, reconcile_observation_identity
+from .identity import reconcile_observation_identity, repair_legacy_identity_duplicates
 from .models import (
     AssetRecord,
     ClassificationSignal,
