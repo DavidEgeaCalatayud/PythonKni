@@ -1,7 +1,10 @@
 import sys
 
+from pythonkni.network_intelligence import reporting_window as _reporting
 from pythonkni.network_intelligence import service as _service
 from pythonkni.network_intelligence import window as _window
+
+_window.Tool = _reporting.Tool
 
 
 def _legacy_getattr(name):

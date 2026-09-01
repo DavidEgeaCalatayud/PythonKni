@@ -21,6 +21,7 @@ CONFIG_DIR = APP_DIR
 DATA_DIR = APP_DIR / "data"
 LOG_DIR = APP_DIR / "logs"
 CAMERA_REPORTS_DIR = DATA_DIR / "camera_audits"
+NETWORK_INTELLIGENCE_REPORTS_DIR = DATA_DIR / "network_intelligence_reports"
 
 CONFIG_FILE = CONFIG_DIR / "config.json"
 SCAN_HISTORY_FILE = DATA_DIR / "scan_history.txt"
@@ -28,5 +29,11 @@ NETWORK_INTELLIGENCE_DB = DATA_DIR / "network_intelligence.sqlite3"
 
 
 def ensure_app_dirs() -> None:
-    for path in (CONFIG_DIR, DATA_DIR, LOG_DIR, CAMERA_REPORTS_DIR):
+    for path in (
+        CONFIG_DIR,
+        DATA_DIR,
+        LOG_DIR,
+        CAMERA_REPORTS_DIR,
+        NETWORK_INTELLIGENCE_REPORTS_DIR,
+    ):
         path.mkdir(parents=True, exist_ok=True)
