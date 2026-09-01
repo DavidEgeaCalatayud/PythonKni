@@ -28,6 +28,7 @@ CONFIG_FILE = CONFIG_DIR / "config.json"
 SCAN_HISTORY_FILE = DATA_DIR / "scan_history.txt"
 NETWORK_INTELLIGENCE_DB = DATA_DIR / "network_intelligence.sqlite3"
 NETWORK_INTELLIGENCE_SCHEDULE_FILE = DATA_DIR / "network_intelligence_schedule.json"
+NETWORK_INTELLIGENCE_NOTIFICATIONS_FILE = DATA_DIR / "network_intelligence_notifications.json"
 
 
 def ensure_app_dirs() -> None:
