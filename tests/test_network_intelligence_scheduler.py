@@ -131,7 +131,9 @@ def test_schedule_atomic_save_preserves_previous_valid_file(tmp_path, monkeypatc
 def test_interval_change_resets_next_run_without_losing_history():
     config = create_schedule(SCOPE, 60, now=NOW)
     config = mark_schedule_started(config, now=NOW + timedelta(hours=1))
-    config = mark_schedule_success(config, now=NOW + timedelta(hours=1, minutes=1), snapshot="a.json")
+    config = mark_schedule_success(
+        config, now=NOW + timedelta(hours=1, minutes=1), snapshot="a.json"
+    )
 
     changed = change_schedule_interval(config, 180, now=NOW + timedelta(hours=2))
 
