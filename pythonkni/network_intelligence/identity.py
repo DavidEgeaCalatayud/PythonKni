@@ -184,10 +184,7 @@ def _merge_identity(
 def _meaningful_equal(left: str, right: str, ignored: set[str]) -> bool:
     normalized_left = (left or "").strip().upper()
     normalized_right = (right or "").strip().upper()
-    return (
-        normalized_left == normalized_right
-        and normalized_left not in ignored
-    )
+    return normalized_left == normalized_right and normalized_left not in ignored
 
 
 def _profile_corrobates_identity(
@@ -204,10 +201,9 @@ def _profile_corrobates_identity(
         canonical_row["vendor"],
         _GENERIC_VENDORS,
     )
-    same_ports = (
-        fallback_row["ports_json"] == canonical_row["ports_json"]
-        and fallback_row["ports_json"] not in {"", "[]"}
-    )
+    same_ports = fallback_row["ports_json"] == canonical_row["ports_json"] and fallback_row[
+        "ports_json"
+    ] not in {"", "[]"}
     return fallback_row["kind"] == canonical_row["kind"] and (
         same_hostname or same_vendor or same_ports
     )
@@ -304,11 +300,7 @@ def repair_legacy_identity_duplicates(
             """,
             (fallback_row["scope"], fallback_row["ip"]),
         ).fetchall()
-        matches = [
-            row
-            for row in canonical_rows
-            if _legacy_fingerprint_matches(fallback_row, row)
-        ]
+        matches = [row for row in canonical_rows if _legacy_fingerprint_matches(fallback_row, row)]
         if len(matches) != 1:
             continue
         _merge_identity(
