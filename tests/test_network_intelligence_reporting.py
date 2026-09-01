@@ -9,6 +9,7 @@ import pytest
 from pythonkni.camera_auditor.models import RiskLevel
 from pythonkni.network_intelligence.models import (
     AssetRecord,
+    ClassificationSignal,
     DeviceKind,
     NetworkRelationship,
     RelationshipConfidence,
@@ -30,6 +31,8 @@ def asset(
     risk: RiskLevel = RiskLevel.LOW,
     online: bool = True,
     evidence: tuple[str, ...] = ("classified",),
+    confidence: int = 0,
+    classification_signals: tuple[ClassificationSignal, ...] = (),
 ) -> AssetRecord:
     return AssetRecord(
         asset_id=asset_id,
@@ -47,6 +50,8 @@ def asset(
         last_seen=NOW,
         last_change=NOW,
         is_online=online,
+        classification_confidence=confidence,
+        classification_signals=classification_signals,
     )
 
 
@@ -79,18 +84,31 @@ def event(*, details: str = "changed") -> TimelineEvent:
 
 
 def test_build_report_is_canonical_ordered_and_reproducible():
+    signal = ClassificationSignal(
+        key="pc.rdp",
+        label="RDP :3389",
+        weight=50,
+        matched=True,
+        evidence="RDP :3389 is reachable.",
+    )
     report = build_network_report(
         "192.168.1.25/24",
         [
             asset("ip:192.168.1.20", "192.168.1.20", online=False),
-            asset("ip:192.168.1.10", "192.168.1.10", risk=RiskLevel.MEDIUM),
+            asset(
+                "ip:192.168.1.10",
+                "192.168.1.10",
+                risk=RiskLevel.MEDIUM,
+                confidence=50,
+                classification_signals=(signal,),
+            ),
         ],
         [relationship()],
         [event()],
         generated_at=NOW,
     )
 
-    assert report["schema_version"] == 1
+    assert report["schema_version"] == 2
     assert report["generated_at"] == "2026-09-01T08:00:00Z"
     assert report["scope"] == SCOPE
     assert report["summary"] == {
@@ -101,6 +119,9 @@ def test_build_report_is_canonical_ordered_and_reproducible():
         "timeline_events": 1,
     }
     assert [item["ip"] for item in report["assets"]] == ["192.168.1.10", "192.168.1.20"]
+    assert report["assets"][0]["classification_confidence"] == 50
+    assert report["assets"][0]["classification_level"] == "MEDIUM"
+    assert report["assets"][0]["classification_signals"][0]["contribution"] == 50
     assert report["security_score"]["total_devices"] == 1
     assert report["security_score"]["medium_risk"] == 1
 
@@ -129,6 +150,13 @@ def test_json_export_preserves_full_structured_snapshot(tmp_path):
 
 
 def test_zip_bundle_contains_json_and_csv_safety(tmp_path):
+    signal = ClassificationSignal(
+        key="pc.rdp",
+        label="=RDP",
+        weight=50,
+        matched=True,
+        evidence="+classification",
+    )
     report = build_network_report(
         SCOPE,
         [
@@ -137,6 +165,8 @@ def test_zip_bundle_contains_json_and_csv_safety(tmp_path):
                 "192.168.1.10",
                 hostname='=HYPERLINK("https://example.invalid")',
                 evidence=("+formula",),
+                confidence=50,
+                classification_signals=(signal,),
             )
         ],
         [relationship(evidence=("-danger",))],
@@ -160,6 +190,7 @@ def test_zip_bundle_contains_json_and_csv_safety(tmp_path):
 
     assert "'=HYPERLINK" in assets_csv
     assert "'+formula" in assets_csv
+    assert "✓ =RDP +50" in assets_csv
     assert "'-danger" in relationships_csv
     assert "'@payload" in timeline_csv
 

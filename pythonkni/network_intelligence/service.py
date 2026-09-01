@@ -15,6 +15,7 @@ from pythonkni.camera_auditor.service import (
 )
 from pythonkni.network.models import DiscoveredHost
 
+from .classification import score_device_classification
 from .models import DeviceKind, NetworkIntelligenceDevice
 from .oui import lookup_mac_vendor
 
@@ -153,15 +154,18 @@ def classify_device(
     oui_vendor = lookup_mac_vendor(host.mac)
     vendor = infer_device_vendor(host, camera)
 
+    camera_hostname = _hostname_contains(host.hostname, CAMERA_HOSTNAME_HINTS)
+    printer_hostname = _hostname_contains(host.hostname, PRINTER_HOSTNAME_HINTS)
+    nas_hostname = _hostname_contains(host.hostname, NAS_HOSTNAME_HINTS)
+    router_hostname = _hostname_contains(host.hostname, ROUTER_HOSTNAME_HINTS)
+    camera_vendor_hint = oui_vendor in CAMERA_OUI_VENDORS
+    nas_vendor_hint = oui_vendor in NAS_OUI_VENDORS
+    gateway_signature = _gateway_style_address(host.ip) and 53 in ports and bool(ports & WEB_PORTS)
+
     if oui_vendor:
         evidence.append(f"Fabricante identificado offline por OUI MAC: {oui_vendor}.")
 
-    if (
-        camera is not None
-        or 554 in ports
-        or _hostname_contains(host.hostname, CAMERA_HOSTNAME_HINTS)
-        or oui_vendor in CAMERA_OUI_VENDORS
-    ):
+    if camera is not None or 554 in ports or camera_hostname or camera_vendor_hint:
         evidence.append("Señales compatibles con cámara IP (ONVIF/RTSP/vendor/hostname).")
         if camera is not None:
             evidence.extend(camera.risk_reasons)
@@ -170,25 +174,19 @@ def classify_device(
             evidence.append("RTSP :554 accesible en la LAN.")
             risk = RiskLevel.MEDIUM
         kind = DeviceKind.CAMERA
-    elif ports & PRINTER_PORTS or _hostname_contains(host.hostname, PRINTER_HOSTNAME_HINTS):
+    elif ports & PRINTER_PORTS or printer_hostname:
         kind = DeviceKind.PRINTER
         evidence.append("Servicios o hostname compatibles con impresora.")
         if 515 in ports or 9100 in ports:
             risk = RiskLevel.MEDIUM
             evidence.append("Servicio de impresión en texto claro accesible en la LAN.")
-    elif (
-        ports & NAS_PORTS
-        or _hostname_contains(host.hostname, NAS_HOSTNAME_HINTS)
-        or oui_vendor in NAS_OUI_VENDORS
-    ):
+    elif ports & NAS_PORTS or nas_hostname or nas_vendor_hint:
         kind = DeviceKind.NAS
         evidence.append("Servicios, hostname o fabricante OUI compatibles con NAS.")
         if 5000 in ports or 2049 in ports:
             risk = RiskLevel.MEDIUM
             evidence.append("Servicio NAS sin TLS o NFS accesible en la LAN.")
-    elif _hostname_contains(host.hostname, ROUTER_HOSTNAME_HINTS) or (
-        _gateway_style_address(host.ip) and 53 in ports and bool(ports & WEB_PORTS)
-    ):
+    elif router_hostname or gateway_signature:
         kind = DeviceKind.ROUTER
         evidence.append("Hostname o combinación DNS+Web en dirección típica de gateway.")
         if 80 in ports:
@@ -201,6 +199,24 @@ def classify_device(
         kind = DeviceKind.UNKNOWN
         evidence.append("No hay señales suficientes para clasificar el dispositivo con confianza.")
 
+    hostname_hint = {
+        DeviceKind.CAMERA: camera_hostname,
+        DeviceKind.PRINTER: printer_hostname,
+        DeviceKind.NAS: nas_hostname,
+        DeviceKind.ROUTER: router_hostname,
+    }.get(kind, False)
+    vendor_hint = (kind == DeviceKind.CAMERA and camera_vendor_hint) or (
+        kind == DeviceKind.NAS and nas_vendor_hint
+    )
+    confidence, classification_signals = score_device_classification(
+        kind,
+        ports,
+        onvif=bool(camera is not None and camera.onvif),
+        hostname_hint=hostname_hint,
+        vendor_hint=vendor_hint,
+        gateway_signature=kind == DeviceKind.ROUTER and gateway_signature,
+    )
+
     services = tuple(INTELLIGENCE_PORTS[port] for port in open_ports if port in INTELLIGENCE_PORTS)
     return NetworkIntelligenceDevice(
         host=host,
@@ -211,6 +227,8 @@ def classify_device(
         risk=risk,
         camera=camera,
         vendor=vendor,
+        classification_confidence=confidence,
+        classification_signals=classification_signals,
     )
 
 
