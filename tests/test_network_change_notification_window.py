@@ -97,6 +97,19 @@ def test_notification_center_starts_empty_and_non_blocking(qtbot, monkeypatch, t
     assert tool.notifications == ()
     assert "0 sin leer" in tool.notification_status.text()
     assert not tool.notification_button.isEnabled()
+    tool._open_notifications()
+
+
+def test_notification_control_sync_is_safe_before_notification_widgets_exist(
+    qtbot, monkeypatch, tmp_path
+):
+    tool, _notification_path, _automatic_dir = make_tool(qtbot, monkeypatch, tmp_path)
+    status = tool.notification_status
+    del tool.notification_status
+
+    tool._sync_notification_controls()
+
+    tool.notification_status = status
 
 
 def test_opening_notification_center_marks_existing_items_read(qtbot, monkeypatch, tmp_path):
@@ -115,6 +128,38 @@ def test_opening_notification_center_marks_existing_items_read(qtbot, monkeypatc
     assert all(item.read for item in load_notification_inbox(notification_path))
     assert "0 sin leer" in tool.notification_status.text()
     assert tool.notification_button.text() == "Ver cambios"
+
+
+def test_opening_notification_center_preserves_unread_state_when_save_fails(
+    qtbot, monkeypatch, tmp_path
+):
+    notification_path = tmp_path / "network_intelligence_notifications.json"
+    batch = build_change_notifications(
+        report(BASELINE_TIME, ports=[80]),
+        report(CURRENT_TIME, ports=[80, 443]),
+    )
+    save_notification_inbox(notification_path, batch.notifications)
+    monkeypatch.setattr(notification_window, "NETWORK_INTELLIGENCE_NOTIFICATIONS_FILE", notification_path)
+    monkeypatch.setattr(notification_window.ChangeNotificationDialog, "exec_", lambda self: 0)
+    errors = []
+    monkeypatch.setattr(
+        notification_window,
+        "show_error",
+        lambda *args, **kwargs: errors.append((args, kwargs)),
+    )
+    tool, _path, _automatic_dir = make_tool(qtbot, monkeypatch, tmp_path)
+    monkeypatch.setattr(
+        notification_window,
+        "save_notification_inbox",
+        lambda *args, **kwargs: (_ for _ in ()).throw(OSError("disk full")),
+    )
+
+    tool._open_notifications()
+
+    assert errors
+    assert any(not item.read for item in tool.notifications)
+    assert any(not item.read for item in load_notification_inbox(notification_path))
+    assert "1 sin leer" in tool.notification_status.text()
 
 
 def test_first_automatic_snapshot_only_establishes_change_baseline(qtbot, monkeypatch, tmp_path):
@@ -159,6 +204,27 @@ def test_post_snapshot_engine_persists_and_deduplicates_same_pair(qtbot, monkeyp
     assert "1 cambio" in first
     assert "sin duplicados" in second
     assert "1 sin leer" in tool.notification_status.text()
+
+
+def test_post_snapshot_engine_reports_clean_pair_without_creating_inbox(
+    qtbot, monkeypatch, tmp_path
+):
+    tool, notification_path, automatic_dir = make_tool(qtbot, monkeypatch, tmp_path)
+    automatic_dir.mkdir(parents=True, exist_ok=True)
+    previous = automatic_dir / "previous.json"
+    current = automatic_dir / "current.json"
+    write_report(previous, report(BASELINE_TIME, ports=[80]))
+    write_report(current, report(CURRENT_TIME, ports=[80]))
+
+    suffix = tool._automatic_snapshot_published(
+        previous_snapshot=previous,
+        snapshot=AutomaticSnapshotResult(path=current, pruned_count=0),
+        generated_at=tool.schedule_config.last_started_at,
+    )
+
+    assert "sin cambios relevantes" in suffix
+    assert tool.notifications == ()
+    assert not notification_path.exists()
 
 
 def test_missing_previous_snapshot_does_not_create_false_change_events(
