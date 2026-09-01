@@ -112,7 +112,9 @@ def build_network_report(
             relationship.target_port,
         ),
     )
-    ordered_events = sorted(events, key=lambda event: (event.created_at, event.event_id), reverse=True)
+    ordered_events = sorted(
+        events, key=lambda event: (event.created_at, event.event_id), reverse=True
+    )
     score = calculate_security_score(list(ordered_assets), now=generated_at)
 
     online = sum(asset.is_online for asset in ordered_assets)
