@@ -68,8 +68,7 @@ def test_completed_scan_does_not_mark_promoted_fallback_as_disappeared(tmp_path)
     assert assets[0].asset_id == CANONICAL_ID
     assert assets[0].is_online is True
     assert not any(
-        event.event_type == "device_disappeared"
-        for event in store.list_events(scope=SCOPE)
+        event.event_type == "device_disappeared" for event in store.list_events(scope=SCOPE)
     )
 
 
@@ -132,18 +131,9 @@ def test_relationship_references_follow_promoted_identity_and_collisions_are_ded
 
     current = relationships.list(scope=SCOPE)
     assert len(current) == 2
-    assert any(
-        item.source_id == CANONICAL_ID and item.target_id == "peer:one"
-        for item in current
-    )
-    assert any(
-        item.source_id == "peer:two" and item.target_id == CANONICAL_ID
-        for item in current
-    )
-    assert not any(
-        FALLBACK_ID in {item.source_id, item.target_id}
-        for item in current
-    )
+    assert any(item.source_id == CANONICAL_ID and item.target_id == "peer:one" for item in current)
+    assert any(item.source_id == "peer:two" and item.target_id == CANONICAL_ID for item in current)
+    assert not any(FALLBACK_ID in {item.source_id, item.target_id} for item in current)
     assert not any(item.source_id == item.target_id for item in current)
 
 
