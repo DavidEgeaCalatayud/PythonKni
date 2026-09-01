@@ -93,6 +93,9 @@ jobs:
       - name: Enforce refactored critical-code coverage
         run: python -m coverage report --include="pythonkni/process_manager/service.py,pythonkni/config/service.py,pythonkni/infrastructure/*.py" --fail-under=88.5
 
+      - name: Run Network Intelligence benchmark smoke
+        run: python -m scripts.benchmark_network_intelligence | Tee-Object -FilePath network-intelligence-benchmark.json
+
       - name: Ruff check
         run: python -m ruff check .
 
@@ -127,6 +130,7 @@ jobs:
             dist/PythonKni-windows-x64.zip
             dist/PythonKni-windows-x64.sha256
             coverage.xml
+            network-intelligence-benchmark.json
             dependency-sbom.cdx.json
             requirements.txt
             requirements-dev.txt
