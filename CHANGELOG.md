@@ -31,6 +31,16 @@ The project has not published a tagged release for the work below yet, so the cu
 - Added `tools/ui_feedback.py`, a reusable Qt feedback renderer that keeps concise user-facing summaries separate from optional expandable technical diagnostics. (PR #39)
 - Added domain-specific service regression suites for Disk Analyzer, WiFi, Process Manager and Duplicate Finder, covering real error, cancellation, identity, parsing and recovery paths without changing production service behavior. (PR #41)
 - Added dedicated behavior-driven Qt regression suites for Converter, Network, System Report, Archive, Process Manager, Duplicate Finder, Disk Analyzer, Temp Cleaner, Config and WiFi, covering worker lifecycle, overlap rejection, stale/current callbacks, cancellation, deferred close, dialogs, import/export, confirmations and technical-error paths without changing production behavior. (PR #42)
+- Added Camera Exposure Auditor for authorized local IPv4 scopes, with bounded ONVIF discovery, HTTP/HTTPS/RTSP exposure evidence, conservative risk reporting, JSON/CSV export and single-host handoff support without credentials or media retrieval. (PR #43)
+- Added Network Intelligence as a first-class domain that reuses bounded discovery and camera evidence to classify local PCs, routers, printers, NAS devices, cameras and unknown assets with explainable evidence. (PR #44)
+- Added a persistent SQLite Asset Inventory with stable MAC-first identity, first/last-seen timestamps, online/offline state, change timeline, explainable Network Security Score and snapshot-based device-specific auditors. (PR #45)
+- Added an interactive logical Network Topology projected from persisted inventory without triggering a second network scan. (PR #46)
+- Added persistent relationship evidence with explicit confirmed/inferred/unknown confidence, local default-route evidence and topology edge explanations. (PR #47)
+- Added import-driven physical-network evidence for LLDP/MAC-table snapshots, including physical link metadata, confidence and transactional persistence without switch probing or credential attempts. (PRs #48, #49)
+- Added a conservative Network Explorer to Camera Exposure Auditor handoff that requires a current persisted Camera identity match and opens only the exact `/32` host. (PR #50)
+- Added deterministic Network Intelligence snapshot reporting as JSON or ZIP evidence bundles containing inventory, relationships, timeline and security-score data with spreadsheet-safe CSV serialization. (PR #51)
+- Added fully offline MAC OUI/vendor enrichment using a bundled curated registry, privacy-aware MAC validation and conservative manufacturer-assisted classification without third-party lookups. (PR #52)
+- Added a reproducible Network Intelligence OUI benchmark smoke that records lookup throughput as a retained CI artifact while keeping correctness, rather than shared-runner timing, as the gate. (PR #52)
 
 ### Changed
 
@@ -123,6 +133,8 @@ The project has not published a tagged release for the work below yet, so the cu
 - Completed the structured-feedback coverage tranche at **555 tests** and **85.6% repository-wide branch coverage**, while preserving **91.5% aggregate service coverage** and validating the complete migrated window set through the frozen Windows bundle. (PR #40)
 - Expanded the suite from **555 to 578 tests**, raising repository-wide branch coverage from **85.6% to 86.4%** and aggregate service coverage from **91.5% to 93.2%**. Disk Analyzer now measures **95.0%**, Duplicate **90.5%**, Process Manager **99.3%** and WiFi **96.0%**. (PR #41)
 - Expanded the suite from **578 to 686 tests**, raising repository-wide branch coverage from **86.4% to 92.9%** while preserving **93.2% aggregate service coverage**. Presentation coverage now measures Archive **97.2%**, Config **90.7%**, Converter **86.9%**, Disk Analyzer **96.9%**, Duplicate Finder **97.4%**, Event Viewer **98.9%**, Network **91.5%**, PDF **93.1%**, Process Manager **98.0%**, Startup **95.3%**, System Report **94.7%**, Temp Cleaner **94.2%** and WiFi **95.0%**. (PR #42)
+- Expanded the Network Intelligence stack regression suite to **885 tests**, preserving **92.9% repository-wide branch coverage** and raising aggregate service coverage to **93.5%** on the validated OUI integration candidate. (PRs #43-#52)
+- The Windows CI pipeline now runs and retains the Network Intelligence OUI benchmark smoke alongside coverage, SBOM, checksum and packaged application artifacts. (PR #52)
 
 ### Documentation
 
@@ -141,7 +153,8 @@ The project has not published a tagged release for the work below yet, so the cu
 - Updated the first-party documentation to reflect the completed structured-feedback migration rather than the earlier partial rollout. (PR #40)
 - Rebuilt README coverage/status sections around the **578-test / 86.4% global / 93.2% service** baseline, restored the regression-tested plugin example, synchronized architecture/usage guidance and redirected the active coverage roadmap toward lower-covered presentation modules. (PR #41)
 - Synchronized README, architecture, usage and roadmap guidance with the **686-test / 92.9% global / 93.2% service** presentation-hardened baseline and the **92.5%** repository coverage ratchet. (PR #42)
+- Added and synchronized `docs/network-intelligence.md` around the persistent asset, topology, relationship/physical-evidence, reporting and offline OUI layers, including their accuracy and authorization boundaries. (PRs #44-#52)
 
 ### Development cycle covered
 
-This Unreleased section consolidates the major merged hardening/refactoring work from **PR #2 through PR #42** during the August 2026 development cycle. PR #1 was intentionally not merged and was superseded by the later Temp Cleaner work in PRs #21 and #26.
+This Unreleased section consolidates the major merged hardening/refactoring and Network Intelligence work from **PR #2 through PR #52** across the August-September 2026 development cycle. PR #1 was intentionally not merged and was superseded by the later Temp Cleaner work in PRs #21 and #26.
