@@ -119,7 +119,9 @@ def test_opening_notification_center_marks_existing_items_read(qtbot, monkeypatc
         report(CURRENT_TIME, ports=[80, 443]),
     )
     save_notification_inbox(notification_path, batch.notifications)
-    monkeypatch.setattr(notification_window, "NETWORK_INTELLIGENCE_NOTIFICATIONS_FILE", notification_path)
+    monkeypatch.setattr(
+        notification_window, "NETWORK_INTELLIGENCE_NOTIFICATIONS_FILE", notification_path
+    )
     monkeypatch.setattr(notification_window.ChangeNotificationDialog, "exec_", lambda self: 0)
 
     tool, _path, _automatic_dir = make_tool(qtbot, monkeypatch, tmp_path)
@@ -139,7 +141,9 @@ def test_opening_notification_center_preserves_unread_state_when_save_fails(
         report(CURRENT_TIME, ports=[80, 443]),
     )
     save_notification_inbox(notification_path, batch.notifications)
-    monkeypatch.setattr(notification_window, "NETWORK_INTELLIGENCE_NOTIFICATIONS_FILE", notification_path)
+    monkeypatch.setattr(
+        notification_window, "NETWORK_INTELLIGENCE_NOTIFICATIONS_FILE", notification_path
+    )
     monkeypatch.setattr(notification_window.ChangeNotificationDialog, "exec_", lambda self: 0)
     errors = []
     monkeypatch.setattr(
