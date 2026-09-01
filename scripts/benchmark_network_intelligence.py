@@ -83,9 +83,7 @@ def _benchmark_classification() -> dict[str, object]:
         "classifications": CLASSIFICATIONS,
         "checksum": checksum,
         "elapsed_seconds": round(elapsed, 6),
-        "classifications_per_second": (
-            round(CLASSIFICATIONS / elapsed, 2) if elapsed else None
-        ),
+        "classifications_per_second": (round(CLASSIFICATIONS / elapsed, 2) if elapsed else None),
     }
 
 
