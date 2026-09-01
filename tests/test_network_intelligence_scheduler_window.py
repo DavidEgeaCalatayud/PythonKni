@@ -100,12 +100,18 @@ def test_due_schedule_advances_persistence_before_starting_worker(qtbot, monkeyp
     )
     calls = []
 
-    def fake_start(_tool):
+    class FakeWorker:
+        @staticmethod
+        def isRunning():
+            return True
+
+    def fake_start(fake_tool):
         persisted = load_schedule(schedule_path)
         calls.append(persisted)
         assert persisted.last_started_at is not None
         assert persisted.next_run_at is not None
         assert persisted.next_run_at > datetime.now(timezone.utc)
+        fake_tool.worker = FakeWorker()
 
     monkeypatch.setattr(scheduler_window.HistoryTool, "start_scan", fake_start)
 
