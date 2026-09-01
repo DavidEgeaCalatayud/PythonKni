@@ -190,7 +190,7 @@ def test_zip_bundle_contains_json_and_csv_safety(tmp_path):
 
     assert "'=HYPERLINK" in assets_csv
     assert "'+formula" in assets_csv
-    assert "'=RDP" in assets_csv
+    assert "✓ =RDP +50" in assets_csv
     assert "'-danger" in relationships_csv
     assert "'@payload" in timeline_csv
 
