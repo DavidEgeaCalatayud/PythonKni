@@ -65,7 +65,9 @@ def test_export_button_tracks_running_state(qtbot, monkeypatch, tmp_path):
 def test_empty_snapshot_warns_without_opening_save_dialog(qtbot, monkeypatch, tmp_path):
     tool = make_tool(qtbot, monkeypatch, tmp_path)
     warnings = []
-    monkeypatch.setattr(reporting_window, "show_warning", lambda *args, **kwargs: warnings.append(args))
+    monkeypatch.setattr(
+        reporting_window, "show_warning", lambda *args, **kwargs: warnings.append(args)
+    )
     monkeypatch.setattr(
         reporting_window.QFileDialog,
         "getSaveFileName",
@@ -123,7 +125,9 @@ def test_export_failure_is_reported(qtbot, monkeypatch, tmp_path):
         "export_network_report",
         lambda *args, **kwargs: (_ for _ in ()).throw(OSError("disk full")),
     )
-    monkeypatch.setattr(reporting_window, "show_error", lambda *args, **kwargs: errors.append((args, kwargs)))
+    monkeypatch.setattr(
+        reporting_window, "show_error", lambda *args, **kwargs: errors.append((args, kwargs))
+    )
 
     tool.export_snapshot_report()
 
