@@ -6,6 +6,8 @@ from PyQt5.QtWidgets import QLineEdit
 
 from pythonkni.camera_auditor import window as camera_window
 from pythonkni.camera_auditor.models import RiskLevel
+from pythonkni.network import service as network_service
+from pythonkni.network import window as base_network_window
 from pythonkni.network.camera_handoff import match_persisted_cameras
 from pythonkni.network.models import DiscoveredHost
 from pythonkni.network_intelligence.models import AssetRecord, DeviceKind
@@ -23,10 +25,11 @@ def asset(
     kind: DeviceKind = DeviceKind.CAMERA,
     mac: str = "AA:BB:CC:DD:EE:10",
     hostname: str = "camera.local",
+    scope: str = SCOPE,
 ) -> AssetRecord:
     return AssetRecord(
         asset_id=asset_id,
-        scope=SCOPE,
+        scope=scope,
         ip=ip,
         mac=mac,
         hostname=hostname,
@@ -41,6 +44,10 @@ def asset(
         last_change=NOW,
         is_online=True,
     )
+
+
+def history_stub():
+    return type("History", (), {"append_to_history": lambda *_: None})()
 
 
 def test_mac_identity_requires_current_mac_match():
@@ -75,8 +82,12 @@ def test_non_camera_wrong_scope_and_unknown_identity_are_not_handoff_candidates(
         kind=DeviceKind.PC,
         mac="AA:BB:CC:DD:EE:30",
     )
-    wrong_scope = asset("mac:AA:BB:CC:DD:EE:30", "192.168.1.30", mac="AA:BB:CC:DD:EE:30")
-    object.__setattr__(wrong_scope, "scope", "192.168.2.0/24")
+    wrong_scope = asset(
+        "mac:AA:BB:CC:DD:EE:30",
+        "192.168.1.30",
+        mac="AA:BB:CC:DD:EE:30",
+        scope="192.168.2.0/24",
+    )
     unknown_identity = asset("legacy-camera-id", "192.168.1.30", mac="AA:BB:CC:DD:EE:30")
 
     assert match_persisted_cameras(SCOPE, [host], [pc, wrong_scope, unknown_identity]) == ()
@@ -84,7 +95,7 @@ def test_non_camera_wrong_scope_and_unknown_identity_are_not_handoff_candidates(
 
 def test_completed_discovery_enables_only_persisted_camera_matches(qtbot, monkeypatch):
     monkeypatch.setattr(network, "get_ipv4_interfaces", lambda: [])
-    scanner = network.NetworkScanner(type("History", (), {"append_to_history": lambda *_: None})())
+    scanner = network.NetworkScanner(history_stub())
     qtbot.addWidget(scanner)
     scanner.cidr_input.setText(SCOPE)
     camera = asset("mac:AA:BB:CC:DD:EE:10", "192.168.1.10")
@@ -111,7 +122,7 @@ def test_completed_discovery_enables_only_persisted_camera_matches(qtbot, monkey
 
 def test_camera_handoff_opens_exact_host_scope(qtbot, monkeypatch):
     monkeypatch.setattr(network, "get_ipv4_interfaces", lambda: [])
-    scanner = network.NetworkScanner(type("History", (), {"append_to_history": lambda *_: None})())
+    scanner = network.NetworkScanner(history_stub())
     qtbot.addWidget(scanner)
     scanner._set_camera_candidates(
         match_persisted_cameras(
@@ -146,7 +157,29 @@ def test_camera_handoff_opens_exact_host_scope(qtbot, monkeypatch):
     assert scanner._camera_windows == opened
 
 
-def test_cancelled_network_scan_never_emits_structured_handoff_results(qtbot, monkeypatch):
+def test_worker_success_emits_structured_results_without_extra_probe(monkeypatch):
+    host = DiscoveredHost("192.168.1.10", "camera", "AA:BB:CC:DD:EE:10")
+
+    def fake_scan(cidr, stop_event=None, on_found=None, on_checked=None, **kwargs):
+        assert cidr == SCOPE
+        on_checked(host.ip)
+        on_found(host)
+        return [host]
+
+    monkeypatch.setattr(network, "scan_network_hosts", fake_scan)
+    worker = network.NetworkScanWorker(SCOPE)
+    structured_results = []
+    summaries = []
+    worker.results_ready.connect(structured_results.append)
+    worker.finished_summary.connect(summaries.append)
+
+    worker.run()
+
+    assert structured_results == [[host]]
+    assert "192.168.1.10" in summaries[0]
+
+
+def test_cancelled_network_scan_never_emits_structured_handoff_results(monkeypatch):
     host = DiscoveredHost("192.168.1.10", "camera", "AA:BB:CC:DD:EE:10")
 
     def fake_scan(cidr, stop_event=None, on_found=None, on_checked=None, **kwargs):
@@ -158,10 +191,52 @@ def test_cancelled_network_scan_never_emits_structured_handoff_results(qtbot, mo
     monkeypatch.setattr(network, "scan_network_hosts", fake_scan)
     worker = network.NetworkScanWorker(SCOPE)
     structured_results = []
+    summaries = []
     worker.results_ready.connect(structured_results.append)
+    worker.finished_summary.connect(summaries.append)
 
-    with qtbot.waitSignal(worker.finished_summary, timeout=2000):
-        worker.start()
-    worker.wait()
+    worker.run()
 
     assert structured_results == []
+    assert summaries[0].startswith("[CANCELADO]")
+
+
+def test_worker_failure_emits_failure_without_handoff_result(monkeypatch):
+    def fail_scan(*args, **kwargs):
+        raise OSError("discovery failed")
+
+    monkeypatch.setattr(network, "scan_network_hosts", fail_scan)
+    worker = network.NetworkScanWorker(SCOPE)
+    failures = []
+    structured_results = []
+    summaries = []
+    worker.failed.connect(failures.append)
+    worker.results_ready.connect(structured_results.append)
+    worker.finished_summary.connect(summaries.append)
+
+    worker.run()
+
+    assert failures and isinstance(failures[0], OSError)
+    assert structured_results == []
+    assert summaries == ["Escaneo de red fallido."]
+
+
+def test_legacy_executor_patch_reaches_network_service(monkeypatch):
+    class TrackingExecutor:
+        pass
+
+    monkeypatch.setattr(network, "ThreadPoolExecutor", TrackingExecutor)
+
+    assert network_service.ThreadPoolExecutor is TrackingExecutor
+
+
+def test_base_network_scanner_invalid_cidr_branch_remains_covered(qtbot, monkeypatch):
+    monkeypatch.setattr(base_network_window, "get_ipv4_interfaces", lambda: [])
+    scanner = base_network_window.NetworkScanner(history_stub())
+    qtbot.addWidget(scanner)
+    scanner.cidr_input.setText("not-a-network")
+
+    scanner.scan_network()
+
+    assert "Error:" in scanner.result_area.toPlainText()
+    assert scanner.worker is None
