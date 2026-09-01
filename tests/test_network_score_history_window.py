@@ -92,7 +92,9 @@ def test_history_action_cancel_and_single_selection_are_non_destructive(
 ):
     tool = make_tool(qtbot, monkeypatch, tmp_path)
     warnings = []
-    monkeypatch.setattr(history_window, "show_warning", lambda *args, **kwargs: warnings.append(args))
+    monkeypatch.setattr(
+        history_window, "show_warning", lambda *args, **kwargs: warnings.append(args)
+    )
 
     monkeypatch.setattr(
         history_window.QFileDialog,
@@ -112,9 +114,7 @@ def test_history_action_cancel_and_single_selection_are_non_destructive(
     assert "al menos dos" in warnings[0][2]
 
 
-def test_history_action_uses_saved_snapshots_only_and_updates_status(
-    qtbot, monkeypatch, tmp_path
-):
+def test_history_action_uses_saved_snapshots_only_and_updates_status(qtbot, monkeypatch, tmp_path):
     tool = make_tool(qtbot, monkeypatch, tmp_path)
     selected = [str(tmp_path / "one.json"), str(tmp_path / "two.json")]
     monkeypatch.setattr(
