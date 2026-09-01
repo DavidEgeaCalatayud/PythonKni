@@ -93,6 +93,7 @@ The project has not published a tagged release for the work below yet, so the cu
 - Configuration save errors are surfaced to the UI without applying theme/language state that failed to persist. (PR #21)
 - Process termination now revalidates PID liveness and `create_time` inside the service immediately before `terminate()`, keeping PID-reuse protection adjacent to the destructive OS operation. (PR #34)
 - Removed vulnerable `setuptools 80.10.2` from the development lock after the new audit gate detected `PYSEC-2026-3447`; the policy now resolves to patched `setuptools 84.0.0` rather than suppressing the advisory. (PR #36)
+- Network Intelligence now promotes an active IP fallback to the canonical MAC identity in one transaction, preserving first-seen history and rewriting timeline/relationship references instead of creating a duplicate asset. Legacy duplicates are repaired only with corroborated transition evidence, so ambiguous offline IP reuse remains separate for DHCP safety. (PR #54)
 
 ### Security
 
@@ -140,6 +141,7 @@ The project has not published a tagged release for the work below yet, so the cu
 - Expanded the Network Intelligence stack regression suite to **885 tests**, preserving **92.9% repository-wide branch coverage** and raising aggregate service coverage to **93.5%** on the validated OUI integration candidate. (PRs #43-#52)
 - The Windows CI pipeline now runs and retains the Network Intelligence OUI benchmark smoke alongside coverage, SBOM, checksum and packaged application artifacts. (PR #52)
 - Extended the retained Network Intelligence benchmark smoke to measure deterministic classification-scoring throughput as well as offline OUI lookup throughput, while keeping shared-runner timing informational rather than a pass/fail threshold. (PR #53)
+- Added focused identity-reconciliation regressions for active MAC promotion, completed-scan continuity, timeline/relationship rewriting, relationship collisions, legacy duplicate repair and DHCP-safe non-merges. (PR #54)
 
 ### Documentation
 
@@ -160,7 +162,8 @@ The project has not published a tagged release for the work below yet, so the cu
 - Synchronized README, architecture, usage and roadmap guidance with the **686-test / 92.9% global / 93.2% service** presentation-hardened baseline and the **92.5%** repository coverage ratchet. (PR #42)
 - Added and synchronized `docs/network-intelligence.md` around the persistent asset, topology, relationship/physical-evidence, reporting and offline OUI layers, including their accuracy and authorization boundaries. (PRs #44-#52)
 - Extended Network Intelligence documentation with confidence scoring semantics, weighted evidence, SQLite migration behavior, risk/confidence separation and report-schema v2. (PR #53)
+- Documented transactional IP-to-MAC promotion, conservative legacy duplicate repair, relationship/timeline rewriting and the explicit DHCP-reuse safety boundary. (PR #54)
 
 ### Development cycle covered
 
-This Unreleased section consolidates the major merged hardening/refactoring and Network Intelligence work from **PR #2 through PR #53** across the August-September 2026 development cycle. PR #1 was intentionally not merged and was superseded by the later Temp Cleaner work in PRs #21 and #26.
+This Unreleased section consolidates the major merged hardening/refactoring and Network Intelligence work from **PR #2 through PR #54** across the August-September 2026 development cycle. PR #1 was intentionally not merged and was superseded by the later Temp Cleaner work in PRs #21 and #26.
