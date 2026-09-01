@@ -1,10 +1,10 @@
 import sys
 
-from pythonkni.network_intelligence import history_window as _history
+from pythonkni.network_intelligence import scheduler_window as _scheduler
 from pythonkni.network_intelligence import service as _service
 from pythonkni.network_intelligence import window as _window
 
-_window.Tool = _history.Tool
+_window.Tool = _scheduler.Tool
 
 
 def _legacy_getattr(name):

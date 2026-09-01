@@ -418,7 +418,7 @@ class Tool(BaseTool):
                 self.status_label.setText(f"Clasificado {device.host.ip}; inventario: {error}")
             self.refresh_inventory(keep_status=True)
 
-    def _scan_finished(self, result) -> None:
+    def _scan_finished(self, result) -> bool:
         if isinstance(result, dict):
             devices = result.get("devices", [])
             gateway_ip = result.get("gateway_ip")
@@ -427,24 +427,28 @@ class Tool(BaseTool):
             gateway_ip = None
         self.devices = list(devices)
         scope = self._active_scope()
+        persistence_ok = True
         try:
             self.inventory.record_scan(scope, self.devices, complete=True)
         except Exception as error:
+            persistence_ok = False
             show_error(
                 self, self.name, "No se pudo actualizar el inventario persistente.", error=error
             )
 
-        try:
-            current_assets = self.inventory.list_assets(scope=scope)
-            relationships = build_relationships(scope, current_assets, gateway_ip=gateway_ip)
-            self.relationship_store.replace_logical(scope, relationships)
-        except Exception as error:
-            show_error(
-                self,
-                self.name,
-                "El inventario se guardó, pero no se pudo actualizar la evidencia de relaciones.",
-                error=error,
-            )
+        if persistence_ok:
+            try:
+                current_assets = self.inventory.list_assets(scope=scope)
+                relationships = build_relationships(scope, current_assets, gateway_ip=gateway_ip)
+                self.relationship_store.replace_logical(scope, relationships)
+            except Exception as error:
+                persistence_ok = False
+                show_error(
+                    self,
+                    self.name,
+                    "El inventario se guardó, pero no se pudo actualizar la evidencia de relaciones.",
+                    error=error,
+                )
 
         self.refresh_inventory(keep_status=True)
         counts = {}
@@ -454,11 +458,14 @@ class Tool(BaseTool):
             counts[asset.kind.value] = counts.get(asset.kind.value, 0) + 1
         summary = ", ".join(f"{kind}: {count}" for kind, count in sorted(counts.items()))
         gateway_summary = f" · gateway {gateway_ip}" if gateway_ip else " · gateway no confirmado"
+        persistence_summary = "" if persistence_ok else " · persistencia incompleta"
         self.status_label.setText(
             f"Network Intelligence completado: {sum(counts.values())} activos online"
             + (f" · {summary}" if summary else "")
             + gateway_summary
+            + persistence_summary
         )
+        return persistence_ok
 
     def _scan_failed(self, error) -> None:
         show_error(
