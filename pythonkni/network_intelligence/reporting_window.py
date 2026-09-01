@@ -72,7 +72,9 @@ class Tool(NetworkIntelligenceTool):
 
         destination = Path(file_path)
         if not destination.suffix:
-            destination = destination.with_suffix(".zip" if "bundle" in selected_filter.lower() else ".json")
+            destination = destination.with_suffix(
+                ".zip" if "bundle" in selected_filter.lower() else ".json"
+            )
         try:
             exported = export_network_report(destination, report)
         except Exception as error:
