@@ -38,7 +38,11 @@ def _contextual_deductions(
     findings: list[str] = []
 
     for kind, weights in _ROLE_RISK_DEDUCTIONS.items():
-        affected = [asset for asset in online if asset.kind == kind and _risk_weight(asset.risk, weights)]
+        affected = [
+            asset
+            for asset in online
+            if asset.kind == kind and _risk_weight(asset.risk, weights)
+        ]
         role_deduction = sum(_risk_weight(asset.risk, weights) for asset in affected)
         if not role_deduction:
             continue
@@ -55,14 +59,19 @@ def _contextual_deductions(
         and relationship.confidence == RelationshipConfidence.CONFIRMED
         and relationship.target_id in asset_by_id
     }
+    elevated_gateways = {
+        asset_id
+        for asset_id in confirmed_gateways
+        if _risk_weight(asset_by_id[asset_id].risk, _GATEWAY_RISK_DEDUCTIONS)
+    }
     gateway_deduction = sum(
         _risk_weight(asset_by_id[asset_id].risk, _GATEWAY_RISK_DEDUCTIONS)
-        for asset_id in confirmed_gateways
+        for asset_id in elevated_gateways
     )
     if gateway_deduction:
         deductions += gateway_deduction
         findings.append(
-            f"{len(confirmed_gateways)} confirmed default-gateway asset(s) have elevated risk "
+            f"{len(elevated_gateways)} confirmed default-gateway asset(s) have elevated risk "
             f"({gateway_deduction} contextual deduction)."
         )
 
