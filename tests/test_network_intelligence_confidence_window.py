@@ -105,9 +105,7 @@ def test_topology_selection_uses_confidence_profile(qtbot, monkeypatch, tmp_path
     assert "30/100 · LOW" in tool.topology_detail.toPlainText()
 
 
-def test_write_row_delegates_while_base_setup_still_has_nine_columns(
-    qtbot, monkeypatch, tmp_path
-):
+def test_write_row_delegates_while_base_setup_still_has_nine_columns(qtbot, monkeypatch, tmp_path):
     tool = make_tool(qtbot, monkeypatch, tmp_path)
     current = asset()
     tool.table.removeColumn(9)
