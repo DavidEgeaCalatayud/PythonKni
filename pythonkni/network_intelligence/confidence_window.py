@@ -28,9 +28,7 @@ def _confidence_profile_text(asset: AssetRecord) -> str:
     else:
         for signal in asset.classification_signals:
             marker = "✓" if signal.matched else "✗"
-            lines.append(
-                f"{marker} {signal.label}  +{signal.contribution}  —  {signal.evidence}"
-            )
+            lines.append(f"{marker} {signal.label}  +{signal.contribution}  —  {signal.evidence}")
     lines.extend(
         [
             "",
