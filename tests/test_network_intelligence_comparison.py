@@ -100,7 +100,9 @@ def report(
 
 
 def test_validation_accepts_supported_schema_versions_and_canonicalizes_scope():
-    assert validate_network_report(report(schema_version=1, scope="192.168.1.25/24"))["scope"] == SCOPE
+    assert (
+        validate_network_report(report(schema_version=1, scope="192.168.1.25/24"))["scope"] == SCOPE
+    )
     assert validate_network_report(report(schema_version=2))["schema_version"] == 2
 
 
