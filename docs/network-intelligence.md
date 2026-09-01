@@ -100,11 +100,14 @@ An asset contains:
 
 A valid MAC address is preferred as the stable identity so DHCP address changes do not create a new asset. When a usable MAC is unavailable, the IP address is used as the fallback identity.
 
+If a device is first persisted with the provisional `ip:<address>` identity and a later observation exposes a valid MAC on that same scoped IP, the inventory promotes the existing record to `mac:<address>` instead of creating a second asset. The transaction preserves `first_seen`, rewrites historical timeline references, migrates topology/relationship references and records an explicit `identity_reconciled` event.
+
 ## Network Timeline / Change Detection
 
 Completed snapshots are compared with the previous persistent state. Network Intelligence records meaningful transitions such as:
 
 - `new_device`;
+- `identity_reconciled`;
 - `device_returned`;
 - `device_disappeared`;
 - `ip_changed`;
