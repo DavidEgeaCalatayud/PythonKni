@@ -9,6 +9,7 @@ from pathlib import Path
 
 from pythonkni.camera_auditor.models import RiskLevel
 
+from .identity import repair_legacy_identity_duplicates, reconcile_observation_identity
 from .models import (
     AssetRecord,
     ClassificationSignal,
@@ -170,6 +171,10 @@ class InventoryStore:
                 connection.execute(
                     "ALTER TABLE assets ADD COLUMN classification_signals_json TEXT NOT NULL DEFAULT '[]'"
                 )
+            repair_legacy_identity_duplicates(
+                connection,
+                reconciled_at=_iso(utc_now()),
+            )
             connection.commit()
 
     def _event(
@@ -201,6 +206,14 @@ class InventoryStore:
     ) -> str:
         asset_id = asset_identity(device)
         mac = _normalize_mac(device.host.mac) or (device.host.mac or "Unknown")
+        timestamp = _iso(observed_at)
+        reconcile_observation_identity(
+            connection,
+            scope=scope,
+            ip=device.host.ip,
+            canonical_id=asset_id,
+            reconciled_at=timestamp,
+        )
         row = connection.execute(
             "SELECT * FROM assets WHERE asset_id = ?",
             (asset_id,),
@@ -211,7 +224,6 @@ class InventoryStore:
         evidence_json = _json_tuple(device.evidence)
         classification_signals_json = _signals_json(device.classification_signals)
         confidence = max(0, min(int(device.classification_confidence), 100))
-        timestamp = _iso(observed_at)
 
         if row is None:
             connection.execute(
