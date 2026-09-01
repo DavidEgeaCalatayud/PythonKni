@@ -5,7 +5,8 @@
 Its purpose is no longer only to answer _what is on the network right now?_ It also answers:
 
 - what devices have been seen before;
-- how each device was classified;
+- how each device was classified and how strong that classification is;
+- which weighted signals explain the classification;
 - which services were observed;
 - which vendor can be inferred from passive/local evidence;
 - when the device first and last appeared;
@@ -38,6 +39,9 @@ Device classification
         +-- Camera
         +-- Unknown
         |
+        +-- Classification confidence (0..100)
+        +-- Weighted explainability signals
+        |
         v
 Persistent Asset Inventory (SQLite)
         |
@@ -64,6 +68,7 @@ Device-specific auditor
 pythonkni/network_intelligence/
 ├── models.py
 ├── service.py
+├── classification.py
 ├── oui.py
 ├── inventory.py
 ├── score.py
@@ -75,6 +80,7 @@ pythonkni/network_intelligence/
 ├── physical_import.py
 ├── reporting.py
 ├── reporting_window.py
+├── confidence_window.py
 ├── auditors.py
 ├── audit_window.py
 └── window.py
@@ -102,6 +108,32 @@ OUI evidence can strengthen classification only for narrowly scoped manufacturer
 
 This keeps vendor intelligence useful without pretending that an interface manufacturer always identifies the device's exact product or role.
 
+## Classification confidence and explainability
+
+The selected device type and its confidence are deliberately separate concepts. The existing conservative classification precedence still decides whether an asset is a Camera, Printer, NAS, Router, PC or Unknown. A second pure scoring layer then explains how strongly the available evidence supports that selected type.
+
+Classification confidence is a deterministic `0..100` heuristic with three presentation bands:
+
+- `LOW`: 0..39;
+- `MEDIUM`: 40..69;
+- `HIGH`: 70..100.
+
+The score is **not** a statistical probability and is not an industry-standard metric. It is a project-defined explainability score whose weights are explicit and regression-tested.
+
+Examples of weighted signals include:
+
+- Camera: ONVIF evidence, RTSP `:554`, camera-specific OUI/vendor and hostname hints;
+- Printer: JetDirect `:9100`, IPP `:631`, LPD `:515` and printer hostname hints;
+- NAS: NFS `:2049`, common NAS management ports, NAS-specific OUI/vendor and hostname hints;
+- Router: gateway-style DNS + web signature and router/gateway hostname hints;
+- PC: RDP `:3389`, SSH `:22` and SMB `:445` when stronger NAS evidence is absent.
+
+Every signal is persisted with its key, label, configured weight, matched state and human-readable evidence. The UI displays both matched and unmatched signals so the score can be inspected rather than treated as an opaque number.
+
+Classification confidence is also explicitly independent from security risk. For example, an ONVIF camera can be classified with `HIGH` confidence while still having `LOW` exposure risk if only protected services are observed. Conversely, a device may have lower classification confidence while exposing a medium-risk clear-text service.
+
+Existing SQLite inventories are migrated in place. Legacy assets receive neutral `0` confidence and an empty signal set until they are observed by a new Network Intelligence run; no existing asset or timeline data is discarded.
+
 ## Asset Inventory
 
 The inventory uses the standard-library `sqlite3` module and stores its database under PythonKni's runtime data directory. No project or installation directory is used for mutable state.
@@ -114,6 +146,8 @@ An asset contains:
 - hostname;
 - inferred vendor when evidence exists;
 - device type;
+- classification confidence (`0..100`);
+- structured weighted classification signals;
 - normalized observed services and ports;
 - exposure risk;
 - classification evidence;
@@ -151,6 +185,8 @@ The dashboard calculates a deterministic `0..100` score from currently online as
 
 The score is deliberately explainable: the UI shows aggregate counts and the findings that caused deductions instead of presenting an opaque number.
 
+The Network Security Score and Device Classification Confidence solve different problems: the former describes exposure posture, while the latter describes how strongly the observed evidence supports the inferred device role.
+
 ## Relationship evidence and topology
 
 Logical relationships are generated from known LAN/gateway evidence and persisted separately from the asset inventory. Relationship records carry explicit confidence and evidence rather than pretending that shared subnet membership proves physical cabling.
@@ -176,8 +212,11 @@ Reports contain:
 - Network Security Score and findings;
 - deterministic asset ordering;
 - persisted vendor/OUI evidence;
+- classification confidence level and weighted signal evidence;
 - relationship evidence and confidence;
 - up to the latest 1000 persisted timeline events.
+
+The report schema is versioned. Classification confidence and structured classification signals are introduced in schema version 2.
 
 CSV values are neutralized against spreadsheet formula injection before being written to the evidence bundle.
 
@@ -198,6 +237,7 @@ Network Intelligence is intended for authorized LAN administration and keeps the
 - fixed curated identification ports;
 - ONVIF limited to the selected local scope;
 - OUI/vendor lookup is fully offline;
+- classification confidence is computed locally from already-observed evidence;
 - no MAC address is submitted to third-party services;
 - no username/password attempts;
 - no default-credential testing;
@@ -208,9 +248,8 @@ Network Intelligence is intended for authorized LAN administration and keeps the
 
 ## Next platform layers
 
-Useful next extensions now that inventory, topology, physical evidence, reporting and vendor enrichment are present include:
+Useful next extensions now that inventory, topology, physical evidence, reporting, vendor enrichment and classification explainability are present include:
 
-- explicit per-device classification confidence;
 - inventory/report comparison between two saved snapshots;
 - scheduled local inventory checks with change notifications;
 - richer risk aggregation by device type and relationship context;
