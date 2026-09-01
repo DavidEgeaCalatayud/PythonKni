@@ -3,7 +3,8 @@ from __future__ import annotations
 from datetime import datetime, timezone
 
 from pythonkni.camera_auditor.models import RiskLevel
-from pythonkni.network_intelligence import reporting_window, window as base_window
+from pythonkni.network_intelligence import reporting_window
+from pythonkni.network_intelligence import window as base_window
 from pythonkni.network_intelligence.models import AssetRecord, DeviceKind
 
 NOW = datetime(2026, 9, 1, 8, 0, tzinfo=timezone.utc)
