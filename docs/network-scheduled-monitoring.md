@@ -44,12 +44,14 @@ Manual scans remain available. They use the same selected/canonical scope but ar
 
 ## Automatic snapshots
 
-A completed scheduled worker produces one JSON Network Intelligence snapshot from the resulting persisted state:
+A completed scheduled worker produces one JSON Network Intelligence snapshot only after the resulting inventory and logical relationship state have both been persisted successfully:
 
 - Asset Inventory;
 - persisted relationships;
 - up to the latest 1000 timeline events;
 - the same context-aware Network Security Score used by normal reporting.
+
+If inventory persistence fails, logical relationships are not replaced from stale inventory data. If either inventory or relationship persistence is incomplete, the scheduled execution is not recorded as a successful snapshot run and no automatic snapshot is published.
 
 Automatic snapshots use the existing report schema, so they can be opened by both `Compare saved snapshots` and `Security Score History` without a separate compatibility layer.
 
@@ -81,7 +83,9 @@ Cancellation continues to use the existing cooperative worker path. As with manu
 
 If the schedule itself cannot be persisted before a due execution, the run is not started and scheduling is disabled for the current session rather than risking repeated uncontrolled execution.
 
-If the network run completes but automatic snapshot publication fails, the scan result remains persisted and PythonKni reports the snapshot failure separately.
+If the scan completes but inventory or relationship persistence is incomplete, PythonKni keeps the successfully persisted state, reports the degraded persistence, and does not publish an automatic snapshot.
+
+If the network run and persistence complete but automatic snapshot publication fails, the scan result remains persisted and PythonKni reports the snapshot failure separately.
 
 ## Security boundary
 
