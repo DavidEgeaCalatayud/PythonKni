@@ -119,7 +119,9 @@ def test_build_report_rejects_ipv6_and_naive_generation_time():
 
 
 def test_json_export_preserves_full_structured_snapshot(tmp_path):
-    report = build_network_report(SCOPE, [asset("ip:192.168.1.10", "192.168.1.10")], [], [], generated_at=NOW)
+    report = build_network_report(
+        SCOPE, [asset("ip:192.168.1.10", "192.168.1.10")], [], [], generated_at=NOW
+    )
     path = export_network_report(tmp_path / "report.json", report)
 
     assert path.name == "report.json"
@@ -133,7 +135,7 @@ def test_zip_bundle_contains_json_and_csv_safety(tmp_path):
             asset(
                 "ip:192.168.1.10",
                 "192.168.1.10",
-                hostname="=HYPERLINK(\"https://example.invalid\")",
+                hostname='=HYPERLINK("https://example.invalid")',
                 evidence=("+formula",),
             )
         ],
