@@ -171,6 +171,36 @@ def test_offline_fallback_is_not_merged_into_new_mac_without_historical_fingerpr
     )
 
 
+def test_exact_transition_time_without_profile_corroboration_is_not_merged(tmp_path):
+    path = tmp_path / "inventory.sqlite3"
+    store = InventoryStore(path)
+    first = datetime(2026, 9, 1, 8, 0, tzinfo=timezone.utc)
+    transition = first + timedelta(minutes=5)
+    unrelated = NetworkIntelligenceDevice(
+        host=DiscoveredHost(ip=IP, hostname="new-storage", mac=MAC),
+        kind=DeviceKind.NAS,
+        open_ports=(2049,),
+        services=("NFS",),
+        evidence=("classified",),
+        risk=RiskLevel.MEDIUM,
+        vendor="QNAP",
+    )
+
+    store.record_device(SCOPE, device(mac="Unknown"), observed_at=first)
+    store.record_scan(SCOPE, [], observed_at=transition, complete=True)
+    store.record_device(SCOPE, unrelated, observed_at=transition)
+
+    reopened = InventoryStore(path)
+    assert {asset.asset_id for asset in reopened.list_assets(scope=SCOPE)} == {
+        FALLBACK_ID,
+        CANONICAL_ID,
+    }
+    assert not any(
+        event.event_type == "asset_identity_reconciled"
+        for event in reopened.list_events(scope=SCOPE)
+    )
+
+
 def test_legacy_duplicate_is_repaired_on_store_initialization(tmp_path):
     path = tmp_path / "inventory.sqlite3"
     store = InventoryStore(path)
