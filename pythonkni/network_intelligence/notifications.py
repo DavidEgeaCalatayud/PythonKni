@@ -180,11 +180,7 @@ def build_change_notifications(
     for asset_id in sorted(after_assets.keys() - before_assets.keys()):
         asset = after_assets[asset_id]
         risk = str(asset.get("risk") or "LOW").upper()
-        severity = (
-            NotificationSeverity.CRITICAL
-            if risk == "HIGH"
-            else NotificationSeverity.WARNING
-        )
+        severity = NotificationSeverity.CRITICAL if risk == "HIGH" else NotificationSeverity.WARNING
         identity = _asset_identity(asset)
         notifications.append(
             _new_notification(
@@ -278,9 +274,7 @@ def build_change_notifications(
 
     if comparison.security_score_delta < 0:
         drop = abs(comparison.security_score_delta)
-        severity = (
-            NotificationSeverity.CRITICAL if drop >= 10 else NotificationSeverity.WARNING
-        )
+        severity = NotificationSeverity.CRITICAL if drop >= 10 else NotificationSeverity.WARNING
         notifications.append(
             _new_notification(
                 scope=scope,
