@@ -51,6 +51,8 @@ def _validate_interval(interval_minutes: int) -> int:
 
 
 def canonical_schedule_scope(scope: str) -> str:
+    if not isinstance(scope, str):
+        raise ValueError("Schedule scope must be a CIDR string.")
     return parse_camera_scope(scope.strip()).with_prefixlen
 
 
@@ -124,14 +126,25 @@ def mark_schedule_success(
     now: datetime,
     snapshot: str | Path,
 ) -> ScheduleConfig:
+    now_utc = _utc(now)
     return replace(
         config,
-        last_success_at=_utc(now),
+        last_success_at=now_utc,
+        next_run_at=(
+            now_utc + timedelta(minutes=config.interval_minutes) if config.enabled else None
+        ),
         last_snapshot=str(snapshot),
     )
 
 
 def _validated_config(config: ScheduleConfig) -> ScheduleConfig:
+    if not isinstance(config.enabled, bool):
+        raise ValueError("Schedule enabled must be a boolean.")
+    if not isinstance(config.scope, str):
+        raise ValueError("Schedule scope must be a CIDR string.")
+    if not isinstance(config.last_snapshot, str):
+        raise ValueError("Schedule last_snapshot must be a string.")
+
     interval = _validate_interval(config.interval_minutes)
     scope = config.scope.strip()
     if config.enabled:
@@ -164,14 +177,24 @@ def load_schedule(path: str | Path) -> ScheduleConfig:
     if payload.get("schema_version") != SCHEDULE_SCHEMA_VERSION:
         raise ValueError("Unsupported Network Intelligence schedule schema version.")
 
+    enabled = payload.get("enabled", False)
+    if not isinstance(enabled, bool):
+        raise ValueError("Schedule enabled must be a boolean.")
+    scope = payload.get("scope", "")
+    last_snapshot = payload.get("last_snapshot", "")
+    if not isinstance(scope, str):
+        raise ValueError("Schedule scope must be a CIDR string.")
+    if not isinstance(last_snapshot, str):
+        raise ValueError("Schedule last_snapshot must be a string.")
+
     config = ScheduleConfig(
-        enabled=bool(payload.get("enabled", False)),
-        scope=str(payload.get("scope", "")),
+        enabled=enabled,
+        scope=scope,
         interval_minutes=payload.get("interval_minutes", DEFAULT_INTERVAL_MINUTES),
         next_run_at=_parse_timestamp(payload.get("next_run_at"), "next_run_at"),
         last_started_at=_parse_timestamp(payload.get("last_started_at"), "last_started_at"),
         last_success_at=_parse_timestamp(payload.get("last_success_at"), "last_success_at"),
-        last_snapshot=str(payload.get("last_snapshot", "")),
+        last_snapshot=last_snapshot,
     )
     return _validated_config(config)
 
