@@ -26,7 +26,9 @@ from tools.worker import Worker
 
 from .audit_window import DeviceAuditorDialog
 from .inventory import InventoryStore
-from .models import AssetRecord, DeviceKind, NetworkIntelligenceDevice
+from .models import AssetRecord, DeviceKind, NetworkIntelligenceDevice, NetworkRelationship
+from .relationship_store import RelationshipStore
+from .relationships import build_relationships, discover_default_gateway
 from .score import calculate_security_score
 from .service import analyze_hosts
 from .topology_view import NetworkTopologyView
@@ -98,13 +100,17 @@ def _run_network_intelligence(worker: Worker, scope: str):
     def on_classified(_host):
         worker.check_cancelled()
 
-    return analyze_hosts(
+    devices = analyze_hosts(
         scope,
         found,
         stop_event=worker.cancel_event,
         on_device=on_device,
         on_checked=on_classified,
     )
+    worker.check_cancelled()
+    gateway_ip = discover_default_gateway()
+    worker.check_cancelled()
+    return {"devices": devices, "gateway_ip": gateway_ip}
 
 
 def _format_time(value) -> str:
@@ -140,7 +146,7 @@ class Tool(BaseTool):
     name = "Network Intelligence"
     description = (
         "Mantiene un inventario persistente de activos locales, clasifica dispositivos, "
-        "calcula exposición de red y registra cambios entre escaneos."
+        "calcula exposición, conserva relaciones con evidencia y registra cambios entre escaneos."
     )
     category = "Network Intelligence"
 
@@ -150,7 +156,9 @@ class Tool(BaseTool):
         self.worker: Worker | None = None
         self.devices: list[NetworkIntelligenceDevice] = []
         self.assets: list[AssetRecord] = []
+        self.relationships: list[NetworkRelationship] = []
         self.inventory = InventoryStore(NETWORK_INTELLIGENCE_DB)
+        self.relationship_store = RelationshipStore(NETWORK_INTELLIGENCE_DB)
         self._camera_windows = []
         self._audit_windows = []
 
@@ -173,7 +181,7 @@ class Tool(BaseTool):
         layout.addLayout(scope_row)
 
         self.status_label = QLabel(
-            "Network Intelligence conserva activos y cambios entre ejecuciones. "
+            "Network Intelligence conserva activos, relaciones y cambios entre ejecuciones. "
             "Solo se analizan redes locales permitidas y hasta 256 hosts."
         )
         layout.addWidget(self.status_label)
@@ -251,6 +259,23 @@ class Tool(BaseTool):
         topology_layout.addWidget(self.topology_detail, 1)
         self.tabs.addTab(topology_tab, "Network Topology")
 
+        relationships_tab = QWidget()
+        relationships_layout = QVBoxLayout(relationships_tab)
+        relationship_help = QLabel(
+            "Solid = CONFIRMED · dashed = INFERRED · dotted = UNKNOWN. "
+            "Estas relaciones describen evidencia lógica; no afirman cableado o puertos de switch."
+        )
+        relationship_help.setWordWrap(True)
+        relationships_layout.addWidget(relationship_help)
+        self.relationship_table = QTableWidget(0, 6)
+        self.relationship_table.setHorizontalHeaderLabels(
+            ["Confidence", "Kind", "Source", "Target", "Observed", "Evidence"]
+        )
+        self.relationship_table.setEditTriggers(QTableWidget.NoEditTriggers)
+        self.relationship_table.horizontalHeader().setSectionResizeMode(QHeaderView.Stretch)
+        relationships_layout.addWidget(self.relationship_table)
+        self.tabs.addTab(relationships_tab, "Relationship Evidence")
+
         timeline_tab = QWidget()
         timeline_layout = QVBoxLayout(timeline_tab)
         self.timeline_table = QTableWidget(0, 4)
@@ -318,7 +343,13 @@ class Tool(BaseTool):
                 self.status_label.setText(f"Clasificado {device.host.ip}; inventario: {error}")
             self.refresh_inventory(keep_status=True)
 
-    def _scan_finished(self, devices) -> None:
+    def _scan_finished(self, result) -> None:
+        if isinstance(result, dict):
+            devices = result.get("devices", [])
+            gateway_ip = result.get("gateway_ip")
+        else:
+            devices = result
+            gateway_ip = None
         self.devices = list(devices)
         scope = self._active_scope()
         try:
@@ -327,6 +358,19 @@ class Tool(BaseTool):
             show_error(
                 self, self.name, "No se pudo actualizar el inventario persistente.", error=error
             )
+
+        try:
+            current_assets = self.inventory.list_assets(scope=scope)
+            relationships = build_relationships(scope, current_assets, gateway_ip=gateway_ip)
+            self.relationship_store.replace(scope, relationships)
+        except Exception as error:
+            show_error(
+                self,
+                self.name,
+                "El inventario se guardó, pero no se pudo actualizar la evidencia de relaciones.",
+                error=error,
+            )
+
         self.refresh_inventory(keep_status=True)
         counts = {}
         for asset in self.assets:
@@ -334,9 +378,11 @@ class Tool(BaseTool):
                 continue
             counts[asset.kind.value] = counts.get(asset.kind.value, 0) + 1
         summary = ", ".join(f"{kind}: {count}" for kind, count in sorted(counts.items()))
+        gateway_summary = f" · gateway {gateway_ip}" if gateway_ip else " · gateway no confirmado"
         self.status_label.setText(
             f"Network Intelligence completado: {sum(counts.values())} activos online"
             + (f" · {summary}" if summary else "")
+            + gateway_summary
         )
 
     def _scan_failed(self, error) -> None:
@@ -353,7 +399,7 @@ class Tool(BaseTool):
         self.refresh_inventory(keep_status=True)
         self.status_label.setText(
             "Network Intelligence cancelado. Los activos ya clasificados se conservan; "
-            "no se marcan desapariciones en un escaneo incompleto."
+            "no se marcan desapariciones ni se reemplaza la evidencia de relaciones con un escaneo incompleto."
         )
 
     def _worker_finished(self) -> None:
@@ -374,6 +420,7 @@ class Tool(BaseTool):
             parse_camera_scope(scope)
             self.assets = self.inventory.list_assets(scope=scope)
             events = self.inventory.list_events(scope=scope, limit=250)
+            self.relationships = self.relationship_store.list(scope=scope)
         except Exception as error:
             if not keep_status:
                 self.status_label.setText(f"No se pudo cargar el inventario: {error}")
@@ -392,11 +439,27 @@ class Tool(BaseTool):
             for column, value in enumerate(values):
                 self.timeline_table.setItem(row, column, QTableWidgetItem(str(value)))
 
-        self.topology_view.set_assets(self.assets)
+        self._render_relationships()
+        self.topology_view.set_assets(self.assets, self.relationships or None)
         if self.topology_view.graph is not None:
+            confirmed = sum(
+                relationship.confidence.value == "CONFIRMED" for relationship in self.relationships
+            )
+            inferred = sum(
+                relationship.confidence.value == "INFERRED" for relationship in self.relationships
+            )
+            unknown = sum(
+                relationship.confidence.value == "UNKNOWN" for relationship in self.relationships
+            )
+            relationship_summary = (
+                f"relationships: {confirmed} confirmed, {inferred} inferred, {unknown} unknown. "
+                if self.relationships
+                else "No persisted relationship snapshot yet; conservative inventory fallback. "
+            )
             self.topology_note.setText(
                 "Logical topology · "
-                f"{len(self.assets)} persisted asset(s). {self.topology_view.graph.note}"
+                f"{len(self.assets)} persisted asset(s) · {relationship_summary}"
+                f"{self.topology_view.graph.note}"
             )
 
         score = calculate_security_score(self.assets)
@@ -411,6 +474,33 @@ class Tool(BaseTool):
         self.topology_detail.setPlainText(
             _asset_profile_text(selected_asset) if selected_asset is not None else ""
         )
+
+    def _relationship_endpoint_text(self, endpoint_id: str) -> str:
+        if endpoint_id == "synthetic:internet":
+            return "Internet / WAN"
+        if endpoint_id.startswith("synthetic:lan:"):
+            return f"LAN {endpoint_id.removeprefix('synthetic:lan:')}"
+        asset = next((item for item in self.assets if item.asset_id == endpoint_id), None)
+        if asset is None:
+            return endpoint_id
+        label = (
+            asset.hostname if asset.hostname and asset.hostname != "Unknown" else asset.kind.value
+        )
+        return f"{label} ({asset.ip})"
+
+    def _render_relationships(self) -> None:
+        self.relationship_table.setRowCount(len(self.relationships))
+        for row, relationship in enumerate(self.relationships):
+            values = (
+                relationship.confidence.value,
+                relationship.kind.value,
+                self._relationship_endpoint_text(relationship.source_id),
+                self._relationship_endpoint_text(relationship.target_id),
+                _format_time(relationship.observed_at),
+                "; ".join(relationship.evidence),
+            )
+            for column, value in enumerate(values):
+                self.relationship_table.setItem(row, column, QTableWidgetItem(str(value)))
 
     def _write_asset_row(self, row: int, asset: AssetRecord) -> None:
         values = (
