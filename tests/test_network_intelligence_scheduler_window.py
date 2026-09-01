@@ -95,9 +95,7 @@ def test_due_schedule_advances_persistence_before_starting_worker(qtbot, monkeyp
         interval_minutes=60,
         next_run_at=now - timedelta(minutes=1),
     )
-    tool, schedule_path, _automatic_dir = make_tool(
-        qtbot, monkeypatch, tmp_path, schedule=schedule
-    )
+    tool, schedule_path, _automatic_dir = make_tool(qtbot, monkeypatch, tmp_path, schedule=schedule)
     calls = []
 
     class FakeWorker:
@@ -131,9 +129,7 @@ def test_scheduled_success_publishes_snapshot_and_records_success(qtbot, monkeyp
         next_run_at=now + timedelta(hours=1),
         last_started_at=now,
     )
-    tool, schedule_path, automatic_dir = make_tool(
-        qtbot, monkeypatch, tmp_path, schedule=schedule
-    )
+    tool, schedule_path, automatic_dir = make_tool(qtbot, monkeypatch, tmp_path, schedule=schedule)
     monkeypatch.setattr(scheduler_window.HistoryTool, "_scan_finished", lambda self, result: True)
     monkeypatch.setattr(tool.inventory, "list_assets", lambda **kwargs: [])
     monkeypatch.setattr(tool.relationship_store, "list", lambda **kwargs: [])
@@ -187,9 +183,7 @@ def test_scheduled_incomplete_persistence_never_publishes_snapshot(qtbot, monkey
     assert "no se creó snapshot automático" in tool.status_label.text()
 
 
-def test_base_scan_persistence_failure_skips_relationship_replacement(
-    qtbot, monkeypatch, tmp_path
-):
+def test_base_scan_persistence_failure_skips_relationship_replacement(qtbot, monkeypatch, tmp_path):
     tool, _schedule_path, _automatic_dir = make_tool(qtbot, monkeypatch, tmp_path)
     errors = []
     relationship_replacements = []
@@ -204,7 +198,9 @@ def test_base_scan_persistence_failure_skips_relationship_replacement(
         lambda *args, **kwargs: relationship_replacements.append((args, kwargs)),
     )
     monkeypatch.setattr(tool, "refresh_inventory", lambda **kwargs: None)
-    monkeypatch.setattr(base_window, "show_error", lambda *args, **kwargs: errors.append((args, kwargs)))
+    monkeypatch.setattr(
+        base_window, "show_error", lambda *args, **kwargs: errors.append((args, kwargs))
+    )
     tool.assets = []
 
     persisted = base_window.Tool._scan_finished(tool, {"devices": [], "gateway_ip": None})
