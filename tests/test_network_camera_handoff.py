@@ -6,7 +6,8 @@ from PyQt5.QtWidgets import QLineEdit
 
 from pythonkni.camera_auditor import window as camera_window
 from pythonkni.camera_auditor.models import RiskLevel
-from pythonkni.network import service as network_service, window as base_network_window
+from pythonkni.network import service as network_service
+from pythonkni.network import window as base_network_window
 from pythonkni.network.camera_handoff import match_persisted_cameras
 from pythonkni.network.models import DiscoveredHost
 from pythonkni.network_intelligence.models import AssetRecord, DeviceKind
