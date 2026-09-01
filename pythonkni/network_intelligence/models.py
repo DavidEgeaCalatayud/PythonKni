@@ -17,6 +17,18 @@ class DeviceKind(str, Enum):
     UNKNOWN = "Unknown"
 
 
+class RelationshipConfidence(str, Enum):
+    CONFIRMED = "CONFIRMED"
+    INFERRED = "INFERRED"
+    UNKNOWN = "UNKNOWN"
+
+
+class RelationshipKind(str, Enum):
+    DEFAULT_GATEWAY = "Default gateway"
+    LAN_MEMBERSHIP = "LAN membership"
+    SAME_SCOPE = "Same local scope"
+
+
 @dataclass(frozen=True, slots=True)
 class NetworkIntelligenceDevice:
     host: DiscoveredHost
@@ -50,6 +62,17 @@ class AssetRecord:
     last_seen: datetime
     last_change: datetime
     is_online: bool
+
+
+@dataclass(frozen=True, slots=True)
+class NetworkRelationship:
+    scope: str
+    source_id: str
+    target_id: str
+    kind: RelationshipKind
+    confidence: RelationshipConfidence
+    evidence: tuple[str, ...]
+    observed_at: datetime
 
 
 @dataclass(frozen=True, slots=True)
