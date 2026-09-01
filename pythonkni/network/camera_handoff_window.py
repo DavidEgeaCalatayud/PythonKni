@@ -9,6 +9,7 @@ from PyQt5.QtWidgets import QComboBox, QHBoxLayout, QLabel, QPushButton, QTabWid
 from pythonkni.infrastructure.paths import NETWORK_INTELLIGENCE_DB
 from pythonkni.network_intelligence.inventory import InventoryStore
 
+from . import service as _service
 from . import window as _base
 from .camera_handoff import CameraHandoffCandidate, match_persisted_cameras
 
@@ -183,11 +184,15 @@ class Tool(_base.Tool):
 
 class _CompatibilityModule(_types.ModuleType):
     def __setattr__(self, name, value):
+        if hasattr(_service, name):
+            setattr(_service, name, value)
         if hasattr(_base, name):
             setattr(_base, name, value)
         super().__setattr__(name, value)
 
     def __delattr__(self, name):
+        if hasattr(_service, name):
+            delattr(_service, name)
         if hasattr(_base, name):
             delattr(_base, name)
         super().__delattr__(name)
