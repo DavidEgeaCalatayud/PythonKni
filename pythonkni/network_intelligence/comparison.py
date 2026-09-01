@@ -191,7 +191,9 @@ def validate_network_report(report: Any) -> dict[str, Any]:
 
 def _read_json_bytes(payload: bytes, *, source: Path) -> dict[str, Any]:
     if len(payload) > MAX_REPORT_BYTES:
-        raise SnapshotReportError(f"Snapshot exceeds the {MAX_REPORT_BYTES // (1024 * 1024)} MiB limit.")
+        raise SnapshotReportError(
+            f"Snapshot exceeds the {MAX_REPORT_BYTES // (1024 * 1024)} MiB limit."
+        )
     try:
         decoded = json.loads(payload.decode("utf-8"))
     except UnicodeDecodeError as error:
@@ -227,7 +229,9 @@ def load_network_report(path: str | Path) -> dict[str, Any]:
             try:
                 info = archive.getinfo("report.json")
             except KeyError as error:
-                raise SnapshotReportError("Evidence bundle does not contain report.json.") from error
+                raise SnapshotReportError(
+                    "Evidence bundle does not contain report.json."
+                ) from error
             if info.is_dir():
                 raise SnapshotReportError("report.json is not a regular ZIP member.")
             if info.file_size > MAX_REPORT_BYTES:
@@ -508,17 +512,20 @@ def format_snapshot_comparison(comparison: SnapshotComparison) -> str:
     if comparison.findings_removed:
         lines.extend(["", "Resolved security findings"])
         lines.extend(f"• {finding}" for finding in comparison.findings_removed)
-    if not any(
-        (
-            comparison.added_assets,
-            comparison.removed_assets,
-            comparison.changed_assets,
-            comparison.added_relationships,
-            comparison.removed_relationships,
-            comparison.changed_relationships,
-            comparison.findings_added,
-            comparison.findings_removed,
+    if (
+        not any(
+            (
+                comparison.added_assets,
+                comparison.removed_assets,
+                comparison.changed_assets,
+                comparison.added_relationships,
+                comparison.removed_relationships,
+                comparison.changed_relationships,
+                comparison.findings_added,
+                comparison.findings_removed,
+            )
         )
-    ) and comparison.security_score_delta == 0:
+        and comparison.security_score_delta == 0
+    ):
         lines.extend(["", "No meaningful state changes were detected."])
     return "\n".join(lines)
