@@ -229,8 +229,16 @@ class Tool(HistoryTool):
 
     def _scan_finished(self, result) -> None:
         scheduled = self._scheduled_scan_active
-        super()._scan_finished(result)
+        persistence_ok = super()._scan_finished(result)
         if not scheduled:
+            return
+        if not persistence_ok:
+            self.schedule_status.setText(self._schedule_summary())
+            self.status_label.setText(
+                "La ejecución programada terminó, pero la persistencia del inventario o de las "
+                "relaciones quedó incompleta; no se creó snapshot automático. "
+                f"Próximo intento: {_local_time(self.schedule_config.next_run_at)}."
+            )
             return
 
         generated_at = datetime.now(timezone.utc)
