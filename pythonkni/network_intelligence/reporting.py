@@ -11,10 +11,11 @@ from typing import Any
 
 from tools.csv_utils import safe_csv_row
 
+from .classification import classification_confidence_level
 from .models import AssetRecord, NetworkRelationship, NetworkSecurityScore, TimelineEvent
 from .score import calculate_security_score
 
-REPORT_SCHEMA_VERSION = 1
+REPORT_SCHEMA_VERSION = 2
 
 
 def _utc_iso(value: datetime) -> str:
@@ -30,6 +31,21 @@ def _asset_to_dict(asset: AssetRecord) -> dict[str, Any]:
         "hostname": asset.hostname,
         "vendor": asset.vendor,
         "kind": asset.kind.value,
+        "classification_confidence": asset.classification_confidence,
+        "classification_level": classification_confidence_level(
+            asset.classification_confidence
+        ).value,
+        "classification_signals": [
+            {
+                "key": signal.key,
+                "label": signal.label,
+                "weight": signal.weight,
+                "matched": signal.matched,
+                "contribution": signal.contribution,
+                "evidence": signal.evidence,
+            }
+            for signal in asset.classification_signals
+        ],
         "services": list(asset.services),
         "open_ports": list(asset.open_ports),
         "evidence": list(asset.evidence),
@@ -150,6 +166,14 @@ def _csv_text(headers: list[str], rows: list[list[Any]]) -> str:
 def _assets_csv(report: dict[str, Any]) -> str:
     rows = []
     for asset in report["assets"]:
+        signal_summary = " | ".join(
+            (
+                f"✓ {signal['label']} +{signal['contribution']}"
+                if signal["matched"]
+                else f"✗ {signal['label']} +0"
+            )
+            for signal in asset["classification_signals"]
+        )
         rows.append(
             [
                 asset["asset_id"],
@@ -158,6 +182,9 @@ def _assets_csv(report: dict[str, Any]) -> str:
                 asset["hostname"],
                 asset["vendor"],
                 asset["kind"],
+                asset["classification_confidence"],
+                asset["classification_level"],
+                signal_summary,
                 " | ".join(asset["services"]),
                 " | ".join(str(port) for port in asset["open_ports"]),
                 asset["risk"],
@@ -176,6 +203,9 @@ def _assets_csv(report: dict[str, Any]) -> str:
             "hostname",
             "vendor",
             "kind",
+            "classification_confidence",
+            "classification_level",
+            "classification_signals",
             "services",
             "open_ports",
             "risk",

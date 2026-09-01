@@ -9,7 +9,13 @@ from pathlib import Path
 
 from pythonkni.camera_auditor.models import RiskLevel
 
-from .models import AssetRecord, DeviceKind, NetworkIntelligenceDevice, TimelineEvent
+from .models import (
+    AssetRecord,
+    ClassificationSignal,
+    DeviceKind,
+    NetworkIntelligenceDevice,
+    TimelineEvent,
+)
 
 _MAC_PATTERN = re.compile(r"^[0-9A-Fa-f]{2}(?::[0-9A-Fa-f]{2}){5}$")
 _UNKNOWN_MACS = {"", "N/A", "UNKNOWN", "NO DISPONIBLE", "00:00:00:00:00:00", "FF:FF:FF:FF:FF:FF"}
@@ -56,6 +62,50 @@ def _load_tuple(value: str, converter=str):
     return tuple(converter(item) for item in decoded)
 
 
+def _signals_json(signals: tuple[ClassificationSignal, ...]) -> str:
+    return json.dumps(
+        [
+            {
+                "key": signal.key,
+                "label": signal.label,
+                "weight": signal.weight,
+                "matched": signal.matched,
+                "evidence": signal.evidence,
+            }
+            for signal in signals
+        ],
+        ensure_ascii=False,
+        separators=(",", ":"),
+    )
+
+
+def _load_signals(value: str) -> tuple[ClassificationSignal, ...]:
+    try:
+        decoded = json.loads(value or "[]")
+    except json.JSONDecodeError:
+        return ()
+    if not isinstance(decoded, list):
+        return ()
+
+    signals = []
+    for item in decoded:
+        if not isinstance(item, dict):
+            continue
+        try:
+            signals.append(
+                ClassificationSignal(
+                    key=str(item.get("key", "")),
+                    label=str(item.get("label", "")),
+                    weight=max(0, int(item.get("weight", 0))),
+                    matched=bool(item.get("matched", False)),
+                    evidence=str(item.get("evidence", "")),
+                )
+            )
+        except (TypeError, ValueError):
+            continue
+    return tuple(signals)
+
+
 class InventoryStore:
     def __init__(self, path: str | Path):
         self.path = Path(path)
@@ -88,7 +138,9 @@ class InventoryStore:
                     first_seen TEXT NOT NULL,
                     last_seen TEXT NOT NULL,
                     last_change TEXT NOT NULL,
-                    is_online INTEGER NOT NULL DEFAULT 1
+                    is_online INTEGER NOT NULL DEFAULT 1,
+                    classification_confidence INTEGER NOT NULL DEFAULT 0,
+                    classification_signals_json TEXT NOT NULL DEFAULT '[]'
                 );
 
                 CREATE INDEX IF NOT EXISTS idx_assets_scope_online
@@ -109,6 +161,15 @@ class InventoryStore:
                     ON network_events(scope, created_at DESC);
                 """
             )
+            columns = {row["name"] for row in connection.execute("PRAGMA table_info(assets)")}
+            if "classification_confidence" not in columns:
+                connection.execute(
+                    "ALTER TABLE assets ADD COLUMN classification_confidence INTEGER NOT NULL DEFAULT 0"
+                )
+            if "classification_signals_json" not in columns:
+                connection.execute(
+                    "ALTER TABLE assets ADD COLUMN classification_signals_json TEXT NOT NULL DEFAULT '[]'"
+                )
             connection.commit()
 
     def _event(
@@ -148,6 +209,8 @@ class InventoryStore:
         services_json = _json_tuple(device.services)
         ports_json = _json_tuple(device.open_ports)
         evidence_json = _json_tuple(device.evidence)
+        classification_signals_json = _signals_json(device.classification_signals)
+        confidence = max(0, min(int(device.classification_confidence), 100))
         timestamp = _iso(observed_at)
 
         if row is None:
@@ -156,8 +219,9 @@ class InventoryStore:
                 INSERT INTO assets(
                     asset_id, scope, ip, mac, hostname, vendor, kind,
                     services_json, ports_json, evidence_json, risk,
-                    first_seen, last_seen, last_change, is_online
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1)
+                    first_seen, last_seen, last_change, is_online,
+                    classification_confidence, classification_signals_json
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?, ?)
                 """,
                 (
                     asset_id,
@@ -174,6 +238,8 @@ class InventoryStore:
                     timestamp,
                     timestamp,
                     timestamp,
+                    confidence,
+                    classification_signals_json,
                 ),
             )
             self._event(
@@ -276,7 +342,8 @@ class InventoryStore:
             UPDATE assets
             SET scope = ?, ip = ?, mac = ?, hostname = ?, vendor = ?, kind = ?,
                 services_json = ?, ports_json = ?, evidence_json = ?, risk = ?,
-                last_seen = ?, last_change = ?, is_online = 1
+                last_seen = ?, last_change = ?, is_online = 1,
+                classification_confidence = ?, classification_signals_json = ?
             WHERE asset_id = ?
             """,
             (
@@ -292,6 +359,8 @@ class InventoryStore:
                 device.risk.value,
                 timestamp,
                 last_change,
+                confidence,
+                classification_signals_json,
                 asset_id,
             ),
         )
@@ -369,6 +438,8 @@ class InventoryStore:
             last_seen=_parse_datetime(row["last_seen"]),
             last_change=_parse_datetime(row["last_change"]),
             is_online=bool(row["is_online"]),
+            classification_confidence=max(0, min(int(row["classification_confidence"]), 100)),
+            classification_signals=_load_signals(row["classification_signals_json"]),
         )
 
     def get_asset(self, asset_id: str) -> AssetRecord | None:

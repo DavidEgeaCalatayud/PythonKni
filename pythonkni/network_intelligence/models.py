@@ -17,6 +17,25 @@ class DeviceKind(str, Enum):
     UNKNOWN = "Unknown"
 
 
+class ClassificationConfidenceLevel(str, Enum):
+    LOW = "LOW"
+    MEDIUM = "MEDIUM"
+    HIGH = "HIGH"
+
+
+@dataclass(frozen=True, slots=True)
+class ClassificationSignal:
+    key: str
+    label: str
+    weight: int
+    matched: bool
+    evidence: str
+
+    @property
+    def contribution(self) -> int:
+        return self.weight if self.matched else 0
+
+
 class RelationshipConfidence(str, Enum):
     CONFIRMED = "CONFIRMED"
     INFERRED = "INFERRED"
@@ -40,6 +59,8 @@ class NetworkIntelligenceDevice:
     risk: RiskLevel = RiskLevel.LOW
     camera: CameraDevice | None = None
     vendor: str = "Unknown"
+    classification_confidence: int = 0
+    classification_signals: tuple[ClassificationSignal, ...] = ()
 
     @property
     def can_open_camera(self) -> bool:
@@ -63,6 +84,8 @@ class AssetRecord:
     last_seen: datetime
     last_change: datetime
     is_online: bool
+    classification_confidence: int = 0
+    classification_signals: tuple[ClassificationSignal, ...] = ()
 
 
 @dataclass(frozen=True, slots=True)
