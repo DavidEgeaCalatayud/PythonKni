@@ -1,7 +1,7 @@
 import sys
 
+from pythonkni.network import camera_handoff_window as _window
 from pythonkni.network import service as _service
-from pythonkni.network import window as _window
 
 
 def _legacy_getattr(name):
