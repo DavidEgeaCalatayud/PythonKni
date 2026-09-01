@@ -12,9 +12,10 @@ Its purpose is no longer only to answer _what is on the network right now?_ It a
 - when the device first and last appeared;
 - what changed between completed scans;
 - how assets are related and what evidence supports those relationships;
-- what the current network exposure score is;
+- what the current network exposure score is, including bounded topology/role context;
 - which specialized auditor should inspect an asset next;
-- how to export a reproducible snapshot for later review.
+- how to export a reproducible snapshot for later review;
+- what changed between two previously exported snapshots without rescanning the network.
 
 ## Platform flow
 
@@ -47,11 +48,12 @@ Persistent Asset Inventory (SQLite)
         |
         +-- Stable identity reconciliation
         +-- Device Profile
-        +-- Network Security Score
+        +-- Context-aware Network Security Score
         +-- Network Timeline / Change Detection
         +-- Relationship Evidence
         +-- Network Topology
         +-- Snapshot Reporting
+        +-- Offline Snapshot Comparison
         |
         v
 Device-specific auditor
@@ -83,6 +85,9 @@ pythonkni/network_intelligence/
 ├── reporting.py
 ├── reporting_window.py
 ├── confidence_window.py
+├── comparison.py
+├── comparison_window.py
+├── risk_window.py
 ├── auditors.py
 ├── audit_window.py
 └── window.py
@@ -190,7 +195,7 @@ Partial/cancelled scans never mark devices as disappeared. This prevents incompl
 
 ## Network Security Score
 
-The dashboard calculates a deterministic `0..100` score from currently online assets. Deductions are applied for signals such as:
+The dashboard calculates a deterministic `0..100` score from currently online assets. The base deductions remain intentionally simple and explainable:
 
 - high/medium-risk assets;
 - unknown devices;
@@ -198,9 +203,21 @@ The dashboard calculates a deterministic `0..100` score from currently online as
 - clear-text HTTP;
 - unknown assets first observed today.
 
-The score is deliberately explainable: the UI shows aggregate counts and the findings that caused deductions instead of presenting an opaque number.
+A second bounded contextual layer prioritizes exposure where the persisted model shows greater operational impact:
 
-The Network Security Score and Device Classification Confidence solve different problems: the former describes exposure posture, while the latter describes how strongly the observed evidence supports the inferred device role.
+- elevated-risk Router and NAS assets receive small role-specific deductions;
+- an elevated-risk asset that is the **confirmed operating-system default gateway** receives an additional gateway deduction;
+- an elevated-risk asset with a **confirmed physical link** to Router/default-gateway infrastructure receives a small topology-context deduction.
+
+Only `CONFIRMED` gateway and physical-link evidence can affect the relationship-context deductions. `INFERRED` and `UNKNOWN` relationships remain visible in topology but do not reduce the score. Logical same-LAN membership is not treated as proof of a physical path and therefore does not add a contextual penalty.
+
+Physical-link deductions are deduplicated by asset, so duplicate/reversed evidence for the same endpoint cannot be counted repeatedly. Offline assets never contribute contextual deductions.
+
+These weights are project-defined prioritization heuristics, not a vulnerability score, exploitability probability or industry-standard risk metric. Relationship context is used to prioritize review; it does not claim that a topological edge proves reachability, trust or compromise propagation.
+
+The UI lists every contextual reason next to the existing findings. Snapshot reports run the same scoring function against the same persisted relationship set, so the exported score and the live dashboard remain consistent.
+
+The Network Security Score and Device Classification Confidence solve different problems: the former describes exposure posture and review priority, while the latter describes how strongly the observed evidence supports the inferred device role.
 
 ## Relationship evidence and topology
 
@@ -224,16 +241,24 @@ Reports contain:
 - canonical CIDR scope;
 - UTC generation timestamp;
 - asset/online/offline counts;
-- Network Security Score and findings;
+- Network Security Score and findings, including confirmed relationship context;
 - deterministic asset ordering;
 - persisted vendor/OUI evidence;
 - classification confidence level and weighted signal evidence;
 - relationship evidence and confidence;
 - up to the latest 1000 persisted timeline events.
 
-The report schema is versioned. Classification confidence and structured classification signals are introduced in schema version 2.
+The report schema is versioned. Classification confidence and structured classification signals are introduced in schema version 2. Context-aware scoring changes only the derived score/findings semantics and does not alter the report shape.
 
 CSV values are neutralized against spreadsheet formula injection before being written to the evidence bundle.
+
+## Offline snapshot comparison
+
+`Compare saved snapshots` is a read-only local workflow for comparing two previously exported Network Intelligence reports. It accepts JSON reports and ZIP evidence bundles, reads only the fixed `report.json` member from ZIP files, validates the snapshot structure and requires the same canonical IPv4 scope on both sides.
+
+Comparison reports meaningful changes to assets, services, ports, risk, classification confidence, relationships and the Network Security Score. Pure observation churn such as `last_seen`, `last_change` or relationship `observed_at` updates is intentionally ignored.
+
+The comparison workflow does not inspect the current inventory and never starts a network worker, so historical analysis cannot accidentally trigger a rescan.
 
 ## Device-specific auditors
 
@@ -254,6 +279,8 @@ Network Intelligence is intended for authorized LAN administration and keeps the
 - OUI/vendor lookup is fully offline;
 - classification confidence is computed locally from already-observed evidence;
 - identity reconciliation uses persisted local identifiers only;
+- contextual risk uses only persisted device roles and relationship evidence;
+- snapshot comparison reads only saved local reports;
 - no MAC address is submitted to third-party services;
 - no username/password attempts;
 - no default-credential testing;
@@ -264,9 +291,9 @@ Network Intelligence is intended for authorized LAN administration and keeps the
 
 ## Next platform layers
 
-Useful next extensions now that inventory, topology, physical evidence, reporting, vendor enrichment, classification explainability and identity reconciliation are present include:
+Useful next extensions now that inventory, topology, physical evidence, reporting, vendor enrichment, classification explainability, identity reconciliation, snapshot comparison and contextual risk are present include:
 
-- inventory/report comparison between two saved snapshots;
-- scheduled local inventory checks with change notifications;
-- richer risk aggregation by device type and relationship context;
-- build-time expansion of the offline OUI snapshot without adding runtime network access.
+- scheduled local inventory checks with explicit change notifications;
+- build-time expansion of the offline OUI snapshot without adding runtime network access;
+- score/history trend views across saved snapshots;
+- additional defensive device-role context backed by explicit persisted evidence.

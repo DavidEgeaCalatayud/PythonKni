@@ -1,10 +1,10 @@
 import sys
 
-from pythonkni.network_intelligence import comparison_window as _comparison
+from pythonkni.network_intelligence import risk_window as _risk
 from pythonkni.network_intelligence import service as _service
 from pythonkni.network_intelligence import window as _window
 
-_window.Tool = _comparison.Tool
+_window.Tool = _risk.Tool
 
 
 def _legacy_getattr(name):
