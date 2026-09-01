@@ -2,8 +2,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from pythonkni.network_intelligence import comparison_window
-from pythonkni.network_intelligence import reporting_window
+from pythonkni.network_intelligence import comparison_window, reporting_window
 from pythonkni.network_intelligence import window as base_window
 from pythonkni.network_intelligence.comparison import (
     SnapshotAssetDelta,
