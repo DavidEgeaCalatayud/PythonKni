@@ -7,6 +7,7 @@ Its purpose is no longer only to answer _what is on the network right now?_ It a
 - what devices have been seen before;
 - how each device was classified;
 - which services were observed;
+- which vendor can be inferred from passive/local evidence;
 - when the device first and last appeared;
 - what changed between completed scans;
 - how assets are related and what evidence supports those relationships;
@@ -24,6 +25,8 @@ Network host discovery
         |
         v
 Bounded intelligence probes + ONVIF
+        |
+        +-- Offline MAC OUI enrichment
         |
         v
 Device classification
@@ -61,6 +64,7 @@ Device-specific auditor
 pythonkni/network_intelligence/
 ├── models.py
 ├── service.py
+├── oui.py
 ├── inventory.py
 ├── score.py
 ├── relationships.py
@@ -74,9 +78,29 @@ pythonkni/network_intelligence/
 ├── auditors.py
 ├── audit_window.py
 └── window.py
+
+assets/
+└── network_oui_prefixes.csv
 ```
 
 The domain reuses `pythonkni/network/service.py` for host discovery and `pythonkni/camera_auditor/service.py` for ONVIF/HTTP(S)/RTSP camera evidence.
+
+## Offline MAC OUI / Vendor Intelligence
+
+Vendor enrichment is performed locally from the MAC address already discovered on the authorized LAN. PythonKni never sends a MAC address to an external lookup service.
+
+The bundled `assets/network_oui_prefixes.csv` snapshot contains curated MA-L/OUI prefixes for high-value Network Intelligence manufacturers such as camera, NAS, networking and common endpoint vendors. It is intentionally a focused snapshot rather than a claim of complete IEEE registry coverage.
+
+Resolution rules are deliberately conservative:
+
+1. an explicit vendor learned from the Camera Auditor/ONVIF has precedence;
+2. otherwise a globally administered unicast MAC may be resolved through the offline OUI snapshot;
+3. hostname hints remain the final fallback;
+4. multicast, broadcast, invalid and locally administered/randomized MAC addresses are never attributed to an OUI vendor.
+
+OUI evidence can strengthen classification only for narrowly scoped manufacturers where the signal is useful, currently camera manufacturers (`Hikvision`, `Dahua`, `Reolink`, `Axis`) and NAS manufacturers (`Synology`, `QNAP`). Multi-purpose manufacturers such as `Ubiquiti`, `TP-Link`, `Apple` and `Raspberry Pi` enrich the profile but do not force a device type on their own.
+
+This keeps vendor intelligence useful without pretending that an interface manufacturer always identifies the device's exact product or role.
 
 ## Asset Inventory
 
@@ -151,6 +175,7 @@ Reports contain:
 - asset/online/offline counts;
 - Network Security Score and findings;
 - deterministic asset ordering;
+- persisted vendor/OUI evidence;
 - relationship evidence and confidence;
 - up to the latest 1000 persisted timeline events.
 
@@ -172,6 +197,8 @@ Network Intelligence is intended for authorized LAN administration and keeps the
 - short connection timeouts;
 - fixed curated identification ports;
 - ONVIF limited to the selected local scope;
+- OUI/vendor lookup is fully offline;
+- no MAC address is submitted to third-party services;
 - no username/password attempts;
 - no default-credential testing;
 - no stream or camera image retrieval;
@@ -181,10 +208,10 @@ Network Intelligence is intended for authorized LAN administration and keeps the
 
 ## Next platform layers
 
-Useful next extensions now that inventory, topology, physical evidence and reporting are present include:
+Useful next extensions now that inventory, topology, physical evidence, reporting and vendor enrichment are present include:
 
-- offline MAC OUI/vendor enrichment;
 - explicit per-device classification confidence;
 - inventory/report comparison between two saved snapshots;
 - scheduled local inventory checks with change notifications;
-- richer risk aggregation by device type and relationship context.
+- richer risk aggregation by device type and relationship context;
+- build-time expansion of the offline OUI snapshot without adding runtime network access.

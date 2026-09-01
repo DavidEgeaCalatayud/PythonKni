@@ -16,6 +16,7 @@ from pythonkni.camera_auditor.service import (
 from pythonkni.network.models import DiscoveredHost
 
 from .models import DeviceKind, NetworkIntelligenceDevice
+from .oui import lookup_mac_vendor
 
 INTELLIGENCE_WORKERS = 16
 INTELLIGENCE_PORT_TIMEOUT_SECONDS = 0.25
@@ -67,6 +68,8 @@ VENDOR_HOSTNAME_HINTS = (
     ("fritz", "AVM"),
     ("livebox", "Orange"),
 )
+CAMERA_OUI_VENDORS = frozenset({"Hikvision", "Dahua", "Reolink", "Axis"})
+NAS_OUI_VENDORS = frozenset({"Synology", "QNAP"})
 
 
 def _is_local_ip(value: str) -> bool:
@@ -114,14 +117,18 @@ def _hostname_contains(hostname: str, hints: tuple[str, ...]) -> bool:
     return any(hint in lowered for hint in hints)
 
 
-def infer_device_vendor(host: DiscoveredHost, camera: CameraDevice | None = None) -> str:
-    if camera is not None and camera.vendor and camera.vendor != "Unknown":
-        return camera.vendor
-    lowered = (host.hostname or "").casefold()
+def _hostname_vendor(hostname: str) -> str:
+    lowered = (hostname or "").casefold()
     for hint, vendor in VENDOR_HOSTNAME_HINTS:
         if hint in lowered:
             return vendor
     return "Unknown"
+
+
+def infer_device_vendor(host: DiscoveredHost, camera: CameraDevice | None = None) -> str:
+    if camera is not None and camera.vendor and camera.vendor != "Unknown":
+        return camera.vendor
+    return lookup_mac_vendor(host.mac) or _hostname_vendor(host.hostname)
 
 
 def _gateway_style_address(ip: str) -> bool:
@@ -143,11 +150,17 @@ def classify_device(
     ports = frozenset(open_ports)
     evidence: list[str] = []
     risk = RiskLevel.LOW
+    oui_vendor = lookup_mac_vendor(host.mac)
+    vendor = infer_device_vendor(host, camera)
+
+    if oui_vendor:
+        evidence.append(f"Fabricante identificado offline por OUI MAC: {oui_vendor}.")
 
     if (
         camera is not None
         or 554 in ports
         or _hostname_contains(host.hostname, CAMERA_HOSTNAME_HINTS)
+        or oui_vendor in CAMERA_OUI_VENDORS
     ):
         evidence.append("Señales compatibles con cámara IP (ONVIF/RTSP/vendor/hostname).")
         if camera is not None:
@@ -163,9 +176,13 @@ def classify_device(
         if 515 in ports or 9100 in ports:
             risk = RiskLevel.MEDIUM
             evidence.append("Servicio de impresión en texto claro accesible en la LAN.")
-    elif ports & NAS_PORTS or _hostname_contains(host.hostname, NAS_HOSTNAME_HINTS):
+    elif (
+        ports & NAS_PORTS
+        or _hostname_contains(host.hostname, NAS_HOSTNAME_HINTS)
+        or oui_vendor in NAS_OUI_VENDORS
+    ):
         kind = DeviceKind.NAS
-        evidence.append("Servicios o hostname compatibles con NAS.")
+        evidence.append("Servicios, hostname o fabricante OUI compatibles con NAS.")
         if 5000 in ports or 2049 in ports:
             risk = RiskLevel.MEDIUM
             evidence.append("Servicio NAS sin TLS o NFS accesible en la LAN.")
@@ -193,7 +210,7 @@ def classify_device(
         evidence=tuple(dict.fromkeys(evidence)),
         risk=risk,
         camera=camera,
-        vendor=infer_device_vendor(host, camera),
+        vendor=vendor,
     )
 
 
