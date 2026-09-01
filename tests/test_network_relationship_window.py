@@ -97,6 +97,40 @@ def test_finished_snapshot_persists_confirmed_relationships(qtbot, monkeypatch, 
     assert "gateway 192.168.1.1" in tool.status_label.text()
 
 
+def test_complete_scan_preserves_imported_physical_relationship(qtbot, monkeypatch, tmp_path):
+    monkeypatch.setattr(window, "_default_scope", lambda: "192.168.1.0/24")
+    monkeypatch.setattr(window, "NETWORK_INTELLIGENCE_DB", tmp_path / "network.sqlite3")
+    tool = window.Tool()
+    qtbot.addWidget(tool)
+    scope = "192.168.1.0/24"
+    router = make_device("192.168.1.1", DeviceKind.ROUTER, "AA:BB:CC:DD:EE:01")
+    pc = make_device("192.168.1.30", DeviceKind.PC, "AA:BB:CC:DD:EE:30")
+    tool._scan_finished({"devices": [router, pc], "gateway_ip": "192.168.1.1"})
+    assets = tool.inventory.list_assets(scope=scope)
+    router_asset = next(asset for asset in assets if asset.ip == "192.168.1.1")
+    pc_asset = next(asset for asset in assets if asset.ip == "192.168.1.30")
+    physical = NetworkRelationship(
+        scope=scope,
+        source_id=router_asset.asset_id,
+        target_id=pc_asset.asset_id,
+        kind=RelationshipKind.PHYSICAL_LINK,
+        confidence=RelationshipConfidence.CONFIRMED,
+        evidence=("administrative LLDP snapshot",),
+        observed_at=datetime(2026, 9, 1, 0, 0, tzinfo=timezone.utc),
+        source_port="Gi1/0/30",
+        target_port="eth0",
+        protocol="LLDP",
+    )
+    tool.relationship_store.replace_physical(scope, [physical])
+
+    tool._scan_finished({"devices": [router, pc], "gateway_ip": "192.168.1.1"})
+
+    relationships = tool.relationship_store.list(scope=scope)
+    persisted = next(item for item in relationships if item.kind == RelationshipKind.PHYSICAL_LINK)
+    assert persisted == physical
+    assert len([item for item in relationships if item.kind != RelationshipKind.PHYSICAL_LINK]) == 3
+
+
 def test_cancelled_scan_keeps_previous_relationship_snapshot(qtbot, monkeypatch, tmp_path):
     monkeypatch.setattr(window, "_default_scope", lambda: "192.168.1.0/24")
     monkeypatch.setattr(window, "NETWORK_INTELLIGENCE_DB", tmp_path / "network.sqlite3")
@@ -134,7 +168,7 @@ def test_relationship_persistence_failure_is_reported_without_losing_inventory(
     monkeypatch.setattr(window, "show_error", lambda *args, **kwargs: errors.append((args, kwargs)))
     monkeypatch.setattr(
         tool.relationship_store,
-        "replace",
+        "replace_logical",
         lambda *args, **kwargs: (_ for _ in ()).throw(OSError("db relationship failure")),
     )
     pc = make_device("192.168.1.30", DeviceKind.PC, "AA:BB:CC:DD:EE:30")

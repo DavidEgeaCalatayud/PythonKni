@@ -68,10 +68,16 @@ class NetworkTopologyView(QGraphicsView):
             pen.setStyle(self._confidence_line_style(edge.confidence))
             line.setPen(pen)
             line.setZValue(-1)
-            evidence = "\n".join(edge.evidence)
+            details = []
+            if edge.protocol:
+                details.append(f"Protocol: {edge.protocol}")
+            if edge.source_port or edge.target_port:
+                details.append(f"Ports: {edge.source_port or '?'} -> {edge.target_port or '?'}")
+            details.extend(edge.evidence)
+            detail_text = "\n".join(details)
             line.setToolTip(
                 f"{edge.relationship} · {edge.confidence.value}"
-                + (f"\n{evidence}" if evidence else "")
+                + (f"\n{detail_text}" if detail_text else "")
             )
             scene.addItem(line)
 
