@@ -78,6 +78,7 @@ def _merge_identity(
     canonical_id: str,
     reconciled_at: str,
     reason: str,
+    remove_false_disappearance: bool = False,
 ) -> None:
     old_id = fallback_row["asset_id"]
     canonical_row = connection.execute(
@@ -101,6 +102,16 @@ def _merge_identity(
             fallback_row=fallback_row,
             canonical_row=canonical_row,
         )
+        if remove_false_disappearance:
+            connection.execute(
+                """
+                DELETE FROM network_events
+                WHERE asset_id = ?
+                  AND event_type = 'device_disappeared'
+                  AND created_at = ?
+                """,
+                (old_id, fallback_row["last_change"]),
+            )
         first_seen = min(
             (fallback_row["first_seen"], canonical_row["first_seen"]),
             key=_instant,
@@ -146,11 +157,17 @@ def _legacy_fingerprint_matches(
     fallback_row: sqlite3.Row,
     canonical_row: sqlite3.Row,
 ) -> bool:
+    try:
+        timestamps_match = _instant(fallback_row["last_change"]) == _instant(
+            canonical_row["first_seen"]
+        )
+    except (TypeError, ValueError):
+        return False
     return (
         not bool(fallback_row["is_online"])
         and fallback_row["scope"] == canonical_row["scope"]
         and fallback_row["ip"] == canonical_row["ip"]
-        and _instant(fallback_row["last_change"]) == _instant(canonical_row["first_seen"])
+        and timestamps_match
     )
 
 
@@ -197,6 +214,7 @@ def reconcile_observation_identity(
         canonical_id=canonical_id,
         reconciled_at=reconciled_at,
         reason=reason,
+        remove_false_disappearance=legacy_repair,
     )
     return True
 
@@ -237,6 +255,7 @@ def repair_legacy_identity_duplicates(
             canonical_id=matches[0]["asset_id"],
             reconciled_at=reconciled_at,
             reason="A legacy IP/MAC duplicate matched the conservative historical fingerprint.",
+            remove_false_disappearance=True,
         )
         repaired += 1
     return repaired
