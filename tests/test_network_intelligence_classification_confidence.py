@@ -65,7 +65,12 @@ def test_rtsp_only_camera_remains_low_confidence_and_medium_risk():
     assert device.classification_confidence == 30
     assert classification_confidence_level(device.classification_confidence).value == "LOW"
     assert device.risk == RiskLevel.MEDIUM
-    assert [signal.matched for signal in device.classification_signals] == [False, True, False, False]
+    assert [signal.matched for signal in device.classification_signals] == [
+        False,
+        True,
+        False,
+        False,
+    ]
 
 
 def test_nas_combines_service_and_vendor_signals():
@@ -87,7 +92,9 @@ def test_gateway_signature_without_hostname_is_medium_confidence():
     assert device.classification_confidence == 65
     assert classification_confidence_level(device.classification_confidence).value == "MEDIUM"
     assert next(
-        signal for signal in device.classification_signals if signal.key == "router.gateway_signature"
+        signal
+        for signal in device.classification_signals
+        if signal.key == "router.gateway_signature"
     ).matched
 
 
