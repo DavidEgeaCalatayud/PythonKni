@@ -97,15 +97,21 @@ def build_score_history(
                 source=source,
                 schema_version=int(report["schema_version"]),
                 score=int(score["score"]),
-                score_delta=None if previous_score is None else int(score["score"]) - previous_score,
+                score_delta=None
+                if previous_score is None
+                else int(score["score"]) - previous_score,
                 total_devices=int(score.get("total_devices", 0)),
                 high_risk=int(score.get("high_risk", 0)),
                 medium_risk=int(score.get("medium_risk", 0)),
                 low_risk=int(score.get("low_risk", 0)),
                 unknown_devices=int(score.get("unknown_devices", 0)),
                 findings=findings,
-                findings_added=tuple(sorted(current_findings - previous_findings)) if points else (),
-                findings_resolved=tuple(sorted(previous_findings - current_findings)) if points else (),
+                findings_added=tuple(sorted(current_findings - previous_findings))
+                if points
+                else (),
+                findings_resolved=tuple(sorted(previous_findings - current_findings))
+                if points
+                else (),
             )
         )
         previous_score = int(score["score"])
@@ -128,7 +134,9 @@ def load_score_history(paths: list[str | Path] | tuple[str | Path, ...]) -> Scor
         seen.add(key)
         unique_paths.append(path)
     if len(unique_paths) < 2:
-        raise SnapshotReportError("Select at least two distinct snapshots for Security Score History.")
+        raise SnapshotReportError(
+            "Select at least two distinct snapshots for Security Score History."
+        )
 
     snapshots = [(path, load_network_report(path)) for path in unique_paths]
     return build_score_history(snapshots)
