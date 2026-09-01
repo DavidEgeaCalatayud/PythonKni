@@ -205,9 +205,9 @@ def classify_device(
         DeviceKind.NAS: nas_hostname,
         DeviceKind.ROUTER: router_hostname,
     }.get(kind, False)
-    vendor_hint = (
-        kind == DeviceKind.CAMERA and camera_vendor_hint
-    ) or (kind == DeviceKind.NAS and nas_vendor_hint)
+    vendor_hint = (kind == DeviceKind.CAMERA and camera_vendor_hint) or (
+        kind == DeviceKind.NAS and nas_vendor_hint
+    )
     confidence, classification_signals = score_device_classification(
         kind,
         ports,
