@@ -368,7 +368,11 @@ def test_notification_inbox_rejects_invalid_item_fields(tmp_path):
     valid = json.loads(path.read_text(encoding="utf-8"))
 
     mutations = (
-        ("empty title", lambda payload: payload["notifications"][0].__setitem__("title", ""), "title"),
+        (
+            "empty title",
+            lambda payload: payload["notifications"][0].__setitem__("title", ""),
+            "title",
+        ),
         (
             "non-string detected_at",
             lambda payload: payload["notifications"][0].__setitem__("detected_at", 5),
