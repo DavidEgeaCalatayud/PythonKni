@@ -134,7 +134,7 @@ def test_scheduled_success_publishes_snapshot_and_records_success(qtbot, monkeyp
     tool, schedule_path, automatic_dir = make_tool(
         qtbot, monkeypatch, tmp_path, schedule=schedule
     )
-    monkeypatch.setattr(scheduler_window.HistoryTool, "_scan_finished", lambda self, result: None)
+    monkeypatch.setattr(scheduler_window.HistoryTool, "_scan_finished", lambda self, result: True)
     monkeypatch.setattr(tool.inventory, "list_assets", lambda **kwargs: [])
     monkeypatch.setattr(tool.relationship_store, "list", lambda **kwargs: [])
     monkeypatch.setattr(tool.inventory, "list_events", lambda **kwargs: [])
@@ -159,9 +159,65 @@ def test_scheduled_success_publishes_snapshot_and_records_success(qtbot, monkeyp
     assert "2 snapshot(s) antiguo(s) eliminado(s)" in tool.status_label.text()
 
 
+def test_scheduled_incomplete_persistence_never_publishes_snapshot(qtbot, monkeypatch, tmp_path):
+    now = datetime.now(timezone.utc)
+    schedule = ScheduleConfig(
+        enabled=True,
+        scope=SCOPE,
+        interval_minutes=60,
+        next_run_at=now + timedelta(hours=1),
+        last_started_at=now,
+    )
+    tool, _schedule_path, _automatic_dir = make_tool(
+        qtbot, monkeypatch, tmp_path, schedule=schedule
+    )
+    monkeypatch.setattr(scheduler_window.HistoryTool, "_scan_finished", lambda self, result: False)
+    monkeypatch.setattr(
+        scheduler_window,
+        "create_automatic_snapshot",
+        lambda *args, **kwargs: (_ for _ in ()).throw(
+            AssertionError("incomplete persistence must not create an automatic snapshot")
+        ),
+    )
+    tool._scheduled_scan_active = True
+
+    tool._scan_finished({"devices": []})
+
+    assert "persistencia" in tool.status_label.text()
+    assert "no se creó snapshot automático" in tool.status_label.text()
+
+
+def test_base_scan_persistence_failure_skips_relationship_replacement(
+    qtbot, monkeypatch, tmp_path
+):
+    tool, _schedule_path, _automatic_dir = make_tool(qtbot, monkeypatch, tmp_path)
+    errors = []
+    relationship_replacements = []
+    monkeypatch.setattr(
+        tool.inventory,
+        "record_scan",
+        lambda *args, **kwargs: (_ for _ in ()).throw(OSError("db failed")),
+    )
+    monkeypatch.setattr(
+        tool.relationship_store,
+        "replace_logical",
+        lambda *args, **kwargs: relationship_replacements.append((args, kwargs)),
+    )
+    monkeypatch.setattr(tool, "refresh_inventory", lambda **kwargs: None)
+    monkeypatch.setattr(base_window, "show_error", lambda *args, **kwargs: errors.append((args, kwargs)))
+    tool.assets = []
+
+    persisted = base_window.Tool._scan_finished(tool, {"devices": [], "gateway_ip": None})
+
+    assert not persisted
+    assert errors
+    assert not relationship_replacements
+    assert "persistencia incompleta" in tool.status_label.text()
+
+
 def test_manual_success_never_creates_automatic_snapshot(qtbot, monkeypatch, tmp_path):
     tool, _schedule_path, _automatic_dir = make_tool(qtbot, monkeypatch, tmp_path)
-    monkeypatch.setattr(scheduler_window.HistoryTool, "_scan_finished", lambda self, result: None)
+    monkeypatch.setattr(scheduler_window.HistoryTool, "_scan_finished", lambda self, result: True)
     monkeypatch.setattr(
         scheduler_window,
         "create_automatic_snapshot",
