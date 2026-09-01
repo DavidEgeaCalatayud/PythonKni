@@ -45,6 +45,7 @@ Device classification
         v
 Persistent Asset Inventory (SQLite)
         |
+        +-- Stable identity reconciliation
         +-- Device Profile
         +-- Network Security Score
         +-- Network Timeline / Change Detection
@@ -70,6 +71,7 @@ pythonkni/network_intelligence/
 ├── service.py
 ├── classification.py
 ├── oui.py
+├── identity.py
 ├── inventory.py
 ├── score.py
 ├── relationships.py
@@ -158,6 +160,18 @@ An asset contains:
 
 A valid MAC address is preferred as the stable identity so DHCP address changes do not create a new asset. When a usable MAC is unavailable, the IP address is used as the fallback identity.
 
+### Identity reconciliation
+
+An IP fallback is intentionally temporary when stronger identity evidence becomes available. If an asset is still online as `ip:<address>` and a later observation of that same address contains a valid MAC, the inventory promotes the existing row to `mac:<address>` inside the same SQLite transaction instead of creating a second device.
+
+Promotion preserves the original `first_seen`, updates the current snapshot under the canonical MAC identity, rewrites existing timeline events and persisted relationship endpoints, and emits one `asset_identity_reconciled` event. Relationship primary-key collisions prefer the already-canonical relationship, and identity collapse cannot leave a self-edge behind.
+
+Historical databases can contain duplicate `ip:` and `mac:` rows created before reconciliation existed. PythonKni repairs those pairs only when the old transition leaves a strong fingerprint: the rows have the same scope and IP, and the IP fallback was marked disappeared at exactly the instant the MAC identity was first created. The duplicate `new_device` and false transition `device_disappeared` events are removed while the earlier first-seen history is retained.
+
+An offline IP fallback is **not** automatically merged into a newly observed MAC identity when that fingerprint is absent. IP reuse after DHCP expiry is common enough that “same IP” is not treated as proof that two historical observations represent the same physical device. PythonKni therefore prefers an explicit duplicate over a false identity merge when the evidence is ambiguous.
+
+No permanent IP-to-MAC alias is stored: an IP remains reusable by a different device later.
+
 ## Network Timeline / Change Detection
 
 Completed snapshots are compared with the previous persistent state. Network Intelligence records meaningful transitions such as:
@@ -169,7 +183,8 @@ Completed snapshots are compared with the previous persistent state. Network Int
 - `type_changed`;
 - `risk_changed`;
 - `port_opened`;
-- `port_closed`.
+- `port_closed`;
+- `asset_identity_reconciled`.
 
 Partial/cancelled scans never mark devices as disappeared. This prevents incomplete runs from corrupting the network timeline.
 
@@ -238,6 +253,7 @@ Network Intelligence is intended for authorized LAN administration and keeps the
 - ONVIF limited to the selected local scope;
 - OUI/vendor lookup is fully offline;
 - classification confidence is computed locally from already-observed evidence;
+- identity reconciliation uses persisted local identifiers only;
 - no MAC address is submitted to third-party services;
 - no username/password attempts;
 - no default-credential testing;
@@ -248,7 +264,7 @@ Network Intelligence is intended for authorized LAN administration and keeps the
 
 ## Next platform layers
 
-Useful next extensions now that inventory, topology, physical evidence, reporting, vendor enrichment and classification explainability are present include:
+Useful next extensions now that inventory, topology, physical evidence, reporting, vendor enrichment, classification explainability and identity reconciliation are present include:
 
 - inventory/report comparison between two saved snapshots;
 - scheduled local inventory checks with change notifications;
