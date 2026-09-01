@@ -4,6 +4,7 @@ import ipaddress
 
 from PyQt5.QtCore import Qt
 from PyQt5.QtWidgets import (
+    QFileDialog,
     QHBoxLayout,
     QHeaderView,
     QLabel,
@@ -27,6 +28,7 @@ from tools.worker import Worker
 from .audit_window import DeviceAuditorDialog
 from .inventory import InventoryStore
 from .models import AssetRecord, DeviceKind, NetworkIntelligenceDevice, NetworkRelationship
+from .physical_import import load_physical_snapshot_file
 from .relationship_store import RelationshipStore
 from .relationships import build_relationships, discover_default_gateway
 from .score import calculate_security_score
@@ -263,13 +265,30 @@ class Tool(BaseTool):
         relationships_layout = QVBoxLayout(relationships_tab)
         relationship_help = QLabel(
             "Solid = CONFIRMED · dashed = INFERRED · dotted = UNKNOWN. "
-            "Estas relaciones describen evidencia lógica; no afirman cableado o puertos de switch."
+            "Las relaciones lógicas se descubren automáticamente; los enlaces físicos solo se "
+            "aceptan desde snapshots administrativos LLDP/MAC-table validados contra el inventario."
         )
         relationship_help.setWordWrap(True)
         relationships_layout.addWidget(relationship_help)
-        self.relationship_table = QTableWidget(0, 6)
+        relationship_actions = QHBoxLayout()
+        self.import_physical_button = QPushButton("Import LLDP/MAC snapshot...")
+        self.import_physical_button.clicked.connect(self.import_physical_evidence)
+        relationship_actions.addWidget(self.import_physical_button)
+        relationship_actions.addStretch(1)
+        relationships_layout.addLayout(relationship_actions)
+        self.relationship_table = QTableWidget(0, 9)
         self.relationship_table.setHorizontalHeaderLabels(
-            ["Confidence", "Kind", "Source", "Target", "Observed", "Evidence"]
+            [
+                "Confidence",
+                "Kind",
+                "Protocol",
+                "Source",
+                "Source port",
+                "Target",
+                "Target port",
+                "Observed",
+                "Evidence",
+            ]
         )
         self.relationship_table.setEditTriggers(QTableWidget.NoEditTriggers)
         self.relationship_table.horizontalHeader().setSectionResizeMode(QHeaderView.Stretch)
@@ -298,6 +317,7 @@ class Tool(BaseTool):
         self.discover_button.setEnabled(not running)
         self.stop_button.setEnabled(running)
         self.scope_input.setEnabled(not running)
+        self.import_physical_button.setEnabled(not running)
 
     def start_scan(self) -> None:
         if self.worker is not None and self.worker.isRunning():
@@ -327,6 +347,61 @@ class Tool(BaseTool):
         self.stop_button.setEnabled(False)
         self.status_label.setText("Cancelando Network Intelligence de forma cooperativa...")
         self.worker.cancel()
+
+    def import_physical_evidence(self) -> None:
+        if self.worker is not None and self.worker.isRunning():
+            return
+        path, _selected_filter = QFileDialog.getOpenFileName(
+            self,
+            "Import physical network evidence",
+            "",
+            "JSON files (*.json);;All files (*)",
+        )
+        if not path:
+            return
+
+        scope = self._active_scope()
+        try:
+            parse_camera_scope(scope)
+            current_assets = self.inventory.list_assets(scope=scope)
+            result = load_physical_snapshot_file(path, current_assets, expected_scope=scope)
+        except (OSError, ValueError) as error:
+            show_error(
+                self,
+                self.name,
+                "No se pudo cargar el snapshot de evidencia física.",
+                error=error,
+            )
+            return
+
+        if result.warnings:
+            show_warning(
+                self,
+                self.name,
+                "El snapshot contiene enlaces que no se pueden validar. "
+                "La evidencia física anterior se conserva sin cambios.",
+                details="\n".join(result.warnings),
+            )
+            self.status_label.setText(
+                "Importación física rechazada: el snapshot anterior se conserva íntegro."
+            )
+            return
+
+        try:
+            self.relationship_store.replace_physical(scope, list(result.relationships))
+        except Exception as error:
+            show_error(
+                self,
+                self.name,
+                "El snapshot es válido, pero no se pudo persistir la evidencia física.",
+                error=error,
+            )
+            return
+
+        self.refresh_inventory(keep_status=True)
+        self.status_label.setText(
+            f"Evidencia física importada: {result.imported_count} enlace(s) para {result.scope}."
+        )
 
     def _handle_progress(self, payload) -> None:
         if not isinstance(payload, dict):
@@ -362,7 +437,7 @@ class Tool(BaseTool):
         try:
             current_assets = self.inventory.list_assets(scope=scope)
             relationships = build_relationships(scope, current_assets, gateway_ip=gateway_ip)
-            self.relationship_store.replace(scope, relationships)
+            self.relationship_store.replace_logical(scope, relationships)
         except Exception as error:
             show_error(
                 self,
@@ -457,7 +532,7 @@ class Tool(BaseTool):
                 else "No persisted relationship snapshot yet; conservative inventory fallback. "
             )
             self.topology_note.setText(
-                "Logical topology · "
+                "Network topology · "
                 f"{len(self.assets)} persisted asset(s) · {relationship_summary}"
                 f"{self.topology_view.graph.note}"
             )
@@ -494,8 +569,11 @@ class Tool(BaseTool):
             values = (
                 relationship.confidence.value,
                 relationship.kind.value,
+                relationship.protocol or "—",
                 self._relationship_endpoint_text(relationship.source_id),
+                relationship.source_port or "—",
                 self._relationship_endpoint_text(relationship.target_id),
+                relationship.target_port or "—",
                 _format_time(relationship.observed_at),
                 "; ".join(relationship.evidence),
             )
