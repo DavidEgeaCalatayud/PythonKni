@@ -96,6 +96,7 @@ def test_trend_chart_renders_empty_zero_risk_and_high_risk_series(qtbot, tmp_pat
     chart.resize(640, 240)
     chart.show()
 
+    chart.set_empty_message("No comparable trend")
     empty_pixmap = chart.grab()
     assert not empty_pixmap.isNull()
 
@@ -133,7 +134,8 @@ def test_dialog_empty_history_and_cleanup_with_no_candidates(qtbot, tmp_path):
 
 def test_cleanup_cancellation_preserves_snapshot_files(qtbot, monkeypatch, tmp_path):
     directory = tmp_path / "scheduled"
-    old = _write_snapshot(directory, "scheduled_old.json", NOW - timedelta(days=2))
+    old = _write_snapshot(directory, "scheduled_old.json", NOW - timedelta(days=3))
+    previous = _write_snapshot(directory, "scheduled_previous.json", NOW - timedelta(days=1))
     latest = _write_snapshot(directory, "scheduled_latest.json", NOW)
     dialog = history_center_window.HistoryCenterDialog(
         directory,
@@ -141,12 +143,13 @@ def test_cleanup_cancellation_preserves_snapshot_files(qtbot, monkeypatch, tmp_p
         RetentionPolicy(),
     )
     qtbot.addWidget(dialog)
-    dialog.keep_spin.setValue(1)
+    dialog.keep_spin.setValue(2)
     monkeypatch.setattr(QMessageBox, "question", lambda *args, **kwargs: QMessageBox.No)
 
     dialog._clean_now()
 
     assert old.exists()
+    assert previous.exists()
     assert latest.exists()
 
 
@@ -178,7 +181,8 @@ def test_save_policy_failure_is_reported_without_mutating_policy(qtbot, monkeypa
 
 def test_cleanup_failure_is_reported_and_does_not_claim_success(qtbot, monkeypatch, tmp_path):
     directory = tmp_path / "scheduled"
-    old = _write_snapshot(directory, "scheduled_old.json", NOW - timedelta(days=2))
+    old = _write_snapshot(directory, "scheduled_old.json", NOW - timedelta(days=3))
+    _write_snapshot(directory, "scheduled_previous.json", NOW - timedelta(days=1))
     _write_snapshot(directory, "scheduled_latest.json", NOW)
     errors = []
     dialog = history_center_window.HistoryCenterDialog(
@@ -187,7 +191,7 @@ def test_cleanup_failure_is_reported_and_does_not_claim_success(qtbot, monkeypat
         RetentionPolicy(),
     )
     qtbot.addWidget(dialog)
-    dialog.keep_spin.setValue(1)
+    dialog.keep_spin.setValue(2)
     monkeypatch.setattr(QMessageBox, "question", lambda *args, **kwargs: QMessageBox.Yes)
     monkeypatch.setattr(
         history_center_window,
@@ -208,7 +212,8 @@ def test_cleanup_failure_is_reported_and_does_not_claim_success(qtbot, monkeypat
 
 def test_cleanup_success_survives_policy_persistence_failure(qtbot, monkeypatch, tmp_path):
     directory = tmp_path / "scheduled"
-    old = _write_snapshot(directory, "scheduled_old.json", NOW - timedelta(days=2))
+    old = _write_snapshot(directory, "scheduled_old.json", NOW - timedelta(days=3))
+    previous = _write_snapshot(directory, "scheduled_previous.json", NOW - timedelta(days=1))
     latest = _write_snapshot(directory, "scheduled_latest.json", NOW)
     warnings = []
     dialog = history_center_window.HistoryCenterDialog(
@@ -217,7 +222,7 @@ def test_cleanup_success_survives_policy_persistence_failure(qtbot, monkeypatch,
         RetentionPolicy(),
     )
     qtbot.addWidget(dialog)
-    dialog.keep_spin.setValue(1)
+    dialog.keep_spin.setValue(2)
     monkeypatch.setattr(QMessageBox, "question", lambda *args, **kwargs: QMessageBox.Yes)
     monkeypatch.setattr(
         history_center_window,
@@ -234,8 +239,9 @@ def test_cleanup_success_survives_policy_persistence_failure(qtbot, monkeypatch,
 
     assert warnings
     assert not old.exists()
+    assert previous.exists()
     assert latest.exists()
-    assert dialog.policy.keep_per_scope == 1
+    assert dialog.policy.keep_per_scope == 2
 
 
 def test_tool_does_not_open_history_center_while_worker_is_running(monkeypatch):
