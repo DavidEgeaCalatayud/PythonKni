@@ -26,9 +26,10 @@ if ([string]$lock.sha256 -notmatch '^[0-9a-fA-F]{64}$') {
 
 $targetDir = Join-Path $repositoryRoot "third_party\nerva"
 $targetExe = Join-Path $targetDir "nerva.exe"
+$targetLicense = Join-Path $targetDir "LICENSE"
 $sourceMetadata = Join-Path $targetDir "source.json"
 
-if ((Test-Path -LiteralPath $targetExe -PathType Leaf) -and (Test-Path -LiteralPath $sourceMetadata -PathType Leaf)) {
+if ((Test-Path -LiteralPath $targetExe -PathType Leaf) -and (Test-Path -LiteralPath $targetLicense -PathType Leaf) -and (Test-Path -LiteralPath $sourceMetadata -PathType Leaf)) {
     try {
         $existing = Get-Content -LiteralPath $sourceMetadata -Raw | ConvertFrom-Json
         if ([string]$existing.version -eq [string]$lock.version -and [string]$existing.archive_sha256 -eq ([string]$lock.sha256).ToLowerInvariant()) {
@@ -60,19 +61,19 @@ try {
     if ($null -eq $engine) {
         throw "The verified Nerva archive does not contain nerva.exe."
     }
+    $licenseFile = Get-ChildItem -LiteralPath $extractDir -Recurse -File | Where-Object {
+        $_.Name -match '^LICENSE(?:\..+)?$'
+    } | Select-Object -First 1
+    if ($null -eq $licenseFile) {
+        throw "The verified Nerva archive does not contain a distributable LICENSE file."
+    }
 
     if (Test-Path -LiteralPath $targetDir) {
         Remove-Item -LiteralPath $targetDir -Recurse -Force
     }
     New-Item -ItemType Directory -Path $targetDir -Force | Out-Null
     Copy-Item -LiteralPath $engine.FullName -Destination $targetExe
-
-    $licenseFile = Get-ChildItem -LiteralPath $extractDir -Recurse -File | Where-Object {
-        $_.Name -match '^LICENSE(?:\..+)?$'
-    } | Select-Object -First 1
-    if ($null -ne $licenseFile) {
-        Copy-Item -LiteralPath $licenseFile.FullName -Destination (Join-Path $targetDir $licenseFile.Name)
-    }
+    Copy-Item -LiteralPath $licenseFile.FullName -Destination $targetLicense
 
     [ordered]@{
         name = [string]$lock.name
