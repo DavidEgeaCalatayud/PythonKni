@@ -139,7 +139,9 @@ class SnapshotTrendChart(QWidget):
 
         score_pen = QPen(palette.highlight().color(), 2)
         painter.setPen(score_pen)
-        score_points = [(x_at(index), score_y(entry.score)) for index, entry in enumerate(self.entries)]
+        score_points = [
+            (x_at(index), score_y(entry.score)) for index, entry in enumerate(self.entries)
+        ]
         for index in range(1, len(score_points)):
             painter.drawLine(
                 score_points[index - 1][0],
@@ -159,8 +161,7 @@ class SnapshotTrendChart(QWidget):
                 return int(plot.bottom() - (value / max_high) * plot.height())
 
             high_points = [
-                (x_at(index), high_y(entry.high_risk))
-                for index, entry in enumerate(self.entries)
+                (x_at(index), high_y(entry.high_risk)) for index, entry in enumerate(self.entries)
             ]
             for index in range(1, len(high_points)):
                 painter.drawLine(
@@ -484,7 +485,9 @@ class HistoryCenterDialog(QDialog):
             scope=scope,
         )
         if not removable:
-            self.catalog_status.setText("La política actual no tiene snapshots válidos que eliminar.")
+            self.catalog_status.setText(
+                "La política actual no tiene snapshots válidos que eliminar."
+            )
             return
 
         reclaim = sum(entry.size_bytes for entry in removable)
