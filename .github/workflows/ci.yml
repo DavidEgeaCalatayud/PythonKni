@@ -109,8 +109,24 @@ jobs:
       - name: Ruff format check
         run: python -m ruff format --check .
 
+      - name: Stage pinned Nerva engine
+        shell: powershell
+        run: .\scripts\fetch_nerva.ps1
+
       - name: Build Windows bundle
         run: pyinstaller --noconfirm --clean PythonKni.spec
+
+      - name: Verify packaged Nerva engine
+        shell: powershell
+        run: |
+          $nerva = Join-Path $PWD "dist\PythonKni\_internal\third_party\nerva\nerva.exe"
+          if (-not (Test-Path -LiteralPath $nerva -PathType Leaf)) {
+            throw "PyInstaller did not package the verified Nerva engine at $nerva"
+          }
+          & $nerva --capabilities | Out-Null
+          if ($LASTEXITCODE -ne 0) {
+            throw "Packaged Nerva capability smoke failed with exit code $LASTEXITCODE"
+          }
 
       - name: Smoke test packaged application
         shell: powershell
@@ -150,6 +166,7 @@ jobs:
             network-intelligence-benchmark.json
             dependency-sbom.cdx.json
             assets/network_oui_prefixes.meta.json
+            third_party/nerva.lock.json
             requirements.txt
             requirements-dev.txt
           if-no-files-found: error
