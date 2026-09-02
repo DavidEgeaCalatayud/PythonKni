@@ -303,7 +303,7 @@ def retention_candidates(
             continue
         protected = {entry.path for entry in scoped_entries[-MIN_KEEP_PER_SCOPE:]}
 
-        overflow = scoped_entries[:-validated.keep_per_scope]
+        overflow = scoped_entries[: -validated.keep_per_scope]
         for entry in overflow:
             if entry.path not in protected:
                 removable[entry.path] = entry
