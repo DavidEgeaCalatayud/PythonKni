@@ -70,6 +70,4 @@ def test_ambiguous_historical_oui_never_forces_a_device_role():
     device = classify_device(host("08:00:30:12:34:56"), ())
 
     assert device.kind == DeviceKind.UNKNOWN
-    assert device.vendor == (
-        "CERN / NETWORK RESEARCH CORPORATION / ROYAL MELBOURNE INST OF TECH"
-    )
+    assert device.vendor == ("CERN / NETWORK RESEARCH CORPORATION / ROYAL MELBOURNE INST OF TECH")
