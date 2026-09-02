@@ -8,13 +8,15 @@ from pathlib import Path
 
 from .models import AssetRecord, NetworkRelationship, TimelineEvent
 from .reporting import build_network_report, export_network_report
-from .scheduler import automatic_snapshot_destination, prune_automatic_snapshots
+from .retention import RetentionPolicy, apply_retention_policy
+from .scheduler import automatic_snapshot_destination
 
 
 @dataclass(frozen=True, slots=True)
 class AutomaticSnapshotResult:
     path: Path
     pruned_count: int
+    retention_error: str = ""
 
 
 def create_automatic_snapshot(
@@ -25,6 +27,7 @@ def create_automatic_snapshot(
     events: list[TimelineEvent] | tuple[TimelineEvent, ...],
     *,
     generated_at: datetime,
+    retention_policy: RetentionPolicy | None = None,
 ) -> AutomaticSnapshotResult:
     root = Path(directory)
     root.mkdir(parents=True, exist_ok=True)
@@ -54,5 +57,17 @@ def create_automatic_snapshot(
             pass
         raise
 
-    removed = prune_automatic_snapshots(root, scope)
-    return AutomaticSnapshotResult(path=destination, pruned_count=len(removed))
+    try:
+        cleanup = apply_retention_policy(
+            root,
+            retention_policy or RetentionPolicy(),
+            now=generated_at,
+            scope=scope,
+        )
+    except Exception as error:
+        return AutomaticSnapshotResult(
+            path=destination,
+            pruned_count=0,
+            retention_error=str(error),
+        )
+    return AutomaticSnapshotResult(path=destination, pruned_count=len(cleanup.removed))

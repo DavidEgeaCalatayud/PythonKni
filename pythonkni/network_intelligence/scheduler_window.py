@@ -15,6 +15,7 @@ from tools.ui_feedback import show_error, show_warning
 
 from .automatic_snapshot import AutomaticSnapshotResult, create_automatic_snapshot
 from .history_window import Tool as HistoryTool
+from .retention import RetentionPolicy
 from .scheduler import (
     DEFAULT_INTERVAL_MINUTES,
     ScheduleConfig,
@@ -227,6 +228,9 @@ class Tool(HistoryTool):
         self._scheduled_scan_active = False
         super().start_scan()
 
+    def _automatic_snapshot_retention_policy(self) -> RetentionPolicy:
+        return RetentionPolicy()
+
     def _automatic_snapshot_published(
         self,
         *,
@@ -267,6 +271,7 @@ class Tool(HistoryTool):
                 relationships,
                 events,
                 generated_at=generated_at,
+                retention_policy=self._automatic_snapshot_retention_policy(),
             )
         except Exception as error:
             show_error(
@@ -277,6 +282,15 @@ class Tool(HistoryTool):
             )
             self.schedule_status.setText(self._schedule_summary())
             return
+
+        if snapshot.retention_error:
+            show_warning(
+                self,
+                self.name,
+                "El snapshot automático se publicó correctamente, pero no se pudo aplicar su "
+                "política de retención.",
+                details=snapshot.retention_error,
+            )
 
         candidate = mark_schedule_success(
             self.schedule_config,
@@ -303,11 +317,12 @@ class Tool(HistoryTool):
             )
             post_snapshot_status = " · procesamiento posterior no disponible"
 
-        retention = (
-            f" · {snapshot.pruned_count} snapshot(s) antiguo(s) eliminado(s)"
-            if snapshot.pruned_count
-            else ""
-        )
+        if snapshot.retention_error:
+            retention = " · retención no aplicada"
+        elif snapshot.pruned_count:
+            retention = f" · {snapshot.pruned_count} snapshot(s) antiguo(s) eliminado(s)"
+        else:
+            retention = ""
         self.status_label.setText(
             f"Ejecución programada completada · snapshot automático {snapshot.path}{retention}"
             f"{post_snapshot_status} · próxima {_local_time(self.schedule_config.next_run_at)}."

@@ -6,6 +6,7 @@ from pathlib import Path
 from pythonkni.network_intelligence import reporting_window, scheduler_window
 from pythonkni.network_intelligence import window as base_window
 from pythonkni.network_intelligence.automatic_snapshot import AutomaticSnapshotResult
+from pythonkni.network_intelligence.retention import RetentionPolicy
 from pythonkni.network_intelligence.scheduler import ScheduleConfig, load_schedule, save_schedule
 
 SCOPE = "192.168.1.0/24"
@@ -136,8 +137,26 @@ def test_scheduled_success_publishes_snapshot_and_records_success(qtbot, monkeyp
     monkeypatch.setattr(tool.inventory, "list_events", lambda **kwargs: [])
     created = []
 
-    def fake_snapshot(directory, scope, assets, relationships, events, *, generated_at):
-        created.append((Path(directory), scope, tuple(assets), tuple(relationships), tuple(events)))
+    def fake_snapshot(
+        directory,
+        scope,
+        assets,
+        relationships,
+        events,
+        *,
+        generated_at,
+        retention_policy,
+    ):
+        created.append(
+            (
+                Path(directory),
+                scope,
+                tuple(assets),
+                tuple(relationships),
+                tuple(events),
+                retention_policy,
+            )
+        )
         return AutomaticSnapshotResult(
             path=automatic_dir / "scheduled_192.168.1.0_24_test.json",
             pruned_count=2,
@@ -148,7 +167,7 @@ def test_scheduled_success_publishes_snapshot_and_records_success(qtbot, monkeyp
 
     tool._scan_finished({"devices": []})
 
-    assert created == [(automatic_dir, SCOPE, (), (), ())]
+    assert created == [(automatic_dir, SCOPE, (), (), (), RetentionPolicy())]
     saved = load_schedule(schedule_path)
     assert saved.last_success_at is not None
     assert saved.last_snapshot.endswith("scheduled_192.168.1.0_24_test.json")
