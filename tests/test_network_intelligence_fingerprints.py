@@ -248,7 +248,9 @@ def test_persisted_fingerprints_refuse_missing_or_stale_asset(tmp_path):
         classification_confidence=persisted.classification_confidence,
         classification_signals=persisted.classification_signals,
     )
-    store.record_device(missing.scope, changed, observed_at=missing.first_seen + timedelta(minutes=1))
+    store.record_device(
+        missing.scope, changed, observed_at=missing.first_seen + timedelta(minutes=1)
+    )
 
     with pytest.raises(ValueError, match="changed before fingerprints"):
         persist_asset_fingerprints(store, persisted, [fingerprint])
