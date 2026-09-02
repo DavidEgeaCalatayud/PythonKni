@@ -1,8 +1,8 @@
 # Release readiness
 
-This document records the first-release gate for PythonKni after the Network Intelligence roadmap, runtime/quality-gate work and public documentation synchronization.
+This document records PythonKni's Windows release-engineering contract after the verified `v0.1.0` release and the first-class installer milestone.
 
-## Intended first version
+## Released baseline
 
 `pyproject.toml` currently declares:
 
@@ -10,13 +10,15 @@ This document records the first-release gate for PythonKni after the Network Int
 0.1.0
 ```
 
-The coherent first release tag is therefore **`v0.1.0`**. Release status is established only after the Release workflow finishes successfully and the published assets are verified; the presence of a tag or retained workflow artifact alone is not sufficient.
+`v0.1.0` is published as the first public release. Its tag remains an immutable reference to the exact released source revision. The release contains the validated portable Windows ZIP/checksum plus the CycloneDX SBOM, OUI provenance metadata and both dependency locks.
+
+Installer generation was added **after** `v0.1.0`, so the historical `v0.1.0` release intentionally remains unchanged. Future releases built from installer-enabled source add the versioned setup executable and its SHA-256 checksum.
 
 ## Current validated baseline
 
-The current pre-release `main` baseline has been validated on Windows / **CPython 3.13.15** with:
+The current installer-enabled branch baseline has been validated on Windows / **CPython 3.13.15** with:
 
-- **1,063/1,063 tests** passing;
+- **1,068/1,068 tests** passing;
 - **92.8%** repository branch coverage;
 - **93.5%** aggregate `service.py` coverage;
 - exact SHA-256-locked runtime/development dependency graphs;
@@ -28,7 +30,10 @@ The current pre-release `main` baseline has been validated on Windows / **CPytho
 - Ruff check/format;
 - PyInstaller Windows build;
 - frozen `PythonKni.exe --smoke-test`;
-- ZIP/checksum artifact publication.
+- ZIP/checksum artifact generation;
+- Inno Setup installer generation using the preinstalled runner toolchain;
+- real installed-app smoke: silent install, installed executable smoke, silent uninstall and cleanup verification;
+- installer executable + SHA-256 artifact retention.
 
 A release must repeat the Release workflow against the exact immutable release commit; a previous CI artifact is supporting evidence, not a substitute for the release run.
 
@@ -36,7 +41,7 @@ A release must repeat the Release workflow against the exact immutable release c
 
 The current Network Intelligence platform includes persistent inventory/identity reconciliation, classification confidence, relationships/topology/physical evidence, contextual Security Score, deterministic snapshot reporting, offline snapshot comparison, Security Score History, opt-in scheduled checks, automatic snapshots, local change notifications, History Center/trends/configurable retention and a reproducible build-time IEEE OUI registry updater.
 
-The quality/toolchain milestone also includes the CPython 3.13.15 runtime contract and incremental Network Intelligence structural typing ratchet enforced by both CI and Release.
+The quality/toolchain milestone also includes the CPython 3.13.15 runtime contract, incremental Network Intelligence structural typing ratchet and first-class per-user Windows installer pipeline enforced by CI and future releases.
 
 ## Release workflow contract
 
@@ -64,6 +69,8 @@ The recovery branch path is also deliberately constrained:
 - the workflow then checks out that **exact tagged commit in detached HEAD state** and verifies its `project.version` before installing, testing, building or publishing anything;
 - recovery therefore repairs publication without moving the immutable tag or silently rebuilding a different source revision.
 
+Historical recovery has one compatibility rule: if an immutable old tag predates the installer pipeline, recovery republishes only the assets that source revision knows how to build. It never injects current installer code into old tagged source. New direct/bootstrap releases require installer support to be present.
+
 After resolving and checking out the release source, the same workflow must:
 
 1. install both committed dependency locks with `--require-hashes`;
@@ -74,8 +81,9 @@ After resolving and checking out the release source, the same workflow must:
 6. run Ruff check/format;
 7. build with PyInstaller and run the frozen smoke test;
 8. package the versioned Windows ZIP + SHA-256 checksum;
-9. upload retained workflow artifacts; and
-10. publish/update the GitHub Release with the validated files.
+9. for installer-enabled source, build the version-bound Inno Setup installer and run the installed-app lifecycle smoke;
+10. upload retained workflow artifacts; and
+11. publish/update the GitHub Release with the validated files.
 
 The publication probe is intentionally compatible with the Windows PowerShell runner: a missing GitHub Release is treated as the expected create path rather than as a terminating native-command error. Existing releases use an idempotent asset upload with `--clobber`; missing releases are created with `--verify-tag`.
 
@@ -83,15 +91,37 @@ The release is complete only after the Release workflow conclusion is `success`,
 
 ## Expected release assets
 
-The release path publishes the versioned Windows ZIP/checksum plus supply-chain evidence including the CycloneDX SBOM, OUI provenance metadata and runtime/development locks. The retained workflow artifact also includes `coverage.xml` as build evidence.
+For installer-enabled source, future releases publish:
+
+```text
+PythonKni-vX.Y.Z-windows-x64.zip
+PythonKni-vX.Y.Z-windows-x64.sha256
+PythonKni-vX.Y.Z-windows-x64-setup.exe
+PythonKni-vX.Y.Z-windows-x64-setup.sha256
+dependency-sbom.cdx.json
+network_oui_prefixes.meta.json
+requirements.txt
+requirements-dev.txt
+```
+
+The retained workflow artifacts also include build evidence such as `coverage.xml`. The historical `v0.1.0` release predates installer support and therefore correctly contains its original six assets only.
+
+## Installer contract
+
+The installer is built with Inno Setup as a **per-user** package with `PrivilegesRequired=lowest`. Its default program directory is `%LOCALAPPDATA%\Programs\PythonKni`, it creates a Start Menu entry and uses the standard Inno Setup uninstaller.
+
+The build script reads the application version from `pyproject.toml`; Release builds additionally require that version to match the resolved immutable release tag. CI never downloads Chocolatey packages, installer compilers or third-party Actions to construct the setup executable: it uses the Inno Setup compiler already present on the Windows runner and fails if that compiler is unavailable.
+
+The installed-app smoke uses an isolated temporary target, verifies Start Menu and per-user uninstall registration, executes the **installed** `PythonKni.exe --smoke-test`, uninstalls silently and verifies cleanup. The smoke refuses to run if PythonKni is already registered as installed for the current user so local validation cannot silently replace a real installation.
+
+See [`windows-installer.md`](windows-installer.md) for the installation, checksum and uninstall contract.
 
 ## Known distribution limitations
 
-These do **not** block a technical `v0.1.0` pre-1.0 release, but should be explicit:
+These do not block the current technical distribution model, but remain explicit:
 
 - Windows is the only packaged/validated platform;
-- the executable is not Authenticode/code signed;
-- there is no MSI/Inno Setup/NSIS installer yet; distribution is the validated ZIP bundle;
+- the executable and installer are not yet Authenticode/code signed, so Windows SmartScreen/reputation warnings remain possible;
 - Python 3.14+, free-threaded CPython and non-Windows packaging are not claimed;
 - optional OCR workflows still depend on local Tesseract/Poppler;
 - localization is incomplete.
@@ -99,6 +129,6 @@ These do **not** block a technical `v0.1.0` pre-1.0 release, but should be expli
 ## Post-v0.1.0 distribution roadmap
 
 1. add representative screenshots/demo media;
-2. add Windows installer generation;
-3. add executable/installer signing once certificate/identity handling is defined;
-4. keep dependency/OUI/runtime/typing gates non-regressive while product features evolve.
+2. define certificate ownership, identity and secret handling for Authenticode signing;
+3. sign the executable/installer once that policy is established;
+4. keep dependency/OUI/runtime/typing/installer gates non-regressive while product features evolve.
