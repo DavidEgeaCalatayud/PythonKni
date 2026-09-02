@@ -1,11 +1,14 @@
 from __future__ import annotations
 
 from collections import defaultdict
+from contextlib import closing
 from dataclasses import replace
+from datetime import datetime
 from typing import Iterable
 
 from pythonkni.network.models import DiscoveredHost, ServiceFingerprint
 
+from .inventory import InventoryStore, _iso, utc_now
 from .models import AssetRecord, NetworkIntelligenceDevice
 
 
@@ -114,3 +117,62 @@ def enrich_asset_with_fingerprints(
         services=tuple(existing.get(port, f"TCP/{port}") for port in ports),
     )
     return enrich_device_with_fingerprints(expanded, matching)
+
+
+def persist_asset_fingerprints(
+    store: InventoryStore,
+    asset: AssetRecord,
+    fingerprints: Iterable[ServiceFingerprint],
+    *,
+    observed_at: datetime | None = None,
+) -> AssetRecord:
+    """Persist explicitly accepted service identities and track identity changes.
+
+    This path never creates a synthetic asset: callers must first resolve an existing
+    ``AssetRecord``. Risk and classification are preserved by the enrichment layer.
+    Existing-port product/version changes are recorded as ``service_changed`` timeline
+    events; newly observed ports continue to use the inventory's normal ``port_opened``
+    event path.
+    """
+
+    observed_at = observed_at or utc_now()
+    enriched = enrich_asset_with_fingerprints(asset, fingerprints)
+    if (
+        enriched.open_ports == asset.open_ports
+        and enriched.services == asset.services
+        and enriched.evidence == asset.evidence
+    ):
+        return asset
+
+    before_services = dict(zip(asset.open_ports, asset.services))
+    after_services = dict(zip(enriched.open_ports, enriched.services))
+    changed_services = tuple(
+        (port, before_services[port], after_services[port])
+        for port in sorted(before_services.keys() & after_services.keys())
+        if before_services[port] != after_services[port]
+    )
+
+    with closing(store._connect()) as connection:
+        asset_id = store._upsert_device(connection, asset.scope, enriched, observed_at)
+        for port, before, after in changed_services:
+            store._event(
+                connection,
+                asset_id=asset_id,
+                scope=asset.scope,
+                created_at=observed_at,
+                event_type="service_changed",
+                summary="Service fingerprint changed",
+                details=f"{port}/tcp {before} → {after}",
+                ip=asset.ip,
+            )
+        if changed_services:
+            connection.execute(
+                "UPDATE assets SET last_change = ? WHERE asset_id = ?",
+                (_iso(observed_at), asset_id),
+            )
+        connection.commit()
+
+    persisted = store.get_asset(asset_id)
+    if persisted is None:
+        raise RuntimeError("The fingerprint-enriched asset could not be reloaded.")
+    return persisted
