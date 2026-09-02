@@ -63,6 +63,15 @@ jobs:
           }
 
           if ($bootstrap) {
+            $project = Get-Content "pyproject.toml" -Raw
+            if ($project -notmatch '(?m)^version\s*=\s*"([^\"]+)"\s*$') {
+              throw "Could not resolve project.version from pyproject.toml before creating a release tag."
+            }
+            $expectedTag = "v$($Matches[1])"
+            if ($tag -ne $expectedTag) {
+              throw "Release bootstrap $tag does not match pyproject.toml version $expectedTag."
+            }
+
             $existingTagCommit = git rev-parse -q --verify "refs/tags/$tag^{commit}" 2>$null
             $tagExists = $LASTEXITCODE -eq 0
             if ($tagExists) {
