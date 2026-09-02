@@ -40,7 +40,9 @@ def test_fetch_script_requires_license_before_publishing_staged_engine():
     assert '$targetLicense = Join-Path $targetDir "LICENSE"' in script
     assert "does not contain a distributable LICENSE file" in script
     assert "Copy-Item -LiteralPath $licenseFile.FullName -Destination $targetLicense" in script
-    assert script.index("$null -eq $licenseFile") < script.index("Copy-Item -LiteralPath $engine.FullName")
+    assert script.index("$null -eq $licenseFile") < script.index(
+        "Copy-Item -LiteralPath $engine.FullName"
+    )
 
 
 def test_generated_nerva_runtime_directory_is_gitignored():
