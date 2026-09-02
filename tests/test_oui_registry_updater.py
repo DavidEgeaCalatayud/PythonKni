@@ -10,9 +10,7 @@ from scripts import update_oui_registry as updater
 
 def _source(*rows: str) -> bytes:
     return (
-        "Registry,Assignment,Organization Name,Organization Address\n"
-        + "\n".join(rows)
-        + "\n"
+        "Registry,Assignment,Organization Name,Organization Address\n" + "\n".join(rows) + "\n"
     ).encode("utf-8")
 
 
@@ -32,15 +30,11 @@ def test_ieee_parser_normalizes_and_sorts_assignments_and_vendors():
 
 
 def test_ieee_parser_accepts_utf8_bom_and_unicode_vendor_names():
-    source = b"\xef\xbb\xbf" + _source(
-        'MA-L,AABBCC,"Tecnología España S.A.",Madrid'
-    )
+    source = b"\xef\xbb\xbf" + _source('MA-L,AABBCC,"Tecnología España S.A.",Madrid')
 
     parsed = updater.parse_ieee_ma_l_csv(source)
 
-    assert parsed.entries == (
-        updater.RegistryEntry("AA-BB-CC", "Tecnología España S.A."),
-    )
+    assert parsed.entries == (updater.RegistryEntry("AA-BB-CC", "Tecnología España S.A."),)
 
 
 def test_vendor_normalization_removes_unicode_format_controls():
@@ -88,11 +82,11 @@ def test_ieee_parser_preserves_conflicting_duplicate_assignments_deterministical
         "ROYAL MELBOURNE INST OF TECH",
     )
     assert parsed.entries == (
-        updater.RegistryEntry("08-00-30", "CERN / NETWORK RESEARCH CORPORATION / ROYAL MELBOURNE INST OF TECH"),
+        updater.RegistryEntry(
+            "08-00-30", "CERN / NETWORK RESEARCH CORPORATION / ROYAL MELBOURNE INST OF TECH"
+        ),
     )
-    assert parsed.duplicate_assignments == (
-        updater.DuplicateAssignment("08-00-30", vendors),
-    )
+    assert parsed.duplicate_assignments == (updater.DuplicateAssignment("08-00-30", vendors),)
 
 
 def test_render_registry_is_deterministic_for_input_order():
@@ -211,30 +205,39 @@ def test_update_from_local_source_writes_valid_pair_and_is_idempotent(tmp_path):
     metadata = tmp_path / "network_oui_prefixes.meta.json"
     timestamp = datetime(2026, 9, 2, 8, 0, tzinfo=timezone.utc)
 
-    assert updater.update_registry(
-        registry_path=registry,
-        metadata_path=metadata,
-        source_file=source_path,
-        min_entries=2,
-        retrieved_at=timestamp,
-    ) is True
+    assert (
+        updater.update_registry(
+            registry_path=registry,
+            metadata_path=metadata,
+            source_file=source_path,
+            min_entries=2,
+            retrieved_at=timestamp,
+        )
+        is True
+    )
     before_registry = registry.read_bytes()
     before_metadata = metadata.read_bytes()
 
-    assert updater.update_registry(
-        registry_path=registry,
-        metadata_path=metadata,
-        source_file=source_path,
-        min_entries=2,
-        retrieved_at=datetime(2026, 9, 3, 8, 0, tzinfo=timezone.utc),
-    ) is False
+    assert (
+        updater.update_registry(
+            registry_path=registry,
+            metadata_path=metadata,
+            source_file=source_path,
+            min_entries=2,
+            retrieved_at=datetime(2026, 9, 3, 8, 0, tzinfo=timezone.utc),
+        )
+        is False
+    )
     assert registry.read_bytes() == before_registry
     assert metadata.read_bytes() == before_metadata
-    assert updater.validate_bundled_registry(
-        registry_path=registry,
-        metadata_path=metadata,
-        min_entries=2,
-    ) == 2
+    assert (
+        updater.validate_bundled_registry(
+            registry_path=registry,
+            metadata_path=metadata,
+            min_entries=2,
+        )
+        == 2
+    )
 
 
 def test_update_refreshes_metadata_when_raw_source_changes(tmp_path):
@@ -252,13 +255,16 @@ def test_update_refreshes_metadata_when_raw_source_changes(tmp_path):
     first = json.loads(metadata.read_text(encoding="utf-8"))
 
     source_path.write_bytes(_source("MA-L,001132,Synology,Changed address"))
-    assert updater.update_registry(
-        registry_path=registry,
-        metadata_path=metadata,
-        source_file=source_path,
-        min_entries=1,
-        retrieved_at=datetime(2026, 9, 3, tzinfo=timezone.utc),
-    ) is True
+    assert (
+        updater.update_registry(
+            registry_path=registry,
+            metadata_path=metadata,
+            source_file=source_path,
+            min_entries=1,
+            retrieved_at=datetime(2026, 9, 3, tzinfo=timezone.utc),
+        )
+        is True
+    )
     second = json.loads(metadata.read_text(encoding="utf-8"))
 
     assert first["registry_sha256"] == second["registry_sha256"]
@@ -421,32 +427,38 @@ def test_cli_update_and_validate_work_offline(tmp_path, capsys):
     registry = tmp_path / "registry.csv"
     metadata = tmp_path / "metadata.json"
 
-    assert updater.main(
-        [
-            "update",
-            "--source-file",
-            str(source),
-            "--registry",
-            str(registry),
-            "--metadata",
-            str(metadata),
-            "--min-entries",
-            "1",
-            "--retrieved-at",
-            "2026-09-02T08:00:00Z",
-        ]
-    ) == 0
+    assert (
+        updater.main(
+            [
+                "update",
+                "--source-file",
+                str(source),
+                "--registry",
+                str(registry),
+                "--metadata",
+                str(metadata),
+                "--min-entries",
+                "1",
+                "--retrieved-at",
+                "2026-09-02T08:00:00Z",
+            ]
+        )
+        == 0
+    )
     assert "1 IEEE MA-L assignments" in capsys.readouterr().out
 
-    assert updater.main(
-        [
-            "validate",
-            "--registry",
-            str(registry),
-            "--metadata",
-            str(metadata),
-            "--min-entries",
-            "1",
-        ]
-    ) == 0
+    assert (
+        updater.main(
+            [
+                "validate",
+                "--registry",
+                str(registry),
+                "--metadata",
+                str(metadata),
+                "--min-entries",
+                "1",
+            ]
+        )
+        == 0
+    )
     assert "OUI registry valid: 1" in capsys.readouterr().out
