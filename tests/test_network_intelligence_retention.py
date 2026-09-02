@@ -74,8 +74,8 @@ def test_retention_policy_round_trip_and_validation(tmp_path):
     save_retention_policy(path, policy)
 
     assert load_retention_policy(path) == policy
-    with pytest.raises(ValueError, match="between 1 and 1000"):
-        validate_retention_policy(RetentionPolicy(keep_per_scope=0))
+    with pytest.raises(ValueError, match="between 2 and 1000"):
+        validate_retention_policy(RetentionPolicy(keep_per_scope=1))
     with pytest.raises(ValueError, match="between 1 and 3650"):
         validate_retention_policy(RetentionPolicy(max_age_days=0))
     with pytest.raises(ValueError, match="integer"):
@@ -215,7 +215,7 @@ def test_filter_trend_and_previous_snapshot_are_scope_and_time_aware(tmp_path):
         filter_snapshot_entries(catalog.entries, since=NOW, until=NOW - timedelta(days=1))
 
 
-def test_retention_candidates_combine_count_and_age_but_preserve_latest(tmp_path):
+def test_retention_candidates_combine_count_and_age_but_preserve_latest_pair(tmp_path):
     times = [
         NOW - timedelta(days=10),
         NOW - timedelta(days=8),
@@ -231,12 +231,13 @@ def test_retention_candidates_combine_count_and_age_but_preserve_latest(tmp_path
 
     removable = retention_candidates(
         catalog.entries,
-        RetentionPolicy(keep_per_scope=3, max_age_days=5),
+        RetentionPolicy(keep_per_scope=3, max_age_days=1),
         now=NOW,
         scope=SCOPE,
     )
 
     assert [entry.path for entry in removable] == paths[:3]
+    assert paths[-2] not in {entry.path for entry in removable}
     assert paths[-1] not in {entry.path for entry in removable}
 
 
@@ -245,6 +246,11 @@ def test_apply_retention_only_deletes_valid_scheduler_owned_snapshots(tmp_path):
         tmp_path,
         "scheduled_192.168.1.0_24_old.json",
         NOW - timedelta(days=30),
+    )
+    previous = _write_snapshot(
+        tmp_path,
+        "scheduled_192.168.1.0_24_previous.json",
+        NOW - timedelta(days=1),
     )
     latest = _write_snapshot(tmp_path, "scheduled_192.168.1.0_24_latest.json", NOW)
     other_scope = _write_snapshot(
@@ -260,13 +266,14 @@ def test_apply_retention_only_deletes_valid_scheduler_owned_snapshots(tmp_path):
 
     cleanup = apply_retention_policy(
         tmp_path,
-        RetentionPolicy(keep_per_scope=1),
+        RetentionPolicy(keep_per_scope=2),
         now=NOW,
         scope=SCOPE,
     )
 
     assert cleanup.removed == (old,)
     assert cleanup.bytes_reclaimed > 0
+    assert previous.exists()
     assert latest.exists()
     assert other_scope.exists()
     assert invalid.exists()
@@ -288,8 +295,37 @@ def test_automatic_snapshot_uses_configurable_retention_policy(tmp_path):
             retention_policy=RetentionPolicy(keep_per_scope=2),
         )
 
-    assert len(list(tmp_path.glob("scheduled_*.json"))) == 2
+    snapshots = sorted(tmp_path.glob("scheduled_*.json"))
+    assert len(snapshots) == 2
     assert manual.exists()
+
+
+def test_automatic_snapshot_age_cleanup_preserves_previous_change_baseline(tmp_path):
+    for index in range(3):
+        create_automatic_snapshot(
+            tmp_path,
+            SCOPE,
+            [],
+            [],
+            [],
+            generated_at=NOW + timedelta(minutes=index),
+            retention_policy=RetentionPolicy(keep_per_scope=120, max_age_days=1),
+        )
+
+    result = create_automatic_snapshot(
+        tmp_path,
+        SCOPE,
+        [],
+        [],
+        [],
+        generated_at=NOW + timedelta(days=10),
+        retention_policy=RetentionPolicy(keep_per_scope=2, max_age_days=1),
+    )
+
+    snapshots = sorted(tmp_path.glob("scheduled_*.json"))
+    assert len(snapshots) == 2
+    assert result.path == snapshots[-1]
+    assert snapshots[-2].exists()
 
 
 def test_retention_failure_does_not_unpublish_successful_snapshot(tmp_path, monkeypatch):
