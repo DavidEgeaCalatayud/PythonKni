@@ -153,7 +153,7 @@ requirements.in      / requirements-dev.in   # direct dependency policy
 requirements.txt     / requirements-dev.txt  # exact transitive pins + SHA-256 hashes
 ```
 
-The committed locks are generated for the canonical Windows / **CPython 3.10.11** environment with `pip-tools --generate-hashes`. CI and release install them with:
+The committed locks are validated against the canonical Windows / **CPython 3.13.15** environment. Intentional dependency changes are regenerated with `pip-tools --generate-hashes` on that same runtime. CI and release install the locks with:
 
 ```powershell
 python -m pip install --require-hashes -r requirements.txt
@@ -176,9 +176,9 @@ These controls materially improve reproducibility and integrity, but do not prov
 - vulnerability databases only contain known/published advisories;
 - `pip-audit` cannot guarantee absence of undisclosed vulnerabilities;
 - Tesseract, Poppler, Windows utilities and other external executables are outside the Python lock and Python SBOM;
-- the canonical dependency/build contract is Windows + CPython 3.10.11; other environments are not currently claimed by CI.
+- the canonical dependency/build contract is Windows + CPython 3.13.15 using the normal GIL-enabled interpreter; Python 3.14+ and free-threaded builds are not currently claimed by CI.
 
-Dependency changes should modify `.in` policy first, regenerate locks with `pip-tools`, review the diff, pass both audits and pass the complete build/smoke pipeline before merge.
+Dependency changes should modify `.in` policy first, regenerate locks with `pip-tools` on Windows / CPython 3.13.15, review the diff, pass both audits and pass the complete build/smoke pipeline before merge. See [`python-runtime.md`](python-runtime.md) for the interpreter support contract.
 
 ---
 
