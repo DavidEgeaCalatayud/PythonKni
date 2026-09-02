@@ -4,7 +4,7 @@
 ![PyQt5](https://img.shields.io/badge/UI-PyQt5-41CD52)
 ![Platform](https://img.shields.io/badge/platform-Windows-blue)
 ![Build](https://img.shields.io/badge/build-PyInstaller-orange)
-![Tests](https://img.shields.io/badge/tests-1060%20pytest-green)
+![Tests](https://img.shields.io/badge/tests-1068%20pytest-green)
 ![Coverage](https://img.shields.io/badge/branch%20coverage-92.8%25-green)
 ![Services](https://img.shields.io/badge/service%20coverage-93.5%25-green)
 ![Dependencies](https://img.shields.io/badge/dependencies-SHA--256%20locked-blueviolet)
@@ -150,7 +150,7 @@ A source-test pass is not considered sufficient. CI builds the actual PyInstalle
 dist\PythonKni\PythonKni.exe --smoke-test
 ```
 
-before producing the validated ZIP/checksum artifact.
+The validated bundle is then packaged as ZIP/checksum, compiled into a per-user Inno Setup installer and exercised through a second real lifecycle smoke: silent install, execution of the **installed** EXE, silent uninstall and cleanup verification. See [`docs/windows-installer.md`](docs/windows-installer.md).
 
 ---
 
@@ -179,16 +179,21 @@ PythonKni/
 │  ├─ python-runtime.md
 │  ├─ release-readiness.md
 │  ├─ security.md
-│  └─ usage.md
+│  ├─ usage.md
+│  └─ windows-installer.md
+├─ installer/
+│  └─ PythonKni.iss
 ├─ pythonkni/
 │  ├─ core/
 │  ├─ infrastructure/
 │  └─ network_intelligence/
 ├─ scripts/
 │  ├─ benchmark_network_intelligence.py
+│  ├─ build_windows_installer.ps1
 │  ├─ check_dependency_locks.py
 │  ├─ check_network_intelligence_typing.py
 │  ├─ package_windows_bundle.ps1
+│  ├─ smoke_test_windows_installer.ps1
 │  └─ update_oui_registry.py
 ├─ tests/
 ├─ tools/                       # adapters + shared Qt/runtime helpers
@@ -250,7 +255,7 @@ Never commit or publicly share real API keys, WiFi credentials, private logs, sc
 
 ## Testing and quality gates
 
-The current behavior-driven suite contains **1,060 tests** on Windows / CPython 3.13.15.
+The current behavior-driven suite contains **1,068 tests** on Windows / CPython 3.13.15.
 
 ```text
 Repository-wide branch coverage                 92.8%
@@ -277,9 +282,12 @@ python -m ruff check .
 python -m ruff format --check .
 pyinstaller --noconfirm --clean PythonKni.spec
 dist\PythonKni\PythonKni.exe --smoke-test
+.\scripts\package_windows_bundle.ps1 -OutputPrefix "PythonKni-windows-x64"
+.\scripts\build_windows_installer.ps1 -OutputPrefix "PythonKni-windows-x64-setup"
+.\scripts\smoke_test_windows_installer.ps1 -InstallerPath ".\dist\PythonKni-windows-x64-setup.exe"
 ```
 
-The workflow also applies individual coverage ratchets and retains the Windows ZIP/checksum, `coverage.xml`, Network Intelligence benchmark JSON, CycloneDX SBOM, OUI provenance metadata and both dependency locks with the validated artifact.
+The workflow also applies individual coverage ratchets and retains the Windows ZIP/checksum, installer/checksum, `coverage.xml`, Network Intelligence benchmark JSON, CycloneDX SBOM, OUI provenance metadata and both dependency locks with the validated artifact.
 
 ---
 
@@ -290,13 +298,16 @@ Local Windows build:
 ```powershell
 pyinstaller --noconfirm --clean PythonKni.spec
 dist\PythonKni\PythonKni.exe --smoke-test
+.\scripts\package_windows_bundle.ps1 -OutputPrefix "PythonKni-windows-x64"
+.\scripts\build_windows_installer.ps1 -OutputPrefix "PythonKni-windows-x64-setup"
+.\scripts\smoke_test_windows_installer.ps1 -InstallerPath ".\dist\PythonKni-windows-x64-setup.exe"
 ```
 
-Tags matching exact `vX.Y.Z` trigger `.github/workflows/release.yml`. Release validation repeats dependency integrity/audit gates, OUI validation, tests, coverage and Network Intelligence typing ratchets, lint/format, PyInstaller build and frozen smoke testing before publishing the ZIP, checksum, SBOM, OUI metadata and dependency locks.
+Tags matching exact `vX.Y.Z` trigger `.github/workflows/release.yml`. Release validation repeats dependency integrity/audit gates, OUI validation, tests, coverage and Network Intelligence typing ratchets, lint/format, PyInstaller build and frozen smoke testing. Installer-enabled release source additionally builds and smoke-tests the version-bound Inno Setup installer before publication.
 
-The package metadata is currently **0.1.0**, so the first coherent release candidate tag is `v0.1.0`. A tag is not considered released until the tag-triggered workflow and published GitHub Release are verified. See [`docs/release-readiness.md`](docs/release-readiness.md).
+`v0.1.0` is the first published public release and intentionally retains its original immutable source and six validated assets. Installer generation was added afterward; future installer-enabled releases publish the versioned ZIP/checksum, setup EXE/checksum, SBOM, OUI metadata and dependency locks. Historical recovery never injects new installer code into old immutable tags. See [`docs/release-readiness.md`](docs/release-readiness.md) and [`docs/windows-installer.md`](docs/windows-installer.md).
 
-Windows executable signing and installer generation are not yet implemented.
+Windows Authenticode signing is not yet implemented and remains a separate release-engineering milestone.
 
 ---
 
@@ -332,7 +343,7 @@ For a conventional first-party domain, keep the adapter thin and put business/OS
 - DOCX -> PDF conversion is intentionally simplified and cannot reproduce every Microsoft Word layout feature.
 - Network/system capabilities depend on Windows permissions, topology, firewall policy and available OS utilities.
 - Localization infrastructure exists, but not every user-visible string is extracted/translated.
-- Windows code signing and installer generation remain release-engineering work.
+- Windows executable/installer Authenticode signing remains release-engineering work.
 
 ---
 
@@ -340,9 +351,10 @@ For a conventional first-party domain, keep the adapter thin and put business/OS
 
 ### Release engineering
 
-- [ ] Publish and verify the first tagged GitHub Release (`v0.1.0`) from a fully green `main` commit.
+- [x] Publish and verify the first tagged GitHub Release (`v0.1.0`) from a fully green `main` commit.
+- [x] Add per-user Windows installer generation and installed-app smoke validation.
 - [ ] Add screenshots/demo media for the main application and representative tools.
-- [ ] Add Windows executable signing and installer generation.
+- [ ] Add Windows Authenticode signing after certificate/identity and secret-handling policy is defined.
 
 ### Reliability and code quality
 
@@ -371,7 +383,8 @@ For a conventional first-party domain, keep the adapter thin and put business/OS
 - [`docs/network-oui-registry.md`](docs/network-oui-registry.md) — official IEEE MA-L snapshot maintenance and provenance
 - [`docs/network-intelligence-quality-gates.md`](docs/network-intelligence-quality-gates.md) — incremental structural typing ratchet
 - [`docs/python-runtime.md`](docs/python-runtime.md) — supported interpreter series and runtime validation contract
-- [`docs/release-readiness.md`](docs/release-readiness.md) — first-release checklist and remaining distribution limitations
+- [`docs/release-readiness.md`](docs/release-readiness.md) — release workflow, immutable recovery and distribution contract
+- [`docs/windows-installer.md`](docs/windows-installer.md) — installer, checksum, smoke and uninstall contract
 - [`docs/usage.md`](docs/usage.md) — operation, cancellation, permissions and troubleshooting
 - [`docs/security.md`](docs/security.md) — security controls, sensitive-data flows and supply-chain limits
 - [`CHANGELOG.md`](CHANGELOG.md) — development history
