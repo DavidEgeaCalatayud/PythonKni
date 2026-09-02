@@ -204,7 +204,9 @@ def test_port_scanner_fingerprint_error_uses_structured_feedback(qtbot, monkeypa
     qtbot.addWidget(history)
     qtbot.addWidget(scanner)
     captured = []
-    monkeypatch.setattr(network_window._base, "_show_exception", lambda *args: captured.append(args))
+    monkeypatch.setattr(
+        network_window._base, "_show_exception", lambda *args: captured.append(args)
+    )
     error = RuntimeError("boom")
 
     scanner._fingerprint_failed(error)
@@ -320,7 +322,9 @@ def test_port_scanner_export_no_results_or_cancelled_dialog_are_noops(qtbot, mon
     assert scanner.result_area.toPlainText() == ""
 
     scanner.fingerprints = (_fingerprint(),)
-    monkeypatch.setattr(network_window.QFileDialog, "getSaveFileName", lambda *_args, **_kwargs: ("", ""))
+    monkeypatch.setattr(
+        network_window.QFileDialog, "getSaveFileName", lambda *_args, **_kwargs: ("", "")
+    )
     scanner.export_fingerprints()
     assert scanner.result_area.toPlainText() == ""
 
@@ -368,7 +372,9 @@ def test_port_scanner_export_failure_uses_structured_feedback(qtbot, monkeypatch
         lambda *_args, **_kwargs: ("fingerprints.json", "JSON"),
     )
     captured = []
-    monkeypatch.setattr(network_window._base, "_show_exception", lambda *args: captured.append(args))
+    monkeypatch.setattr(
+        network_window._base, "_show_exception", lambda *args: captured.append(args)
+    )
 
     original_open = builtins.open
 
