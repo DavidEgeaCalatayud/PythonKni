@@ -4,7 +4,9 @@ import ipaddress
 import platform
 import re
 import subprocess
+from collections.abc import Callable
 from datetime import datetime, timezone
+from typing import Protocol
 
 from pythonkni.camera_auditor.service import parse_camera_scope
 
@@ -18,6 +20,15 @@ from .models import (
 INTERNET_NODE_ID = "synthetic:internet"
 LAN_NODE_PREFIX = "synthetic:lan:"
 _MAC_PATTERN = re.compile(r"^[0-9A-Fa-f]{2}(?::[0-9A-Fa-f]{2}){5}$")
+
+
+class _CommandResult(Protocol):
+    returncode: int
+    stdout: str
+
+
+_CommandRunner = Callable[..., _CommandResult]
+_GatewayDiscovery = Callable[[], str | None]
 
 
 def utc_now() -> datetime:
@@ -72,7 +83,11 @@ def parse_posix_default_gateway(output: str) -> str | None:
     return None
 
 
-def discover_default_gateway(*, command_runner=None, system_name: str | None = None) -> str | None:
+def discover_default_gateway(
+    *,
+    command_runner: _CommandRunner | None = None,
+    system_name: str | None = None,
+) -> str | None:
     command_runner = command_runner or subprocess.run
     system_name = system_name or platform.system()
     if system_name == "Windows":
@@ -223,7 +238,7 @@ def discover_relationships(
     scope: str,
     assets: list[AssetRecord],
     *,
-    gateway_discovery=discover_default_gateway,
+    gateway_discovery: _GatewayDiscovery = discover_default_gateway,
     observed_at: datetime | None = None,
 ) -> tuple[NetworkRelationship, ...]:
     return build_relationships(
