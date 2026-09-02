@@ -53,13 +53,9 @@ def test_build_nerva_command_rejects_invalid_limits():
     with pytest.raises(ValueError):
         fingerprinting.build_nerva_command("nerva.exe", "192.0.2.1", [80], workers=101)
     with pytest.raises(ValueError):
-        fingerprinting.build_nerva_command(
-            "nerva.exe", "192.0.2.1", [80], max_host_connections=0
-        )
+        fingerprinting.build_nerva_command("nerva.exe", "192.0.2.1", [80], max_host_connections=0)
     with pytest.raises(ValueError):
-        fingerprinting.build_nerva_command(
-            "nerva.exe", "192.0.2.1", [80], max_host_connections=21
-        )
+        fingerprinting.build_nerva_command("nerva.exe", "192.0.2.1", [80], max_host_connections=21)
 
 
 def test_parse_nerva_output_accepts_single_json_object_and_preserves_metadata():
@@ -144,10 +140,7 @@ def test_parse_nerva_output_rejects_malformed_or_incomplete_results():
 
 
 def test_parse_nerva_output_can_keep_complete_entries_from_cancelled_partial_stream():
-    output = (
-        '{"host":"x","ip":"192.0.2.2","port":22,"protocol":"ssh"}\n'
-        '{"host":"x","port":443'
-    )
+    output = '{"host":"x","ip":"192.0.2.2","port":22,"protocol":"ssh"}\n{"host":"x","port":443'
 
     results = fingerprinting.parse_nerva_output(output, allow_partial=True)
 
@@ -184,7 +177,9 @@ def test_resolve_nerva_executable_reports_missing_engine(monkeypatch, tmp_path):
     monkeypatch.setattr(fingerprinting, "PROJECT_ROOT", tmp_path)
     monkeypatch.setattr(fingerprinting.shutil, "which", lambda _name: None)
 
-    with pytest.raises(fingerprinting.FingerprintEngineUnavailable, match="Nerva no está disponible"):
+    with pytest.raises(
+        fingerprinting.FingerprintEngineUnavailable, match="Nerva no está disponible"
+    ):
         fingerprinting.resolve_nerva_executable()
 
 
@@ -212,9 +207,10 @@ def test_fingerprint_open_ports_pre_cancelled_or_empty_does_not_launch_process()
         )
         == []
     )
-    assert fingerprinting.fingerprint_open_ports(
-        "example.test", [], popen_factory=should_not_launch
-    ) == []
+    assert (
+        fingerprinting.fingerprint_open_ports("example.test", [], popen_factory=should_not_launch)
+        == []
+    )
 
 
 class _CompletedProcess:
@@ -312,8 +308,7 @@ def test_fingerprint_open_ports_cancellation_terminates_process_and_keeps_partia
     class CancellingProcess(_CompletedProcess):
         def __init__(self):
             super().__init__(
-                '{"host":"x","ip":"192.0.2.20","port":22,"protocol":"ssh"}\n'
-                '{"host":"x","port":443'
+                '{"host":"x","ip":"192.0.2.20","port":22,"protocol":"ssh"}\n{"host":"x","port":443'
             )
             self.calls = 0
 
