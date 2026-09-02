@@ -128,12 +128,19 @@ def persist_asset_fingerprints(
 ) -> AssetRecord:
     """Persist explicitly accepted service identities and track identity changes.
 
-    This path never creates a synthetic asset: callers must first resolve an existing
-    ``AssetRecord``. Risk and classification are preserved by the enrichment layer.
-    Existing-port product/version changes are recorded as ``service_changed`` timeline
-    events; newly observed ports continue to use the inventory's normal ``port_opened``
-    event path.
+    The caller must resolve an existing ``AssetRecord`` first. The record is reloaded
+    and revalidated immediately before mutation so this path cannot synthesize a new
+    inventory asset from Nerva output alone. Risk and classification remain unchanged.
+    Existing-port product/version changes become ``service_changed`` timeline events;
+    newly observed ports continue through the inventory's normal ``port_opened`` path.
     """
+
+    current = store.get_asset(asset.asset_id)
+    if current is None:
+        raise ValueError("The Network Intelligence asset no longer exists.")
+    if current.scope != asset.scope or current.ip != asset.ip:
+        raise ValueError("The Network Intelligence asset changed before fingerprints were applied.")
+    asset = current
 
     observed_at = observed_at or utc_now()
     enriched = enrich_asset_with_fingerprints(asset, fingerprints)
