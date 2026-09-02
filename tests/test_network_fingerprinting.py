@@ -137,7 +137,7 @@ def test_parse_nerva_output_rejects_malformed_or_incomplete_results():
         fingerprinting.parse_nerva_output('{"port":70000,"protocol":"ssh"}')
     with pytest.raises(ValueError, match="no es un objeto"):
         fingerprinting.parse_nerva_output('[{"port":22,"protocol":"ssh"}, 3]')
-    with pytest.raises(ValueError, match="no es un objeto"):
+    with pytest.raises(ValueError, match="estructura JSON no compatible"):
         fingerprinting.parse_nerva_output("1\n")
     with pytest.raises(ValueError, match="estructura JSON no compatible"):
         fingerprinting.parse_nerva_output("true")
