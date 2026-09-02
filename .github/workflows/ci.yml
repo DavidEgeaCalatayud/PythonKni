@@ -5,6 +5,7 @@ on:
     branches:
       - "**"
   pull_request:
+  workflow_dispatch:
 
 permissions:
   contents: read
@@ -47,6 +48,9 @@ jobs:
 
       - name: Compile Python files
         run: python -m compileall .
+
+      - name: Validate bundled IEEE OUI registry
+        run: python scripts/update_oui_registry.py validate
 
       - name: Run tests and collect branch coverage
         run: python -m pytest --cov=pythonkni --cov=tools --cov-branch --cov-report=term-missing --cov-report=xml
@@ -132,6 +136,7 @@ jobs:
             coverage.xml
             network-intelligence-benchmark.json
             dependency-sbom.cdx.json
+            assets/network_oui_prefixes.meta.json
             requirements.txt
             requirements-dev.txt
           if-no-files-found: error
