@@ -108,6 +108,9 @@ jobs:
       - name: Enforce refactored critical-code coverage
         run: python -m coverage report --include="pythonkni/process_manager/service.py,pythonkni/config/service.py,pythonkni/infrastructure/*.py" --fail-under=88.5
 
+      - name: Enforce Network Intelligence typing ratchet
+        run: python -m scripts.check_network_intelligence_typing
+
       - name: Ruff check
         run: python -m ruff check .
 
