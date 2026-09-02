@@ -164,7 +164,7 @@ requirements-dev.in  ──pip-tools──► requirements-dev.txt
        ranges                    exact versions + SHA-256 hashes
 ```
 
-The canonical environment is Windows / CPython 3.10.11.
+The canonical environment is Windows / **CPython 3.13.15** using the normal GIL-enabled interpreter. `pyproject.toml` supports the Python 3.13 series (`>=3.13,<3.14`) and Ruff targets `py313`. Python 3.14+ and free-threaded builds are not currently claimed.
 
 The lock contract requires:
 
@@ -174,7 +174,7 @@ The lock contract requires:
 - compatible identical pins where runtime/development graphs overlap;
 - CI/release installation through `pip --require-hashes`.
 
-`scripts/check_dependency_locks.py` and dedicated tests enforce this structure. CI additionally runs `pip check`, strict runtime/development `pip-audit` gates and a CycloneDX JSON SBOM generation step.
+`scripts/check_dependency_locks.py` and dedicated tests enforce this structure. CI additionally runs `pip check`, strict runtime/development `pip-audit` gates and a CycloneDX JSON SBOM generation step. `tests/test_python_runtime_contract.py` keeps the runtime pin, project metadata and Ruff target synchronized.
 
 GitHub Actions references are pinned to immutable commit SHAs. Dependabot proposes Python/Action updates weekly, but every resulting change must still pass the same lock, audit, test, build and smoke gates.
 
@@ -183,7 +183,7 @@ GitHub Actions references are pinned to immutable commit SHAs. Dependabot propos
 The canonical validation path is:
 
 ```text
-CPython 3.10.11 / Windows
+CPython 3.13.15 / Windows
           ↓
 hash-locked runtime + dev install
           ↓
@@ -193,7 +193,7 @@ runtime/dev pip-audit + CycloneDX SBOM
           ↓
 compileall
           ↓
-686 pytest tests + branch coverage
+1,052 pytest tests + branch coverage
           ↓
 repository/service/priority-window coverage ratchets
           ↓
@@ -206,7 +206,7 @@ frozen PythonKni.exe --smoke-test
 ZIP + SHA-256 + coverage.xml + SBOM + locks
 ```
 
-Release validation mirrors the same quality gates before publishing a tag-driven GitHub Release. CI and Release use the same coverage floors so distribution cannot bypass a regression rejected on normal pushes.
+Release validation mirrors the same quality gates before publishing a tag-driven GitHub Release. CI and Release use the same coverage floors so distribution cannot bypass a regression rejected on normal pushes. See [`python-runtime.md`](python-runtime.md) for the interpreter migration and support contract.
 
 ## Architecture enforcement
 
@@ -220,9 +220,10 @@ Architecture regressions verify, among other rules, that:
 - configuration persistence remains framework-independent;
 - Process Manager presentation does not import `psutil`;
 - loader-facing modules remain thin adapters;
-- every domain window still satisfies the `BaseTool` contract.
+- every domain window still satisfies the `BaseTool` contract;
+- CI, release, maintenance, project metadata and Ruff remain aligned on the supported Python 3.13 runtime.
 
-Other focused suites protect archive extraction safety, Temp Cleaner path identity, startup rollback, duplicate revalidation/manifests, process PID identity, CSV injection, worker lifecycle, dependency locks and structured feedback behavior.
+Other focused suites protect archive extraction safety, Temp Cleaner path identity, startup rollback, duplicate revalidation/manifests, process PID identity, CSV injection, worker lifecycle, dependency locks, runtime contract and structured feedback behavior.
 
 ## Coverage model
 
@@ -241,13 +242,18 @@ Service-hardening baseline
 86.4% repository branch coverage
 93.2% aggregated services
 
-Current presentation-hardened baseline
+Presentation-hardened baseline
 686 tests
 92.9% repository branch coverage
 93.2% aggregated services
+
+Current runtime-migration baseline
+1,052 tests
+92.8% repository branch coverage
+93.5% aggregated services
 ```
 
-Current service measurements:
+Current service measurements include the established non-regression floors below; additional Network Intelligence services are covered by the repository and domain-specific suites.
 
 ```text
 Archive service                 95.7%
@@ -283,7 +289,7 @@ Temp Cleaner window             94.2%
 WiFi window                     95.0%
 ```
 
-The latest presentation-hardening work added behavior/failure-path tests without changing production implementation: worker overlap and cancellation, stale/current results, deferred close behavior, conversion/dialog flows, Network history I/O, Process Manager/VirusTotal states, archive/duplicate operations, Disk Analyzer export paths, Temp Cleaner confirmation/error handling, Config load/save application, WiFi loading states and System Report generation/export orchestration.
+Coverage expansion remains behavior-driven: worker overlap and cancellation, stale/current results, deferred close behavior, conversion/dialog flows, Network history I/O, Process Manager/VirusTotal states, archive/duplicate operations, Disk Analyzer export paths, Temp Cleaner confirmation/error handling, Config load/save application, WiFi loading states, System Report generation/export orchestration and Network Intelligence persistence/history/notification contracts.
 
 ### Enforced ratchets
 
