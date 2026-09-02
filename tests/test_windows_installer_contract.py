@@ -24,10 +24,10 @@ def test_inno_setup_definition_is_per_user_and_creates_standard_shell_entries():
 def test_installer_build_is_version_bound_and_uses_preinstalled_inno_setup_only():
     content = BUILD_SCRIPT.read_text(encoding="utf-8")
 
-    assert 'Get-Content -LiteralPath $projectPath -Raw' in content
+    assert "Get-Content -LiteralPath $projectPath -Raw" in content
     assert 'if ($ExpectedTag -and $ExpectedTag -ne "v$version")' in content
     assert 'Get-Command "ISCC.exe"' in content
-    assert 'Inno Setup 6\\ISCC.exe' in content
+    assert "Inno Setup 6\\ISCC.exe" in content
     assert '"/DAppVersion=$version"' in content
     assert '"/DSourceDir=$bundleDir"' in content
     assert "Get-FileHash -LiteralPath $installer -Algorithm SHA256" in content
