@@ -97,9 +97,7 @@ def make_tool(qtbot, monkeypatch, tmp_path, *, policy: RetentionPolicy | None = 
 
 def test_history_center_tool_loads_policy_and_exposes_scheduler_hook(qtbot, monkeypatch, tmp_path):
     policy = RetentionPolicy(keep_per_scope=45, max_age_days=30)
-    tool, _automatic_dir, _retention_path = make_tool(
-        qtbot, monkeypatch, tmp_path, policy=policy
-    )
+    tool, _automatic_dir, _retention_path = make_tool(qtbot, monkeypatch, tmp_path, policy=policy)
 
     assert tool.retention_policy == policy
     assert tool._automatic_snapshot_retention_policy() == policy
@@ -132,7 +130,9 @@ def test_history_center_dialog_indexes_filters_and_navigates(qtbot, tmp_path):
     retention_path = tmp_path / "retention.json"
     now = datetime.now(timezone.utc)
     _write_snapshot(automatic_dir, "scheduled_192_a.json", now - timedelta(days=20), score=95)
-    second = _write_snapshot(automatic_dir, "scheduled_192_b.json", now - timedelta(days=2), score=88)
+    second = _write_snapshot(
+        automatic_dir, "scheduled_192_b.json", now - timedelta(days=2), score=88
+    )
     latest = _write_snapshot(automatic_dir, "scheduled_192_c.json", now, score=91, high=1)
     _write_snapshot(
         automatic_dir,
@@ -229,7 +229,9 @@ def test_history_center_compare_previous_uses_same_scope(qtbot, monkeypatch, tmp
     automatic_dir = tmp_path / "scheduled"
     now = datetime.now(timezone.utc)
     _write_snapshot(automatic_dir, "scheduled_192_a.json", now - timedelta(hours=2), score=95)
-    _write_snapshot(automatic_dir, "scheduled_10_a.json", now - timedelta(hours=1), scope=OTHER_SCOPE)
+    _write_snapshot(
+        automatic_dir, "scheduled_10_a.json", now - timedelta(hours=1), scope=OTHER_SCOPE
+    )
     _write_snapshot(automatic_dir, "scheduled_192_b.json", now, score=90)
 
     shown = []
