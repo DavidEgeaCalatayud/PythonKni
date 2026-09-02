@@ -3,6 +3,7 @@ from __future__ import annotations
 from pathlib import Path
 
 from scripts.check_network_intelligence_typing import (
+    NETWORK_INTELLIGENCE_DIR,
     ModuleMetrics,
     TypingPolicy,
     TypingReport,
@@ -98,6 +99,8 @@ def test_policy_reports_global_ratchet_regressions():
     )
     policy = TypingPolicy(
         minimum_annotation_coverage=80.0,
+        minimum_annotated_slots=16,
+        minimum_fully_annotated_callables=5,
         minimum_tracked_callables=10,
         maximum_explicit_any=1,
         strict_modules=frozenset(),
@@ -106,6 +109,8 @@ def test_policy_reports_global_ratchet_regressions():
     failures = evaluate_policy(report, policy)
 
     assert any("annotation coverage regressed" in failure for failure in failures)
+    assert any("annotated slot count regressed" in failure for failure in failures)
+    assert any("fully annotated callable count regressed" in failure for failure in failures)
     assert any("tracked callable count regressed" in failure for failure in failures)
     assert any("explicit Any count increased" in failure for failure in failures)
 
@@ -122,10 +127,24 @@ def test_policy_requires_strict_modules_to_exist_be_complete_and_avoid_any():
             )
         },
     )
-    policy = TypingPolicy(strict_modules=frozenset({"partial.py", "missing.py"}))
+    policy = TypingPolicy(
+        minimum_annotation_coverage=0.0,
+        minimum_annotated_slots=0,
+        minimum_fully_annotated_callables=0,
+        minimum_tracked_callables=0,
+        maximum_explicit_any=1_000_000,
+        strict_modules=frozenset({"partial.py", "missing.py"}),
+    )
 
     failures = evaluate_policy(report, policy)
 
     assert "strict module is missing: missing.py" in failures
     assert any("partial.py is not fully annotated" in failure for failure in failures)
     assert any("partial.py contains 1 explicit Any" in failure for failure in failures)
+
+
+def test_repository_network_intelligence_typing_policy_passes():
+    repo_root = Path(__file__).resolve().parents[1]
+    report = analyze_directory(repo_root / NETWORK_INTELLIGENCE_DIR)
+
+    assert evaluate_policy(report, TypingPolicy()) == []
