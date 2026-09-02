@@ -34,6 +34,15 @@ def test_fetch_script_verifies_hash_before_extracting_and_never_uses_latest():
     assert "/latest" not in script
 
 
+def test_fetch_script_requires_license_before_publishing_staged_engine():
+    script = (ROOT / "scripts" / "fetch_nerva.ps1").read_text(encoding="utf-8")
+
+    assert '$targetLicense = Join-Path $targetDir "LICENSE"' in script
+    assert "does not contain a distributable LICENSE file" in script
+    assert "Copy-Item -LiteralPath $licenseFile.FullName -Destination $targetLicense" in script
+    assert script.index("$null -eq $licenseFile") < script.index("Copy-Item -LiteralPath $engine.FullName")
+
+
 def test_generated_nerva_runtime_directory_is_gitignored():
     ignore = (ROOT / ".gitignore").read_text(encoding="utf-8")
     assert "third_party/nerva/" in ignore.splitlines()
