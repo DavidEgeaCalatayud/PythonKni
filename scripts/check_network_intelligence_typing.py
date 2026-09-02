@@ -7,12 +7,28 @@ from dataclasses import dataclass
 from pathlib import Path
 
 NETWORK_INTELLIGENCE_DIR = Path("pythonkni/network_intelligence")
+MINIMUM_ANNOTATION_COVERAGE = 92.64
+MINIMUM_ANNOTATED_SLOTS = 668
+MINIMUM_FULLY_ANNOTATED_CALLABLES = 263
+MINIMUM_TRACKED_CALLABLES = 303
+MAXIMUM_EXPLICIT_ANY = 39
 STRICT_MODULES = frozenset(
     {
+        "auditors.py",
         "automatic_snapshot.py",
         "classification.py",
+        "history.py",
+        "identity.py",
         "models.py",
+        "oui.py",
+        "physical_import.py",
+        "relationships.py",
+        "reporting_window.py",
+        "retention.py",
+        "risk_window.py",
+        "scheduler.py",
         "score.py",
+        "topology.py",
     }
 )
 
@@ -45,9 +61,11 @@ class ModuleMetrics:
 
 @dataclass(frozen=True, slots=True)
 class TypingPolicy:
-    minimum_annotation_coverage: float = 0.0
-    minimum_tracked_callables: int = 0
-    maximum_explicit_any: int = 1_000_000
+    minimum_annotation_coverage: float = MINIMUM_ANNOTATION_COVERAGE
+    minimum_annotated_slots: int = MINIMUM_ANNOTATED_SLOTS
+    minimum_fully_annotated_callables: int = MINIMUM_FULLY_ANNOTATED_CALLABLES
+    minimum_tracked_callables: int = MINIMUM_TRACKED_CALLABLES
+    maximum_explicit_any: int = MAXIMUM_EXPLICIT_ANY
     strict_modules: frozenset[str] = STRICT_MODULES
 
 
@@ -141,6 +159,16 @@ def evaluate_policy(report: TypingReport, policy: TypingPolicy) -> list[str]:
             "annotation coverage regressed: "
             f"{package.coverage_percent:.2f}% < {policy.minimum_annotation_coverage:.2f}%"
         )
+    if package.annotated_slots < policy.minimum_annotated_slots:
+        failures.append(
+            "annotated slot count regressed: "
+            f"{package.annotated_slots} < {policy.minimum_annotated_slots}"
+        )
+    if package.fully_annotated_callables < policy.minimum_fully_annotated_callables:
+        failures.append(
+            "fully annotated callable count regressed: "
+            f"{package.fully_annotated_callables} < {policy.minimum_fully_annotated_callables}"
+        )
     if package.tracked_callables < policy.minimum_tracked_callables:
         failures.append(
             "tracked callable count regressed: "
@@ -168,7 +196,7 @@ def evaluate_policy(report: TypingReport, policy: TypingPolicy) -> list[str]:
     return failures
 
 
-def report_payload(report: TypingReport) -> dict[str, object]:
+def report_payload(report: TypingReport, policy: TypingPolicy | None = None) -> dict[str, object]:
     def metrics_payload(metrics: ModuleMetrics) -> dict[str, int | float]:
         return {
             "tracked_callables": metrics.tracked_callables,
@@ -179,7 +207,7 @@ def report_payload(report: TypingReport) -> dict[str, object]:
             "explicit_any": metrics.explicit_any,
         }
 
-    return {
+    payload: dict[str, object] = {
         "package": metrics_payload(report.package),
         "strict_modules": sorted(STRICT_MODULES),
         "modules": {
@@ -187,6 +215,15 @@ def report_payload(report: TypingReport) -> dict[str, object]:
             for module_name, metrics in sorted(report.modules.items())
         },
     }
+    if policy is not None:
+        payload["policy"] = {
+            "minimum_annotation_coverage": policy.minimum_annotation_coverage,
+            "minimum_annotated_slots": policy.minimum_annotated_slots,
+            "minimum_fully_annotated_callables": policy.minimum_fully_annotated_callables,
+            "minimum_tracked_callables": policy.minimum_tracked_callables,
+            "maximum_explicit_any": policy.maximum_explicit_any,
+        }
+    return payload
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -202,12 +239,13 @@ def main(argv: list[str] | None = None) -> int:
 
     repo_root = Path(__file__).resolve().parents[1]
     report = analyze_directory(repo_root / NETWORK_INTELLIGENCE_DIR)
-    print("NI_TYPING_REPORT=" + json.dumps(report_payload(report), sort_keys=True))
+    policy = TypingPolicy()
+    print("NI_TYPING_REPORT=" + json.dumps(report_payload(report, policy), sort_keys=True))
 
     if args.report_only:
         return 0
 
-    failures = evaluate_policy(report, TypingPolicy())
+    failures = evaluate_policy(report, policy)
     if failures:
         for failure in failures:
             print(f"NI typing ratchet failed: {failure}")
