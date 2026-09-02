@@ -34,7 +34,6 @@ from .comparison import compare_network_reports, load_network_report
 from .comparison_window import SnapshotComparisonDialog
 from .notification_window import Tool as NotificationTool
 from .retention import (
-    DEFAULT_KEEP_PER_SCOPE,
     MAX_KEEP_PER_SCOPE,
     MAX_RETENTION_DAYS,
     MIN_KEEP_PER_SCOPE,
@@ -442,7 +441,8 @@ class HistoryCenterDialog(QDialog):
                 error=error,
             )
             return
-        SnapshotComparisonDialog(comparison, self).exec_()
+        dialog = SnapshotComparisonDialog(comparison, self)
+        dialog.exec_()
 
     def _candidate_policy(self) -> RetentionPolicy:
         age = self.age_spin.value()
