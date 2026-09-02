@@ -12,6 +12,7 @@ from .comparison import SnapshotReportError, load_network_report
 
 RETENTION_SCHEMA_VERSION = 1
 DEFAULT_KEEP_PER_SCOPE = 120
+MIN_KEEP_PER_SCOPE = 2
 MAX_KEEP_PER_SCOPE = 1000
 MAX_RETENTION_DAYS = 3650
 MAX_CATALOG_FILES = 2000
@@ -97,9 +98,10 @@ def validate_retention_policy(policy: RetentionPolicy) -> RetentionPolicy:
     keep = policy.keep_per_scope
     if isinstance(keep, bool) or not isinstance(keep, int):
         raise ValueError("Snapshot retention count must be an integer.")
-    if not 1 <= keep <= MAX_KEEP_PER_SCOPE:
+    if not MIN_KEEP_PER_SCOPE <= keep <= MAX_KEEP_PER_SCOPE:
         raise ValueError(
-            f"Snapshot retention count must be between 1 and {MAX_KEEP_PER_SCOPE}."
+            f"Snapshot retention count must be between {MIN_KEEP_PER_SCOPE} and "
+            f"{MAX_KEEP_PER_SCOPE}."
         )
 
     age = policy.max_age_days
@@ -299,17 +301,17 @@ def retention_candidates(
         scoped_entries.sort(key=lambda entry: (entry.generated_at, str(entry.path)))
         if not scoped_entries:
             continue
-        newest = scoped_entries[-1]
+        protected = {entry.path for entry in scoped_entries[-MIN_KEEP_PER_SCOPE:]}
 
         overflow = scoped_entries[:-validated.keep_per_scope]
         for entry in overflow:
-            if entry.path != newest.path:
+            if entry.path not in protected:
                 removable[entry.path] = entry
 
         if validated.max_age_days is not None:
             cutoff = now_utc - timedelta(days=validated.max_age_days)
             for entry in scoped_entries:
-                if entry.path != newest.path and entry.generated_at < cutoff:
+                if entry.path not in protected and entry.generated_at < cutoff:
                     removable[entry.path] = entry
 
     return tuple(
