@@ -4,7 +4,7 @@
 ![PyQt5](https://img.shields.io/badge/UI-PyQt5-41CD52)
 ![Platform](https://img.shields.io/badge/platform-Windows-blue)
 ![Build](https://img.shields.io/badge/build-PyInstaller-orange)
-![Tests](https://img.shields.io/badge/tests-1052%20pytest-green)
+![Tests](https://img.shields.io/badge/tests-1060%20pytest-green)
 ![Coverage](https://img.shields.io/badge/branch%20coverage-92.8%25-green)
 ![Services](https://img.shields.io/badge/service%20coverage-93.5%25-green)
 ![Dependencies](https://img.shields.io/badge/dependencies-SHA--256%20locked-blueviolet)
@@ -12,9 +12,9 @@
 ![Lint](https://img.shields.io/badge/lint-Ruff%20F%20%2B%20I-purple)
 ![License](https://img.shields.io/badge/license-MIT-lightgrey)
 
-PythonKni is a **local-first Windows desktop utility suite** built with Python and PyQt5. It combines file and PDF operations, archive handling, duplicate detection, network diagnostics, process inspection, startup management, Windows event analysis, system reporting, WiFi diagnostics and safe temporary-file cleanup in one application.
+PythonKni is a **local-first Windows desktop utility suite** built with Python and PyQt5. It combines file/PDF/archive operations, duplicate detection, network diagnostics and Network Intelligence, process inspection, startup management, Windows event analysis, system reporting, WiFi diagnostics and safe temporary-file cleanup in one application.
 
-The repository is maintained as an application rather than a collection of scripts. First-party domains follow an enforced layered architecture, long-running work is moved away from the GUI thread, destructive operations have explicit safeguards, dependencies are reproducibly locked and audited, and every push is validated through the real Windows packaging path.
+The repository is maintained as an application rather than a collection of scripts. First-party domains follow enforced dependency boundaries, long-running work is moved away from the GUI thread, destructive operations have explicit safeguards, dependencies are reproducibly locked and audited, and every push is validated through the real Windows packaging path.
 
 > Use system, network, process and WiFi capabilities only on systems and networks you own or are explicitly authorized to administer.
 
@@ -29,6 +29,8 @@ The repository is maintained as an application rather than a collection of scrip
 | **PDF Toolkit** | Merge, split, extract, reorder and read PDFs through `pypdf`; optional OCR for scanned documents |
 | **Duplicate Finder** | Detect duplicates through staged hashing plus byte verification and move copies with restoration manifests |
 | **Network Explorer** | Discover IPv4 interfaces/hosts, resolve names, inspect ARP data and scan bounded TCP port ranges |
+| **Camera Exposure Auditor** | Audit authorized local camera exposure through bounded ONVIF/HTTP(S)/RTSP evidence without credentials or media retrieval |
+| **Network Intelligence** | Persist local assets/relationships, score exposure, compare/history snapshots, schedule checks, detect meaningful changes and manage bounded retention |
 | **Process Manager** | Inspect processes, filter resource use, safely terminate selected processes and query optional VirusTotal reports |
 | **Temporary Cleaner** | Preview and clean explicitly authorized temporary/cache targets without following symlinks/reparse points |
 | **WiFi Profiles** | Read locally stored Windows WiFi profiles for authorized support/diagnostics |
@@ -42,7 +44,7 @@ The repository is maintained as an application rather than a collection of scrip
 
 ## Architecture
 
-The enforced dependency direction is:
+The enforced dependency direction for conventional first-party domains is:
 
 ```text
 pythonkni/core + pythonkni/infrastructure
@@ -79,17 +81,7 @@ services ─────► pythonkni/core + pythonkni/infrastructure
 
 `tests/test_architecture_boundaries.py` makes these rules executable. Models and infrastructure cannot depend on Qt/tool presentation code, services cannot import windows, and OS mutations remain in the owning service instead of leaking into widgets.
 
-Current layered domains:
-
-```text
-archive          config           converter
-disk_analyzer    duplicate        event_viewer
-network          pdf              process_manager
-startup          system_report    temp_cleaner
-wifi
-```
-
-Shared framework-independent infrastructure lives under `pythonkni/core` and `pythonkni/infrastructure`. Loader-facing modules under `tools/*_tool.py` remain thin compatibility adapters so the dynamic plugin contract can coexist with the layered codebase.
+Network Intelligence is a larger composed domain under `pythonkni/network_intelligence/`; its pure persistence/scoring/history/notification components remain separated from Qt composition and are covered by domain-specific regressions and an incremental structural typing ratchet.
 
 See [`docs/architecture.md`](docs/architecture.md) for the detailed dependency rules and quality gates.
 
@@ -113,9 +105,7 @@ window chooses actionable summary
 primary message + expandable diagnostics
 ```
 
-Raw exception text is kept out of normal user-facing copy while the original diagnostic remains available through **Show Details**. Loader/configuration failures and the Archive, Process Manager, Converter, PDF, Network, System Report, Disk Analyzer, Startup, Temp Cleaner, WiFi, Event Viewer and Duplicate Finder technical paths have been migrated.
-
-Input validation, destructive-operation confirmations and business/domain warnings intentionally remain explicit domain dialogs rather than being forced through a generic error abstraction.
+Raw exception text is kept out of normal user-facing copy while the original diagnostic remains available through **Show Details**. Input validation, destructive-operation confirmations and business/domain warnings intentionally remain explicit domain dialogs rather than being forced through a generic error abstraction.
 
 ### Safer destructive operations
 
@@ -140,16 +130,17 @@ requirements-dev.in  ──pip-tools──► requirements-dev.txt
        ranges                     exact pins + SHA-256 hashes
 ```
 
-The canonical resolver/build environment is Windows with **CPython 3.13.15** using the normal GIL-enabled interpreter. PythonKni supports the Python 3.13 series (`>=3.13,<3.14`). CI and release jobs:
+The canonical resolver/build environment is Windows with **CPython 3.13.15** using the normal GIL-enabled interpreter. PythonKni supports the Python 3.13 series (`>=3.13,<3.14`). CI and release jobs install both locks with `pip --require-hashes`, validate lock structure and installed consistency, run strict runtime/development `pip-audit`, and generate a CycloneDX JSON SBOM before application validation continues.
 
-1. install both locks with `pip --require-hashes`;
-2. validate lock structure;
-3. run `pip check`;
-4. audit runtime and development graphs with `pip-audit`;
-5. generate a CycloneDX JSON SBOM;
-6. continue only if the graph is valid and no known vulnerability is reported.
+GitHub Actions are pinned by immutable commit SHA and Dependabot checks Python dependencies and Actions weekly. See [`docs/python-runtime.md`](docs/python-runtime.md).
 
-GitHub Actions are pinned by immutable commit SHA and Dependabot checks Python dependencies and Actions weekly. See [`docs/python-runtime.md`](docs/python-runtime.md) for the interpreter support contract.
+### Network Intelligence quality controls
+
+Network Intelligence keeps normal runtime OUI lookup fully offline while a build/maintenance-time updater can regenerate the bundled registry from the official IEEE MA-L CSV. The checked-in snapshot currently contains **40,046 unique OUI-24 assignments** plus provenance/hash metadata; normal runtime operation performs no IEEE lookup.
+
+CI/release also enforce an incremental structural typing ratchet for `pythonkni/network_intelligence`. The current protected package baseline is **668/721 annotation slots (92.65%)**, **264 fully annotated / 303 tracked callables**, and at most **39 explicit `Any` annotations**. Fifteen strict modules must stay completely annotated with zero explicit `Any`. This is an AST annotation guardrail, not a substitute for semantic checking by `mypy`/`pyright`.
+
+See [`docs/network-intelligence-quality-gates.md`](docs/network-intelligence-quality-gates.md) and [`docs/network-oui-registry.md`](docs/network-oui-registry.md).
 
 ### Real distributable validation
 
@@ -173,21 +164,32 @@ PythonKni/
 │     ├─ ci.yml
 │     └─ release.yml
 ├─ assets/
+│  ├─ network_oui_prefixes.csv
+│  └─ network_oui_prefixes.meta.json
 ├─ docs/
 │  ├─ architecture.md
+│  ├─ network-intelligence.md
+│  ├─ network-scheduled-monitoring.md
+│  ├─ network-change-notifications.md
+│  ├─ network-history-center.md
+│  ├─ network-score-history.md
+│  ├─ network-snapshot-comparison.md
+│  ├─ network-oui-registry.md
+│  ├─ network-intelligence-quality-gates.md
 │  ├─ python-runtime.md
+│  ├─ release-readiness.md
 │  ├─ security.md
 │  └─ usage.md
 ├─ pythonkni/
 │  ├─ core/
 │  ├─ infrastructure/
-│  └─ <domain>/
-│     ├─ models.py
-│     ├─ service.py
-│     └─ window.py
+│  └─ network_intelligence/
 ├─ scripts/
+│  ├─ benchmark_network_intelligence.py
 │  ├─ check_dependency_locks.py
-│  └─ package_windows_bundle.ps1
+│  ├─ check_network_intelligence_typing.py
+│  ├─ package_windows_bundle.ps1
+│  └─ update_oui_registry.py
 ├─ tests/
 ├─ tools/                       # adapters + shared Qt/runtime helpers
 ├─ main.py
@@ -203,32 +205,15 @@ PythonKni/
 
 ---
 
-## Requirements
+## Requirements and installation
 
-### Python
+PythonKni supports:
 
 ```text
 Python >= 3.13, < 3.14
 ```
 
 The canonical Windows CI/release environment is **CPython 3.13.15** using the normal GIL-enabled build. Python 3.14+ and free-threaded CPython builds are not currently claimed as supported.
-
-### Python dependencies
-
-Runtime dependencies include PyQt5, `pypdf`, PyMuPDF, ReportLab, Pillow, python-docx, psutil, requests, py7zr, pytesseract and pdf2image. Direct policy ranges live in `requirements.in`/`pyproject.toml`; exact transitive distributions and SHA-256 hashes live in `requirements.txt`.
-
-### Optional external dependencies
-
-OCR/document workflows can additionally require:
-
-- Tesseract OCR;
-- Poppler.
-
-These executables are outside the Python dependency lock and Python SBOM.
-
----
-
-## Installation
 
 ```powershell
 git clone https://github.com/DavidEgeaCalatayud/PythonKni.git
@@ -245,130 +230,34 @@ For development/CI tooling:
 python -m pip install --require-hashes -r requirements-dev.txt
 ```
 
-### Updating dependencies
-
-Do not hand-edit generated transitive pins or hashes. Change the relevant `.in` policy and regenerate the lock from the canonical Windows / CPython 3.13.15 environment:
-
-```powershell
-python -m piptools compile requirements.in --generate-hashes --allow-unsafe --strip-extras --no-header --output-file requirements.txt
-python -m piptools compile requirements-dev.in --generate-hashes --allow-unsafe --strip-extras --no-header --output-file requirements-dev.txt
-python scripts/check_dependency_locks.py
-python -m pip check
-python -m pip_audit -r requirements.txt --no-deps --strict --progress-spinner=off
-python -m pip_audit -r requirements-dev.txt --no-deps --strict --progress-spinner=off
-```
+Optional OCR/document workflows can additionally require Tesseract OCR and Poppler. These executables are outside the Python dependency lock and Python SBOM.
 
 ---
 
 ## Configuration and privacy
 
-Runtime data is stored outside the source tree under the user profile:
+Runtime data is stored outside the source tree under:
 
 ```text
 %LOCALAPPDATA%\PythonKni\
 ```
 
-PythonKni does not require an application account or backend service.
+PythonKni does not require an application account or backend service. Optional VirusTotal process analysis reads `VIRUSTOTAL_API_KEY`, hashes the selected executable locally and queries by SHA-256; it does not upload the executable itself, although the hash is disclosed to the provider.
 
-Optional VirusTotal integration reads its key from:
-
-```powershell
-$env:VIRUSTOTAL_API_KEY="your_api_key_here"
-```
-
-The current integration hashes the selected executable locally and queries VirusTotal by SHA-256; it does not upload the executable itself. The hash is still disclosed to the external provider.
-
-Never commit or publicly share real API keys, WiFi credentials, private logs, scan histories or diagnostic reports.
-
-See [`docs/security.md`](docs/security.md).
+Never commit or publicly share real API keys, WiFi credentials, private logs, scan histories or diagnostic reports. See [`docs/security.md`](docs/security.md).
 
 ---
 
-## Testing and coverage
+## Testing and quality gates
 
-The current behavior-driven suite contains **1,052 tests**.
-
-Measured branch coverage on the canonical Windows / CPython 3.13.15 CI environment:
+The current behavior-driven suite contains **1,060 tests** on Windows / CPython 3.13.15.
 
 ```text
-Repository-wide                 92.8%
-All service.py modules          93.5%
+Repository-wide branch coverage                 92.8%
+All pythonkni/*/service.py coverage              93.5%
 ```
 
-Key service coverage:
-
-```text
-Archive service                 95.7%
-Config service                  96.2%
-Converter service               94.5%
-Disk Analyzer service           95.0%
-Duplicate service               90.5%
-Event Viewer service            95.4%
-Network service                 96.7%
-PDF service                     95.3%
-Process Manager service         99.3%
-Startup service                 87.7%
-System Report service           97.2%
-Temp Cleaner service            86.4%
-WiFi service                    96.0%
-```
-
-Presentation coverage now has dedicated behavioral regression suites around worker lifecycle, stale/current callbacks, cancellation, dialog flows, imports/exports, confirmation paths and technical-error rendering:
-
-```text
-Archive window                  97.2%
-Config window                   90.7%
-Converter window                86.9%
-Disk Analyzer window            96.9%
-Duplicate Finder window         97.4%
-Event Viewer window             98.9%
-Network window                  91.5%
-PDF window                      93.1%
-Process Manager window          98.0%
-Startup window                  95.3%
-System Report window            94.7%
-Temp Cleaner window             94.2%
-WiFi window                     95.0%
-```
-
-The presentation-hardening pass deliberately targets real orchestration contracts rather than changing production behavior just to increase coverage. Converter and Network include worker overlap/cancellation and I/O flows; Process Manager covers termination/VirusTotal orchestration; Archive, Duplicate, Disk Analyzer, Temp Cleaner, Config, WiFi and System Report cover their corresponding state, dialog and error paths.
-
-### Coverage ratchets
-
-CI and release protect the achieved baseline rather than lowering thresholds when a regression appears:
-
-```text
-repository-wide branch coverage                   >= 92.5%
-all pythonkni/*/service.py coverage                >= 93.0%
-Archive service coverage                           >= 95.0%
-Converter service coverage                         >= 94.0%
-Disk Analyzer service coverage                     >= 94.5%
-Duplicate service coverage                         >= 90.0%
-Network service coverage                           >= 96.0%
-PDF service coverage                               >= 95.0%
-Process Manager service coverage                   >= 99.0%
-Startup service coverage                           >= 87.5%
-Event Viewer service coverage                      >= 95.0%
-System Report service coverage                     >= 97.0%
-Temp Cleaner service coverage                      >= 86.0%
-WiFi service coverage                              >= 95.5%
-Archive window coverage                            >= 96.5%
-Config window coverage                             >= 90.0%
-Converter window coverage                          >= 86.0%
-Disk Analyzer window coverage                      >= 96.0%
-Duplicate Finder window coverage                   >= 97.0%
-Event Viewer window coverage                       >= 98.0%
-Network window coverage                            >= 91.0%
-PDF window coverage                                >= 93.0%
-Process Manager window coverage                    >= 97.5%
-Startup window coverage                            >= 95.0%
-System Report window coverage                      >= 94.0%
-Temp Cleaner window coverage                       >= 93.5%
-WiFi window coverage                               >= 94.5%
-process/config/infrastructure aggregate             >= 88.5%
-```
-
-Coverage work remains behavior-driven. A test is useful when it protects a contract, failure mode, safety property or orchestration path—not simply because it turns a line green.
+Coverage ratchets remain at **>=92.5% repository-wide** and **>=93.0% across services**, with stronger per-service/per-window floors for already-hardened areas. Network Intelligence additionally has its own structural typing ratchet described above.
 
 ### CI-equivalent validation
 
@@ -378,16 +267,19 @@ python -m pip check
 python -m pip_audit -r requirements.txt --no-deps --strict --progress-spinner=off
 python -m pip_audit -r requirements-dev.txt --no-deps --strict --progress-spinner=off
 python -m compileall .
+python scripts/update_oui_registry.py validate
 python -m pytest --cov=pythonkni --cov=tools --cov-branch --cov-report=term-missing --cov-report=xml
 python -m coverage report --fail-under=92.5
 python -m coverage report --include="pythonkni/*/service.py" --fail-under=93.0
+python -m scripts.benchmark_network_intelligence
+python -m scripts.check_network_intelligence_typing
 python -m ruff check .
 python -m ruff format --check .
 pyinstaller --noconfirm --clean PythonKni.spec
 dist\PythonKni\PythonKni.exe --smoke-test
 ```
 
-The workflow also applies the individual ratchets listed above and retains `coverage.xml`, the CycloneDX SBOM and dependency locks with the validated artifact.
+The workflow also applies individual coverage ratchets and retains the Windows ZIP/checksum, `coverage.xml`, Network Intelligence benchmark JSON, CycloneDX SBOM, OUI provenance metadata and both dependency locks with the validated artifact.
 
 ---
 
@@ -400,7 +292,9 @@ pyinstaller --noconfirm --clean PythonKni.spec
 dist\PythonKni\PythonKni.exe --smoke-test
 ```
 
-Tags matching exact `vX.Y.Z` format trigger `.github/workflows/release.yml`. Release validation repeats dependency integrity/audit gates, tests, coverage ratchets, lint/format, PyInstaller build and frozen smoke testing before publishing the ZIP, checksum, SBOM and dependency locks.
+Tags matching exact `vX.Y.Z` trigger `.github/workflows/release.yml`. Release validation repeats dependency integrity/audit gates, OUI validation, tests, coverage and Network Intelligence typing ratchets, lint/format, PyInstaller build and frozen smoke testing before publishing the ZIP, checksum, SBOM, OUI metadata and dependency locks.
+
+The package metadata is currently **0.1.0**, so the first coherent release candidate tag is `v0.1.0`. A tag is not considered released until the tag-triggered workflow and published GitHub Release are verified. See [`docs/release-readiness.md`](docs/release-readiness.md).
 
 Windows executable signing and installer generation are not yet implemented.
 
@@ -408,13 +302,7 @@ Windows executable signing and installer generation are not yet implemented.
 
 ## Adding a first-party tool
 
-A loader-compatible module under `tools/` must:
-
-1. end in `_tool.py`;
-2. expose `Tool`;
-3. inherit `tools.base_tool.BaseTool`;
-4. override `setup_ui()`;
-5. define non-empty `name`, `description` and `category` metadata.
+A loader-compatible module under `tools/` must end in `_tool.py`, expose `Tool`, inherit `tools.base_tool.BaseTool`, override `setup_ui()`, and define non-empty `name`, `description` and `category` metadata.
 
 Minimal loader-facing contract:
 
@@ -432,27 +320,17 @@ class Tool(BaseTool):
         pass
 ```
 
-For a real first-party domain, keep that adapter thin and put the implementation in:
-
-```text
-pythonkni/<domain>/models.py
-pythonkni/<domain>/service.py
-pythonkni/<domain>/window.py
-tools/<domain>_tool.py
-```
-
-Business/OS logic belongs in `service.py`; Qt orchestration belongs in `window.py`. The loader/plugin contract itself is regression-tested by `tests/test_tool_contract.py`.
+For a conventional first-party domain, keep the adapter thin and put business/OS behavior in `service.py` and Qt orchestration in `window.py`. The loader/plugin contract is regression-tested by `tests/test_tool_contract.py`.
 
 ---
 
 ## Current limitations
 
 - Windows is the only platform currently packaged and enforced by CI.
-- The canonical reproducible environment is Windows / CPython 3.13.15; compatibility is currently claimed only for the Python 3.13 series and the normal GIL-enabled interpreter, not Python 3.14+, free-threaded builds or a broader platform matrix.
+- Compatibility is currently claimed only for the Python 3.13 series and the normal GIL-enabled interpreter, not Python 3.14+, free-threaded builds or a broader platform matrix.
 - OCR depends on local Tesseract/Poppler installation and document quality.
-- DOCX → PDF conversion is intentionally simplified and cannot reproduce every Microsoft Word layout feature.
+- DOCX -> PDF conversion is intentionally simplified and cannot reproduce every Microsoft Word layout feature.
 - Network/system capabilities depend on Windows permissions, topology, firewall policy and available OS utilities.
-- Presentation coverage is materially stronger and now protected per window, but Converter remains the lowest measured first-party window at 86.9%; further tests should continue to protect meaningful orchestration/failure contracts rather than chase uniform percentages.
 - Localization infrastructure exists, but not every user-visible string is extracted/translated.
 - Windows code signing and installer generation remain release-engineering work.
 
@@ -460,35 +338,42 @@ Business/OS logic belongs in `service.py`; Qt orchestration belongs in `window.p
 
 ## Roadmap
 
+### Release engineering
+
+- [ ] Publish and verify the first tagged GitHub Release (`v0.1.0`) from a fully green `main` commit.
+- [ ] Add screenshots/demo media for the main application and representative tools.
+- [ ] Add Windows executable signing and installer generation.
+
 ### Reliability and code quality
 
 - [ ] Continue behavior-driven coverage where uncovered branches represent real failure, cancellation or OS-integration contracts; avoid percentage-only tests.
+- [ ] Expand the Network Intelligence structural typing ratchet by removing legacy explicit `Any` and promoting additional modules to the strict set; evaluate a semantic `mypy`/`pyright` gate as a separate migration.
 - [ ] Audit remaining long-running operations for consistent progress/cancellation semantics.
 - [ ] Migrate deprecated PyMuPDF `fitz` imports to the current `pymupdf` API where applicable and review avoidable PyInstaller collection warnings.
-- [ ] Expand static analysis beyond the current Ruff `F + I` baseline when the repository is ready for a stricter rule set/type-checking gate.
 
 ### Product evolution
 
 - [ ] Build a **PC Health / System Intelligence dashboard** that composes existing services instead of duplicating their domain logic.
 - [ ] Add a unified operation/history and recovery center for reversible maintenance actions.
-- [ ] Evolve Network Explorer toward an authorized local-device inventory with persisted snapshots.
-- [ ] Improve DOCX → PDF formatting fidelity.
+- [ ] Add further defensive device-role context only when backed by explicit persisted evidence.
+- [ ] Improve DOCX -> PDF formatting fidelity.
 - [ ] Complete localization of user-visible strings.
-
-### Distribution and documentation
-
-- [ ] Add screenshots/demo media for the main application and representative tools.
-- [ ] Add Windows executable signing and installer generation.
-- [ ] Define the versioning milestone for moving beyond the current pre-1.0 package version.
 
 ---
 
 ## Documentation
 
-- [`docs/architecture.md`](docs/architecture.md) — dependency boundaries, infrastructure and coverage ratchets
-- [`docs/python-runtime.md`](docs/python-runtime.md) — supported interpreter series, canonical runtime and migration validation contract
-- [`docs/usage.md`](docs/usage.md) — per-tool operation, cancellation, permissions and troubleshooting
-- [`docs/security.md`](docs/security.md) — security controls, sensitive-data flows, destructive operations and supply-chain limits
+- [`docs/architecture.md`](docs/architecture.md) — dependency boundaries, quality and packaging gates
+- [`docs/network-intelligence.md`](docs/network-intelligence.md) — Network Intelligence architecture, features and safety boundaries
+- [`docs/network-scheduled-monitoring.md`](docs/network-scheduled-monitoring.md) — in-app scheduling and automatic snapshot semantics
+- [`docs/network-change-notifications.md`](docs/network-change-notifications.md) — meaningful-change notification engine
+- [`docs/network-history-center.md`](docs/network-history-center.md) — automatic history catalog, trends and retention
+- [`docs/network-oui-registry.md`](docs/network-oui-registry.md) — official IEEE MA-L snapshot maintenance and provenance
+- [`docs/network-intelligence-quality-gates.md`](docs/network-intelligence-quality-gates.md) — incremental structural typing ratchet
+- [`docs/python-runtime.md`](docs/python-runtime.md) — supported interpreter series and runtime validation contract
+- [`docs/release-readiness.md`](docs/release-readiness.md) — first-release checklist and remaining distribution limitations
+- [`docs/usage.md`](docs/usage.md) — operation, cancellation, permissions and troubleshooting
+- [`docs/security.md`](docs/security.md) — security controls, sensitive-data flows and supply-chain limits
 - [`CHANGELOG.md`](CHANGELOG.md) — development history
 
 ---

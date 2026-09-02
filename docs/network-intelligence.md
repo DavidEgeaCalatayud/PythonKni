@@ -1,68 +1,33 @@
 # Network Intelligence
 
-`Network Intelligence` is PythonKni's persistent local asset, exposure, relationship and change-intelligence layer. It sits above Network Explorer and the specialized device auditors.
+`Network Intelligence` is PythonKni's persistent local asset, exposure, relationship, history and change-intelligence layer. It sits above Network Explorer and the specialized device auditors.
 
-Its purpose is no longer only to answer _what is on the network right now?_ It also answers:
-
-- what devices have been seen before;
-- how each device was classified and how strong that classification is;
-- which weighted signals explain the classification;
-- which services were observed;
-- which vendor can be inferred from passive/local evidence;
-- when the device first and last appeared;
-- what changed between completed scans;
-- how assets are related and what evidence supports those relationships;
-- what the current network exposure score is, including bounded topology/role context;
-- which specialized auditor should inspect an asset next;
-- how to export a reproducible snapshot for later review;
-- what changed between two previously exported snapshots without rescanning the network.
+It answers both current-state and historical questions: what devices exist, how they were classified, what evidence supports that classification, how they are related, how exposure is scored, what changed between observations/snapshots, how those changes trend over time, and which changes deserve a local notification.
 
 ## Platform flow
 
 ```text
 Authorized local CIDR
-        |
-        v
-Network host discovery
-        |
-        v
-Bounded intelligence probes + ONVIF
-        |
-        +-- Offline MAC OUI enrichment
-        |
-        v
-Device classification
-        |
-        +-- PC
-        +-- Router
-        +-- Printer
-        +-- NAS
-        +-- Camera
-        +-- Unknown
-        |
-        +-- Classification confidence (0..100)
-        +-- Weighted explainability signals
-        |
-        v
+        ↓
+Bounded host discovery + intelligence probes + ONVIF
+        ↓
+Offline MAC OUI enrichment
+        ↓
+Device classification + confidence/explainability
+        ↓
 Persistent Asset Inventory (SQLite)
-        |
-        +-- Stable identity reconciliation
-        +-- Device Profile
-        +-- Context-aware Network Security Score
-        +-- Network Timeline / Change Detection
-        +-- Relationship Evidence
-        +-- Network Topology
-        +-- Snapshot Reporting
-        +-- Offline Snapshot Comparison
-        |
-        v
-Device-specific auditor
-        |
-        +-- Camera -> Camera Exposure Auditor (/32)
-        +-- Router -> Router Security Auditor
-        +-- NAS -> NAS Exposure Auditor
-        +-- Printer -> Printer Security Auditor
-        +-- PC -> PC Security Auditor
+        ├─ stable identity reconciliation
+        ├─ relationship evidence / topology
+        ├─ contextual Network Security Score
+        ├─ timeline / device auditors
+        └─ deterministic snapshot reporting
+                       ↓
+             automatic/saved snapshots
+                ├─ offline comparison
+                ├─ Security Score History
+                ├─ History Center + trends
+                ├─ retention policy
+                └─ meaningful-change notifications
 ```
 
 ## Architecture
@@ -84,216 +49,137 @@ pythonkni/network_intelligence/
 ├── physical_import.py
 ├── reporting.py
 ├── reporting_window.py
-├── confidence_window.py
 ├── comparison.py
 ├── comparison_window.py
+├── history.py
+├── history_window.py
+├── history_center_window.py
+├── automatic_snapshot.py
+├── retention.py
+├── scheduler.py
+├── scheduler_window.py
+├── notifications.py
+├── notification_window.py
+├── confidence_window.py
 ├── risk_window.py
 ├── auditors.py
 ├── audit_window.py
 └── window.py
-
-assets/
-└── network_oui_prefixes.csv
 ```
 
 The domain reuses `pythonkni/network/service.py` for host discovery and `pythonkni/camera_auditor/service.py` for ONVIF/HTTP(S)/RTSP camera evidence.
 
 ## Offline MAC OUI / Vendor Intelligence
 
-Vendor enrichment is performed locally from the MAC address already discovered on the authorized LAN. PythonKni never sends a MAC address to an external lookup service.
+Vendor enrichment is performed locally from the MAC address already discovered on the authorized LAN. PythonKni never sends a MAC address to an external lookup service during normal runtime operation.
 
-The bundled `assets/network_oui_prefixes.csv` snapshot contains curated MA-L/OUI prefixes for high-value Network Intelligence manufacturers such as camera, NAS, networking and common endpoint vendors. It is intentionally a focused snapshot rather than a claim of complete IEEE registry coverage.
+The bundled `assets/network_oui_prefixes.csv` is generated from the official IEEE Registration Authority **MA-L** public CSV by the explicit build/maintenance tool `scripts/update_oui_registry.py`. The current checked-in registry contains **40,046 unique OUI-24 assignments**. `assets/network_oui_prefixes.meta.json` records source/provenance and SHA-256 integrity metadata; CI and Release validate both files offline.
 
-Resolution rules are deliberately conservative:
+The updater normalizes input deterministically, detects malformed/truncated data and records conflicting duplicate upstream assignments instead of silently choosing one. Monthly/manual maintenance can propose a PR, but the application runtime itself remains offline.
 
-1. an explicit vendor learned from the Camera Auditor/ONVIF has precedence;
-2. otherwise a globally administered unicast MAC may be resolved through the offline OUI snapshot;
-3. hostname hints remain the final fallback;
-4. multicast, broadcast, invalid and locally administered/randomized MAC addresses are never attributed to an OUI vendor.
+Resolution remains conservative: explicit Camera Auditor/ONVIF vendor evidence has precedence; otherwise a globally administered unicast MAC may resolve against the bundled snapshot; hostname hints remain a fallback; multicast/broadcast/invalid/locally administered MACs are never attributed to an OUI vendor. Vendor evidence strengthens device classification only where the signal is appropriately narrow; a manufacturer name is not treated as proof of an exact device role.
 
-OUI evidence can strengthen classification only for narrowly scoped manufacturers where the signal is useful, currently camera manufacturers (`Hikvision`, `Dahua`, `Reolink`, `Axis`) and NAS manufacturers (`Synology`, `QNAP`). Multi-purpose manufacturers such as `Ubiquiti`, `TP-Link`, `Apple` and `Raspberry Pi` enrich the profile but do not force a device type on their own.
-
-This keeps vendor intelligence useful without pretending that an interface manufacturer always identifies the device's exact product or role.
+See [`network-oui-registry.md`](network-oui-registry.md).
 
 ## Classification confidence and explainability
 
-The selected device type and its confidence are deliberately separate concepts. The existing conservative classification precedence still decides whether an asset is a Camera, Printer, NAS, Router, PC or Unknown. A second pure scoring layer then explains how strongly the available evidence supports that selected type.
+The selected device type and its confidence are separate concepts. Conservative classification precedence decides Camera/Printer/NAS/Router/PC/Unknown; a deterministic `0..100` confidence heuristic then records weighted matched/unmatched signals explaining how strongly evidence supports that selection.
 
-Classification confidence is a deterministic `0..100` heuristic with three presentation bands:
+Confidence bands are LOW `0..39`, MEDIUM `40..69` and HIGH `70..100`. This score is not a statistical probability or industry standard. It is independent from exposure risk: a device can be classified confidently while having low current exposure, or vice versa.
 
-- `LOW`: 0..39;
-- `MEDIUM`: 40..69;
-- `HIGH`: 70..100.
+## Asset Inventory and identity reconciliation
 
-The score is **not** a statistical probability and is not an industry-standard metric. It is a project-defined explainability score whose weights are explicit and regression-tested.
+Inventory uses standard-library SQLite under PythonKni's runtime data directory. Assets persist stable identifier, IP/MAC/hostname/vendor, type/confidence/signals, services/ports, exposure risk/evidence, lifecycle timestamps and online/offline state.
 
-Examples of weighted signals include:
-
-- Camera: ONVIF evidence, RTSP `:554`, camera-specific OUI/vendor and hostname hints;
-- Printer: JetDirect `:9100`, IPP `:631`, LPD `:515` and printer hostname hints;
-- NAS: NFS `:2049`, common NAS management ports, NAS-specific OUI/vendor and hostname hints;
-- Router: gateway-style DNS + web signature and router/gateway hostname hints;
-- PC: RDP `:3389`, SSH `:22` and SMB `:445` when stronger NAS evidence is absent.
-
-Every signal is persisted with its key, label, configured weight, matched state and human-readable evidence. The UI displays both matched and unmatched signals so the score can be inspected rather than treated as an opaque number.
-
-Classification confidence is also explicitly independent from security risk. For example, an ONVIF camera can be classified with `HIGH` confidence while still having `LOW` exposure risk if only protected services are observed. Conversely, a device may have lower classification confidence while exposing a medium-risk clear-text service.
-
-Existing SQLite inventories are migrated in place. Legacy assets receive neutral `0` confidence and an empty signal set until they are observed by a new Network Intelligence run; no existing asset or timeline data is discarded.
-
-## Asset Inventory
-
-The inventory uses the standard-library `sqlite3` module and stores its database under PythonKni's runtime data directory. No project or installation directory is used for mutable state.
-
-An asset contains:
-
-- stable asset identifier;
-- current IP;
-- MAC;
-- hostname;
-- inferred vendor when evidence exists;
-- device type;
-- classification confidence (`0..100`);
-- structured weighted classification signals;
-- normalized observed services and ports;
-- exposure risk;
-- classification evidence;
-- first-seen timestamp;
-- last-seen timestamp;
-- last-change timestamp;
-- online/offline state.
-
-A valid MAC address is preferred as the stable identity so DHCP address changes do not create a new asset. When a usable MAC is unavailable, the IP address is used as the fallback identity.
-
-### Identity reconciliation
-
-An IP fallback is intentionally temporary when stronger identity evidence becomes available. If an asset is still online as `ip:<address>` and a later observation of that same address contains a valid MAC, the inventory promotes the existing row to `mac:<address>` inside the same SQLite transaction instead of creating a second device.
-
-Promotion preserves the original `first_seen`, updates the current snapshot under the canonical MAC identity, rewrites existing timeline events and persisted relationship endpoints, and emits one `asset_identity_reconciled` event. Relationship primary-key collisions prefer the already-canonical relationship, and identity collapse cannot leave a self-edge behind.
-
-Historical databases can contain duplicate `ip:` and `mac:` rows created before reconciliation existed. PythonKni repairs those pairs only when the old transition leaves a strong fingerprint: the rows have the same scope and IP, and the IP fallback was marked disappeared at exactly the instant the MAC identity was first created. The duplicate `new_device` and false transition `device_disappeared` events are removed while the earlier first-seen history is retained.
-
-An offline IP fallback is **not** automatically merged into a newly observed MAC identity when that fingerprint is absent. IP reuse after DHCP expiry is common enough that “same IP” is not treated as proof that two historical observations represent the same physical device. PythonKni therefore prefers an explicit duplicate over a false identity merge when the evidence is ambiguous.
-
-No permanent IP-to-MAC alias is stored: an IP remains reusable by a different device later.
+A valid MAC is preferred as stable identity. An active `ip:<address>` fallback is promoted transactionally to `mac:<address>` when stronger evidence appears, preserving `first_seen` and rewriting timeline/relationship references. Legacy duplicates are repaired only with corroborated transition evidence; ambiguous offline IP reuse is deliberately **not** merged merely because the IP matches.
 
 ## Network Timeline / Change Detection
 
-Completed snapshots are compared with the previous persistent state. Network Intelligence records meaningful transitions such as:
-
-- `new_device`;
-- `device_returned`;
-- `device_disappeared`;
-- `ip_changed`;
-- `type_changed`;
-- `risk_changed`;
-- `port_opened`;
-- `port_closed`;
-- `asset_identity_reconciled`.
-
-Partial/cancelled scans never mark devices as disappeared. This prevents incomplete runs from corrupting the network timeline.
+Completed snapshots record meaningful transitions including new/returned/disappeared devices, IP/type/risk changes, opened/closed ports and identity reconciliation. Partial/cancelled scans never mark devices disappeared.
 
 ## Network Security Score
 
-The dashboard calculates a deterministic `0..100` score from currently online assets. The base deductions remain intentionally simple and explainable:
+The dashboard calculates a deterministic `0..100` score from online assets. Base deductions cover elevated risk, unknown devices, exposed RTSP/clear-text HTTP and newly observed unknown assets. A bounded contextual layer can add small review-priority deductions for elevated-risk Router/NAS roles, a **confirmed** default gateway and **confirmed physical links** to relevant infrastructure.
 
-- high/medium-risk assets;
-- unknown devices;
-- cameras exposing RTSP;
-- clear-text HTTP;
-- unknown assets first observed today.
-
-A second bounded contextual layer prioritizes exposure where the persisted model shows greater operational impact:
-
-- elevated-risk Router and NAS assets receive small role-specific deductions;
-- an elevated-risk asset that is the **confirmed operating-system default gateway** receives an additional gateway deduction;
-- an elevated-risk asset with a **confirmed physical link** to Router/default-gateway infrastructure receives a small topology-context deduction.
-
-Only `CONFIRMED` gateway and physical-link evidence can affect the relationship-context deductions. `INFERRED` and `UNKNOWN` relationships remain visible in topology but do not reduce the score. Logical same-LAN membership is not treated as proof of a physical path and therefore does not add a contextual penalty.
-
-Physical-link deductions are deduplicated by asset, so duplicate/reversed evidence for the same endpoint cannot be counted repeatedly. Offline assets never contribute contextual deductions.
-
-These weights are project-defined prioritization heuristics, not a vulnerability score, exploitability probability or industry-standard risk metric. Relationship context is used to prioritize review; it does not claim that a topological edge proves reachability, trust or compromise propagation.
-
-The UI lists every contextual reason next to the existing findings. Snapshot reports run the same scoring function against the same persisted relationship set, so the exported score and the live dashboard remain consistent.
-
-The Network Security Score and Device Classification Confidence solve different problems: the former describes exposure posture and review priority, while the latter describes how strongly the observed evidence supports the inferred device role.
+Inferred/unknown relationships and generic same-LAN membership do not receive contextual deductions. Offline assets are excluded and physical-link context is deduplicated. The score is a project-defined prioritization heuristic, not a vulnerability score, exploitability probability or compromise model.
 
 ## Relationship evidence and topology
 
-Logical relationships are generated from known LAN/gateway evidence and persisted separately from the asset inventory. Relationship records carry explicit confidence and evidence rather than pretending that shared subnet membership proves physical cabling.
+Logical relationships are generated from local LAN/gateway evidence and persisted with explicit CONFIRMED/INFERRED/UNKNOWN confidence. Administrative LLDP/MAC-table snapshots can add validated `PHYSICAL_LINK` relationships transactionally. Topology renders the persisted graph; it does not trigger a second scan.
 
-Administrative LLDP/MAC-table snapshots can add `PHYSICAL_LINK` relationships after validation against the current inventory. Import is transactional: a snapshot containing unresolved or invalid links does not replace the previous physical-evidence snapshot.
+## Snapshot reporting and offline comparison
 
-The topology view renders the persisted relationship graph and exposes confidence, protocol and endpoint-port metadata. Physical links therefore remain distinguishable from inferred logical relationships.
+`Export snapshot report` serializes already-persisted state and performs no additional network probe. JSON reports and ZIP evidence bundles contain canonical scope, UTC generation time, assets, score/findings, vendor/confidence evidence, relationships and bounded timeline data.
 
-## Snapshot reporting
+`Compare saved snapshots` loads only validated saved JSON/ZIP reports, requires the same canonical scope and reports meaningful asset/service/risk/confidence/relationship/score changes while ignoring observation-only timestamp churn. It never reads current inventory or starts a worker.
 
-`Export snapshot report` serializes the already-persisted state. Export does not start discovery or perform any additional network probe.
+See [`network-snapshot-comparison.md`](network-snapshot-comparison.md).
 
-Two formats are supported:
+## Offline Security Score History
 
-- JSON: complete structured snapshot with a versioned schema;
-- ZIP evidence bundle: `report.json`, `assets.csv`, `relationships.csv` and `timeline.csv`.
+Security Score History loads two or more validated saved snapshots for one scope, sorts them chronologically and derives score delta/range plus device/risk/finding evolution. It is read-only and does not inspect live inventory or trigger discovery.
 
-Reports contain:
+See [`network-score-history.md`](network-score-history.md).
 
-- canonical CIDR scope;
-- UTC generation timestamp;
-- asset/online/offline counts;
-- Network Security Score and findings, including confirmed relationship context;
-- deterministic asset ordering;
-- persisted vendor/OUI evidence;
-- classification confidence level and weighted signal evidence;
-- relationship evidence and confidence;
-- up to the latest 1000 persisted timeline events.
+## Scheduled monitoring and automatic snapshots
 
-The report schema is versioned. Classification confidence and structured classification signals are introduced in schema version 2. Context-aware scoring changes only the derived score/findings semantics and does not alter the report shape.
+Scheduling is opt-in and in-process. A versioned schedule stores canonical local scope, interval, next run and success metadata. Scheduled checks run only while Network Intelligence is open; no Windows Scheduled Task, service or daemon is installed. An overdue run is picked up when the window is opened again.
 
-CSV values are neutralized against spreadsheet formula injection before being written to the evidence bundle.
+A scheduler-owned JSON snapshot is published atomically only after the successful inventory/relationship persistence path. Failed/cancelled/incomplete-persistence runs create neither a successful automatic snapshot nor downstream change notification.
 
-## Offline snapshot comparison
+See [`network-scheduled-monitoring.md`](network-scheduled-monitoring.md).
 
-`Compare saved snapshots` is a read-only local workflow for comparing two previously exported Network Intelligence reports. It accepts JSON reports and ZIP evidence bundles, reads only the fixed `report.json` member from ZIP files, validates the snapshot structure and requires the same canonical IPv4 scope on both sides.
+## Change Notification Engine
 
-Comparison reports meaningful changes to assets, services, ports, risk, classification confidence, relationships and the Network Security Score. Pure observation churn such as `last_seen`, `last_change` or relationship `observed_at` updates is intentionally ignored.
+Consecutive successful automatic snapshots feed a local deterministic change engine. It detects meaningful `new_device`, `ports_opened`, `risk_changed`, `security_score_drop` and `relationships_changed` events, assigns INFO/WARNING/CRITICAL severity and deduplicates exact reprocessing through SHA-256 event IDs.
 
-The comparison workflow does not inspect the current inventory and never starts a network worker, so historical analysis cannot accidentally trigger a rescan.
+Timestamp/status/hostname/confidence churn and closed ports are deliberately not treated as notification events. The first automatic snapshot establishes the baseline only. The inbox is versioned, bounded and atomically persisted; a corrupt/incompatible inbox is not automatically overwritten. Notification failures cannot roll back a successful scheduled snapshot.
+
+See [`network-change-notifications.md`](network-change-notifications.md).
+
+## History Center, trends and retention
+
+History Center catalogs only scheduler-owned `scheduled_*.json` reports after validation. Corrupt/incompatible files are surfaced and preserved. Filters support scope plus 24h/7d/30d/90d/1y/all windows. Comparable single-scope views show dependency-free Qt trends for Security Score/high-risk evolution and summaries for device/risk changes, with previous/next navigation and comparison to the previous snapshot.
+
+Retention is versioned/configurable by per-scope count (2..1000) plus optional age. Automatic/manual cleanup applies only to validated scheduler-owned snapshots, never to manual reports or invalid/corrupt snapshots, and always protects the newest **two** valid snapshots per scope so the notification engine keeps its consecutive baseline.
+
+See [`network-history-center.md`](network-history-center.md).
 
 ## Device-specific auditors
 
-Router, NAS, Printer and PC auditors consume the already persisted device snapshot. They do **not** repeat network discovery or arbitrary port scanning. Their findings map known exposure signals to defensive recommendations.
+Router, NAS, Printer and PC auditors consume the persisted device snapshot instead of repeating discovery/arbitrary scanning. Camera assets retain the dedicated Camera Exposure Auditor hand-off with one exact `/32` host.
 
-Camera assets retain the dedicated `Camera Exposure Auditor` hand-off and are opened with a single-host `/32` scope. Network Explorer also exposes a conservative hand-off for cameras whose current identity matches a persisted Camera asset.
+## Quality gates
+
+The retained Network Intelligence benchmark measures deterministic classification and OUI throughput but keeps shared-runner timing informational rather than a pass/fail threshold.
+
+A separate AST structural typing ratchet prevents annotation regression. Current protected package metrics are **668/721 annotated slots (92.65%)**, **264 fully annotated / 303 tracked callables**, and **39 explicit `Any`** at most. Fifteen strict modules must remain fully annotated with zero explicit `Any`. This is intentionally incremental and does not claim semantic static type checking.
+
+See [`network-intelligence-quality-gates.md`](network-intelligence-quality-gates.md).
 
 ## Safety boundaries
 
-Network Intelligence is intended for authorized LAN administration and keeps the same boundaries as Camera Exposure Auditor:
+Network Intelligence is intended for authorized LAN administration and keeps these boundaries:
 
-- local/private IPv4 scopes only;
-- maximum 256 hosts per run;
-- bounded worker concurrency;
-- short connection timeouts;
-- fixed curated identification ports;
-- ONVIF limited to the selected local scope;
-- OUI/vendor lookup is fully offline;
-- classification confidence is computed locally from already-observed evidence;
-- identity reconciliation uses persisted local identifiers only;
-- contextual risk uses only persisted device roles and relationship evidence;
-- snapshot comparison reads only saved local reports;
-- no MAC address is submitted to third-party services;
-- no username/password attempts;
-- no default-credential testing;
-- no stream or camera image retrieval;
-- no internet-wide discovery, search-engine dorking or scraping;
+- private/local/link-local/loopback IPv4 only;
+- maximum 256 hosts per Network Intelligence run;
+- bounded concurrency and short timeouts;
+- fixed curated identification ports/ONVIF within selected scope;
+- OUI/vendor lookup fully offline at runtime;
+- historical comparison/history/notification/retention read saved local state only;
+- no username/password or default-credential attempts;
+- no stream/camera-image retrieval;
+- no internet-wide discovery, dorking or scraping;
 - cooperative cancellation through managed workers;
-- reporting operates only on already-persisted local state.
+- no cloud telemetry or OS background service.
 
-## Next platform layers
+## Current platform status and next layers
 
-Useful next extensions now that inventory, topology, physical evidence, reporting, vendor enrichment, classification explainability, identity reconciliation, snapshot comparison and contextual risk are present include:
+The previously planned layers for scheduled checks, change notifications, history/trends/retention and build-time OUI expansion are now implemented. Network Intelligence currently spans:
 
-- scheduled local inventory checks with explicit change notifications;
-- build-time expansion of the offline OUI snapshot without adding runtime network access;
-- score/history trend views across saved snapshots;
-- additional defensive device-role context backed by explicit persisted evidence.
+```text
+Discover → Inventory → Classify → Relate → Score → Report
+        → Schedule → Snapshot → Compare/History → Detect change → Notify/Retain
+```
+
+Future work should remain incremental: add further defensive device-role context only when backed by explicit persisted evidence, reduce remaining structural typing debt/promote more strict modules, and consider a semantic type checker as a separate migration rather than weakening the existing gate.
