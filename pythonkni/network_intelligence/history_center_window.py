@@ -37,6 +37,7 @@ from .retention import (
     DEFAULT_KEEP_PER_SCOPE,
     MAX_KEEP_PER_SCOPE,
     MAX_RETENTION_DAYS,
+    MIN_KEEP_PER_SCOPE,
     RetentionPolicy,
     SnapshotCatalog,
     SnapshotCatalogEntry,
@@ -98,10 +99,15 @@ class SnapshotTrendChart(QWidget):
     def __init__(self, parent=None):
         super().__init__(parent)
         self.entries: tuple[SnapshotCatalogEntry, ...] = ()
+        self.empty_message = "Sin snapshots para el filtro actual"
         self.setMinimumHeight(190)
 
     def set_entries(self, entries: tuple[SnapshotCatalogEntry, ...]) -> None:
         self.entries = entries
+        self.update()
+
+    def set_empty_message(self, message: str) -> None:
+        self.empty_message = message
         self.update()
 
     def paintEvent(self, event) -> None:  # noqa: N802 - Qt API name
@@ -113,7 +119,7 @@ class SnapshotTrendChart(QWidget):
 
         if not self.entries:
             painter.setPen(palette.text().color())
-            painter.drawText(self.rect(), Qt.AlignCenter, "Sin snapshots para el filtro actual")
+            painter.drawText(self.rect(), Qt.AlignCenter, self.empty_message)
             return
 
         plot = self.rect().adjusted(48, 24, -24, -38)
@@ -253,7 +259,7 @@ class HistoryCenterDialog(QDialog):
         retention_row = QHBoxLayout(retention_group)
         retention_row.addWidget(QLabel("Máximo por scope:"))
         self.keep_spin = QSpinBox()
-        self.keep_spin.setRange(1, MAX_KEEP_PER_SCOPE)
+        self.keep_spin.setRange(MIN_KEEP_PER_SCOPE, MAX_KEEP_PER_SCOPE)
         self.keep_spin.setValue(policy.keep_per_scope)
         retention_row.addWidget(self.keep_spin)
         retention_row.addWidget(QLabel("Edad máxima (días):"))
@@ -318,23 +324,38 @@ class HistoryCenterDialog(QDialog):
         since = None
         if days is not None:
             since = datetime.now(timezone.utc) - timedelta(days=int(days))
+        selected_scope = self._selected_scope()
         self.filtered_entries = filter_snapshot_entries(
             self.catalog.entries,
-            scope=self._selected_scope(),
+            scope=selected_scope,
             since=since,
         )
 
-        trend = summarize_trend(self.filtered_entries)
-        if trend is None:
+        scopes = {entry.scope for entry in self.filtered_entries}
+        if not self.filtered_entries:
             self.summary_label.setText("Sin snapshots para el filtro actual.")
+            self.chart.set_empty_message("Sin snapshots para el filtro actual")
+            self.chart.set_entries(())
+        elif selected_scope is None and len(scopes) > 1:
+            self.summary_label.setText(
+                f"{len(self.filtered_entries)} snapshot(s) en {len(scopes)} scopes · "
+                "selecciona un scope para calcular una tendencia comparable."
+            )
+            self.chart.set_empty_message(
+                "Selecciona un scope para visualizar una tendencia comparable"
+            )
+            self.chart.set_entries(())
         else:
+            trend = summarize_trend(self.filtered_entries)
+            assert trend is not None
             self.summary_label.setText(
                 f"{trend.points} snapshot(s) · Score {trend.first_score} → {trend.latest_score} "
                 f"({trend.score_delta:+d}) · rango {trend.lowest_score}–{trend.highest_score} · "
                 f"devices {trend.devices_delta:+d} · high risk {trend.high_risk_delta:+d} · "
                 f"medium risk {trend.medium_risk_delta:+d} · unknown {trend.unknown_delta:+d}"
             )
-        self.chart.set_entries(self.filtered_entries)
+            self.chart.set_empty_message("Sin snapshots para el filtro actual")
+            self.chart.set_entries(self.filtered_entries)
 
         self.table.setRowCount(len(self.filtered_entries))
         for row, entry in enumerate(self.filtered_entries):
@@ -443,7 +464,11 @@ class HistoryCenterDialog(QDialog):
             )
             return
         self.policy = candidate
-        age = "sin límite de edad" if candidate.max_age_days is None else f"{candidate.max_age_days} días"
+        age = (
+            "sin límite de edad"
+            if candidate.max_age_days is None
+            else f"{candidate.max_age_days} días"
+        )
         self.catalog_status.setText(
             f"Política guardada: máximo {candidate.keep_per_scope} por scope · {age}."
         )
@@ -470,7 +495,9 @@ class HistoryCenterDialog(QDialog):
             (
                 f"Se eliminarán {len(removable)} snapshot(s) programados válidos de {scope_text} "
                 f"y se recuperarán aproximadamente {_format_bytes(reclaim)}.\n\n"
-                "Los reportes manuales y archivos inválidos no se tocarán. ¿Continuar?"
+                "Se conservarán siempre los dos snapshots válidos más recientes por scope para "
+                "mantener el baseline de comparación. Los reportes manuales y archivos inválidos "
+                "no se tocarán. ¿Continuar?"
             ),
             QMessageBox.Yes | QMessageBox.No,
             QMessageBox.No,
