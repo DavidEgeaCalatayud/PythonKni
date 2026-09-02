@@ -69,8 +69,8 @@ VENDOR_HOSTNAME_HINTS = (
     ("fritz", "AVM"),
     ("livebox", "Orange"),
 )
-CAMERA_OUI_VENDORS = frozenset({"Hikvision", "Dahua", "Reolink", "Axis"})
-NAS_OUI_VENDORS = frozenset({"Synology", "QNAP"})
+CAMERA_OUI_VENDOR_HINTS = ("hikvision", "dahua", "reolink", "axis")
+NAS_OUI_VENDOR_HINTS = ("synology", "qnap")
 
 
 def _is_local_ip(value: str) -> bool:
@@ -126,6 +126,19 @@ def _hostname_vendor(hostname: str) -> str:
     return "Unknown"
 
 
+def _oui_vendor_matches(vendor: str | None, hints: tuple[str, ...]) -> bool:
+    """Match a known vendor family without discarding the IEEE legal vendor name.
+
+    Historical duplicate OUI rows are rendered as an explicit ``A / B`` ambiguity.
+    Those values deliberately never drive classification because ownership is not unique.
+    """
+
+    if not vendor or " / " in vendor:
+        return False
+    lowered = vendor.casefold()
+    return any(hint in lowered for hint in hints)
+
+
 def infer_device_vendor(host: DiscoveredHost, camera: CameraDevice | None = None) -> str:
     if camera is not None and camera.vendor and camera.vendor != "Unknown":
         return camera.vendor
@@ -158,8 +171,8 @@ def classify_device(
     printer_hostname = _hostname_contains(host.hostname, PRINTER_HOSTNAME_HINTS)
     nas_hostname = _hostname_contains(host.hostname, NAS_HOSTNAME_HINTS)
     router_hostname = _hostname_contains(host.hostname, ROUTER_HOSTNAME_HINTS)
-    camera_vendor_hint = oui_vendor in CAMERA_OUI_VENDORS
-    nas_vendor_hint = oui_vendor in NAS_OUI_VENDORS
+    camera_vendor_hint = _oui_vendor_matches(oui_vendor, CAMERA_OUI_VENDOR_HINTS)
+    nas_vendor_hint = _oui_vendor_matches(oui_vendor, NAS_OUI_VENDOR_HINTS)
     gateway_signature = _gateway_style_address(host.ip) and 53 in ports and bool(ports & WEB_PORTS)
 
     if oui_vendor:

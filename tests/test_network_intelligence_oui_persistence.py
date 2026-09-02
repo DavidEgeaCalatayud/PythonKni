@@ -25,7 +25,7 @@ def test_oui_vendor_flows_from_classification_to_inventory_and_report(tmp_path):
     persisted = inventory.record_device(SCOPE, device, observed_at=NOW)
     report = build_network_report(SCOPE, [persisted], [], [], generated_at=NOW)
 
-    assert persisted.vendor == "Synology"
+    assert persisted.vendor == "Synology Incorporated"
     assert persisted.asset_id == "mac:00:11:32:12:34:56"
-    assert report["assets"][0]["vendor"] == "Synology"
-    assert any("OUI MAC: Synology" in item for item in report["assets"][0]["evidence"])
+    assert report["assets"][0]["vendor"] == "Synology Incorporated"
+    assert any("OUI MAC: Synology Incorporated" in item for item in report["assets"][0]["evidence"])

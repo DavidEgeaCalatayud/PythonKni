@@ -80,7 +80,7 @@ def test_nas_combines_service_and_vendor_signals():
     )
 
     assert device.kind == DeviceKind.NAS
-    assert device.vendor == "Synology"
+    assert device.vendor == "Synology Incorporated"
     assert device.classification_confidence == 100
     assert classification_confidence_level(device.classification_confidence).value == "HIGH"
 

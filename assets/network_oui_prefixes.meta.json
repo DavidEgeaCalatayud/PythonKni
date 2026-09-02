@@ -1,0 +1,31 @@
+{
+  "duplicate_assignment_count": 2,
+  "duplicate_assignments": [
+    {
+      "prefix": "00-01-C8",
+      "vendors": [
+        "CONRAD CORP.",
+        "THOMAS CONRAD CORP."
+      ]
+    },
+    {
+      "prefix": "08-00-30",
+      "vendors": [
+        "CERN",
+        "NETWORK RESEARCH CORPORATION",
+        "ROYAL MELBOURNE INST OF TECH"
+      ]
+    }
+  ],
+  "entry_count": 40046,
+  "generator": "scripts/update_oui_registry.py",
+  "registry": "IEEE MA-L / OUI-24",
+  "registry_sha256": "68a002284f369879697acc139e4ae5cdf8ced097961571df826ae5940ff6cddb",
+  "retrieved_at": "2026-09-02T08:46:55Z",
+  "schema_version": 1,
+  "source_etag": "\"6a97d7ce-3a671e\"",
+  "source_last_modified": "Wed, 02 Sep 2026 08:01:18 GMT",
+  "source_name": "IEEE Registration Authority MA-L Public Listing",
+  "source_sha256": "66ddb3dd80d595876a711c987a72adaa175c2e3178b194bbf9b1918074571714",
+  "source_url": "https://standards-oui.ieee.org/oui/oui.csv"
+}
