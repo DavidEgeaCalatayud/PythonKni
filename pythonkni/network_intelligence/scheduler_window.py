@@ -283,6 +283,15 @@ class Tool(HistoryTool):
             self.schedule_status.setText(self._schedule_summary())
             return
 
+        if snapshot.retention_error:
+            show_warning(
+                self,
+                self.name,
+                "El snapshot automático se publicó correctamente, pero no se pudo aplicar su "
+                "política de retención.",
+                details=snapshot.retention_error,
+            )
+
         candidate = mark_schedule_success(
             self.schedule_config,
             now=generated_at,
@@ -308,11 +317,12 @@ class Tool(HistoryTool):
             )
             post_snapshot_status = " · procesamiento posterior no disponible"
 
-        retention = (
-            f" · {snapshot.pruned_count} snapshot(s) antiguo(s) eliminado(s)"
-            if snapshot.pruned_count
-            else ""
-        )
+        if snapshot.retention_error:
+            retention = " · retención no aplicada"
+        elif snapshot.pruned_count:
+            retention = f" · {snapshot.pruned_count} snapshot(s) antiguo(s) eliminado(s)"
+        else:
+            retention = ""
         self.status_label.setText(
             f"Ejecución programada completada · snapshot automático {snapshot.path}{retention}"
             f"{post_snapshot_status} · próxima {_local_time(self.schedule_config.next_run_at)}."
