@@ -25,7 +25,7 @@ The catalog is bounded to the newest 2,000 scheduler-owned files per load. If mo
 
 ## Trends
 
-For the current filter the History Center calculates:
+For a comparable single-scope filter the History Center calculates:
 
 - first/latest Security Score and total delta;
 - minimum/maximum Security Score;
@@ -33,6 +33,8 @@ For the current filter the History Center calculates:
 - high-risk, medium-risk and unknown-device deltas.
 
 A native Qt chart visualizes Security Score over time and, when present, high-risk device evolution. It does not introduce a plotting/runtime dependency.
+
+The `All scopes` view remains useful as a global catalog, but it deliberately does not combine snapshots from different networks into one trend line or one set of deltas. When more than one scope is present, the UI asks the user to select a scope before presenting a comparable trend.
 
 ## Snapshot navigation and comparison
 
@@ -56,15 +58,17 @@ Current fields:
 }
 ```
 
-`keep_per_scope` is a maximum number of valid scheduled snapshots per IPv4 scope. The supported range is 1–1,000 and defaults to 120.
+`keep_per_scope` is a maximum number of valid scheduled snapshots per IPv4 scope. The supported range is 2–1,000 and defaults to 120. The minimum of two is intentional: the newest pair is the consecutive baseline required by the Change Notification Engine and by meaningful short-term trend comparison.
 
 `max_age_days` is optional. `null` disables age-based cleanup; otherwise the supported range is 1–3,650 days.
 
-The two rules are combined: a snapshot can become eligible because it exceeds the count limit or because it is older than the age limit. The newest valid snapshot in every scope is always preserved as a baseline even when it is older than the configured age.
+The two rules are combined: a snapshot can become eligible because it exceeds the count limit or because it is older than the age limit. The two newest valid snapshots in every scope are always protected, even when one or both are older than the configured age. This prevents retention from deleting the previous successful scheduler baseline before the next snapshot can be compared by the Change Notification Engine.
 
 ## Automatic retention
 
-After a scheduled scan has completed and its snapshot has been atomically published, the scheduler applies the current in-memory retention policy to that scope. The cleanup result is reported through the existing scheduled-scan status text.
+After a scheduled scan has completed and its snapshot has been atomically published, the configured retention policy is applied to scheduler-owned snapshots for that scope. Because the newest two snapshots are protected, the previous successful snapshot remains available to the post-publication change evaluation introduced by #60.
+
+The cleanup result is reported through the existing scheduled-scan status text. A cleanup failure never unpublishes a successfully written snapshot and is surfaced separately.
 
 Retention remains downstream of scan persistence. It does not change the rules introduced by scheduled monitoring:
 
@@ -82,7 +86,7 @@ If a scope filter is selected, cleanup is limited to that scope. With `All scope
 Manual cleanup:
 
 - deletes only validated scheduler-owned `scheduled_*.json` files;
-- preserves the newest valid snapshot per scope;
+- preserves the two newest valid snapshots per scope;
 - never deletes manual reports;
 - never deletes skipped/corrupt files automatically;
 - reports reclaimed bytes after completion.
