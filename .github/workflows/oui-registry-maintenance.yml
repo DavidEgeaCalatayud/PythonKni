@@ -9,6 +9,7 @@ on:
       - "feature/oui-registry-updater"
     paths:
       - ".github/workflows/oui-registry-maintenance.yml"
+      - "scripts/update_oui_registry.py"
 
 permissions:
   contents: write
