@@ -37,6 +37,18 @@ class RegistryEntry:
 
 
 @dataclass(frozen=True)
+class DuplicateAssignment:
+    prefix: str
+    vendors: tuple[str, ...]
+
+
+@dataclass(frozen=True)
+class ParsedRegistry:
+    entries: tuple[RegistryEntry, ...]
+    duplicate_assignments: tuple[DuplicateAssignment, ...]
+
+
+@dataclass(frozen=True)
 class DownloadedSource:
     content: bytes
     etag: str | None = None
@@ -74,7 +86,13 @@ def normalize_vendor(value: str | None) -> str:
     return normalized
 
 
-def parse_ieee_ma_l_csv(source: bytes) -> tuple[RegistryEntry, ...]:
+def _render_ambiguous_vendor(vendors: tuple[str, ...]) -> str:
+    if len(vendors) == 1:
+        return vendors[0]
+    return " / ".join(vendors)
+
+
+def parse_ieee_ma_l_csv(source: bytes) -> ParsedRegistry:
     try:
         text = source.decode("utf-8-sig")
     except UnicodeDecodeError as exc:
@@ -89,7 +107,7 @@ def parse_ieee_ma_l_csv(source: bytes) -> tuple[RegistryEntry, ...]:
                 + ", ".join(sorted(required))
             )
 
-        entries: dict[str, RegistryEntry] = {}
+        vendors_by_prefix: dict[str, set[str]] = {}
         for line_number, row in enumerate(reader, start=2):
             if (row.get("Registry") or "").strip().upper() != "MA-L":
                 raise RegistryUpdateError(
@@ -100,17 +118,23 @@ def parse_ieee_ma_l_csv(source: bytes) -> tuple[RegistryEntry, ...]:
                 vendor = normalize_vendor(row.get("Organization Name"))
             except RegistryUpdateError as exc:
                 raise RegistryUpdateError(f"line {line_number}: {exc}") from exc
-            if prefix in entries:
-                raise RegistryUpdateError(
-                    f"duplicate MA-L assignment at line {line_number}: {prefix}"
-                )
-            entries[prefix] = RegistryEntry(prefix=prefix, vendor=vendor)
+            vendors_by_prefix.setdefault(prefix, set()).add(vendor)
     except csv.Error as exc:
         raise RegistryUpdateError(f"invalid IEEE MA-L CSV: {exc}") from exc
 
-    if not entries:
+    if not vendors_by_prefix:
         raise RegistryUpdateError("IEEE MA-L CSV contains no assignments")
-    return tuple(sorted(entries.values()))
+
+    entries: list[RegistryEntry] = []
+    duplicates: list[DuplicateAssignment] = []
+    for prefix in sorted(vendors_by_prefix):
+        vendors = tuple(sorted(vendors_by_prefix[prefix], key=str.casefold))
+        entries.append(
+            RegistryEntry(prefix=prefix, vendor=_render_ambiguous_vendor(vendors))
+        )
+        if len(vendors) > 1:
+            duplicates.append(DuplicateAssignment(prefix=prefix, vendors=vendors))
+    return ParsedRegistry(entries=tuple(entries), duplicate_assignments=tuple(duplicates))
 
 
 def render_registry(entries: tuple[RegistryEntry, ...] | list[RegistryEntry]) -> bytes:
@@ -220,7 +244,7 @@ def build_metadata(
     *,
     source: DownloadedSource,
     registry_bytes: bytes,
-    entry_count: int,
+    parsed: ParsedRegistry,
     retrieved_at: datetime,
     source_url: str = IEEE_MA_L_CSV_URL,
 ) -> bytes:
@@ -240,7 +264,12 @@ def build_metadata(
         "retrieved_at": timestamp,
         "source_sha256": _sha256(source.content),
         "registry_sha256": _sha256(registry_bytes),
-        "entry_count": entry_count,
+        "entry_count": len(parsed.entries),
+        "duplicate_assignment_count": len(parsed.duplicate_assignments),
+        "duplicate_assignments": [
+            {"prefix": item.prefix, "vendors": list(item.vendors)}
+            for item in parsed.duplicate_assignments
+        ],
         "source_etag": source.etag,
         "source_last_modified": source.last_modified,
         "generator": "scripts/update_oui_registry.py",
@@ -253,9 +282,7 @@ def build_metadata(
 def _stage_file(path: Path, content: bytes) -> Path:
     path.parent.mkdir(parents=True, exist_ok=True)
     file_descriptor, temp_name = tempfile.mkstemp(
-        prefix=f".{path.name}.",
-        suffix=".tmp",
-        dir=path.parent,
+        prefix=f".{path.name}.", suffix=".tmp", dir=path.parent
     )
     temp_path = Path(temp_name)
     try:
@@ -285,6 +312,14 @@ def write_registry_pair(
         metadata_temp.unlink(missing_ok=True)
 
 
+def _load_metadata(path: Path) -> dict[str, object] | None:
+    try:
+        value = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return None
+    return value if isinstance(value, dict) else None
+
+
 def update_registry(
     *,
     registry_path: Path = DEFAULT_REGISTRY_PATH,
@@ -310,35 +345,37 @@ def update_registry(
             )
         source = DownloadedSource(content=raw)
 
-    entries = parse_ieee_ma_l_csv(source.content)
-    if len(entries) < min_entries:
+    parsed = parse_ieee_ma_l_csv(source.content)
+    if len(parsed.entries) < min_entries:
         raise RegistryUpdateError(
-            f"IEEE MA-L CSV contains only {len(entries)} entries; "
+            f"IEEE MA-L CSV contains only {len(parsed.entries)} unique entries; "
             f"expected at least {min_entries}"
         )
 
-    registry_bytes = render_registry(entries)
+    registry_bytes = render_registry(parsed.entries)
+    existing_metadata = _load_metadata(metadata_path)
     try:
-        existing = registry_path.read_bytes()
+        existing_registry = registry_path.read_bytes()
     except OSError:
-        existing = None
-    if existing == registry_bytes and metadata_path.is_file():
-        try:
-            validate_bundled_registry(
-                registry_path=registry_path,
-                metadata_path=metadata_path,
-                min_entries=min_entries,
-                expected_source_url=source_url,
-            )
-        except RegistryUpdateError:
-            pass
-        else:
-            return False
+        existing_registry = None
+
+    if (
+        existing_registry == registry_bytes
+        and existing_metadata is not None
+        and existing_metadata.get("source_sha256") == _sha256(source.content)
+    ):
+        validate_bundled_registry(
+            registry_path=registry_path,
+            metadata_path=metadata_path,
+            min_entries=min_entries,
+            expected_source_url=source_url,
+        )
+        return False
 
     metadata_bytes = build_metadata(
         source=source,
         registry_bytes=registry_bytes,
-        entry_count=len(entries),
+        parsed=parsed,
         retrieved_at=retrieved_at or datetime.now(timezone.utc),
         source_url=source_url,
     )
@@ -364,12 +401,9 @@ def validate_bundled_registry(
             f"expected at least {min_entries}"
         )
 
-    try:
-        metadata = json.loads(metadata_path.read_text(encoding="utf-8"))
-    except (OSError, json.JSONDecodeError) as exc:
-        raise RegistryUpdateError(f"failed to read OUI metadata: {exc}") from exc
-    if not isinstance(metadata, dict):
-        raise RegistryUpdateError("OUI metadata root must be a JSON object")
+    metadata = _load_metadata(metadata_path)
+    if metadata is None:
+        raise RegistryUpdateError("failed to read valid OUI metadata JSON")
 
     expected = {
         "schema_version": SCHEMA_VERSION,
@@ -394,6 +428,28 @@ def validate_bundled_registry(
     if not isinstance(retrieved_at, str):
         raise RegistryUpdateError("OUI metadata retrieved_at is missing")
     _parse_retrieved_at(retrieved_at)
+
+    duplicates = metadata.get("duplicate_assignments")
+    duplicate_count = metadata.get("duplicate_assignment_count")
+    if not isinstance(duplicates, list) or duplicate_count != len(duplicates):
+        raise RegistryUpdateError("OUI metadata duplicate assignment data is invalid")
+    for item in duplicates:
+        if not isinstance(item, dict):
+            raise RegistryUpdateError("OUI metadata duplicate assignment item is invalid")
+        prefix = item.get("prefix")
+        vendors = item.get("vendors")
+        try:
+            normalized_prefix = normalize_assignment(prefix if isinstance(prefix, str) else None)
+        except RegistryUpdateError as exc:
+            raise RegistryUpdateError("OUI metadata duplicate prefix is invalid") from exc
+        if normalized_prefix != prefix or not isinstance(vendors, list) or len(vendors) < 2:
+            raise RegistryUpdateError("OUI metadata duplicate assignment item is invalid")
+        normalized_vendors = tuple(
+            normalize_vendor(vendor if isinstance(vendor, str) else None)
+            for vendor in vendors
+        )
+        if tuple(sorted(set(normalized_vendors), key=str.casefold)) != normalized_vendors:
+            raise RegistryUpdateError("OUI metadata duplicate vendors are not canonical")
     return len(entries)
 
 
@@ -415,8 +471,7 @@ def _build_parser() -> argparse.ArgumentParser:
     )
 
     validate = subparsers.add_parser(
-        "validate",
-        help="Validate the checked-in registry and metadata without network access.",
+        "validate", help="Validate the checked-in registry and metadata offline."
     )
     validate.add_argument("--registry", type=Path, default=DEFAULT_REGISTRY_PATH)
     validate.add_argument("--metadata", type=Path, default=DEFAULT_METADATA_PATH)
@@ -425,7 +480,8 @@ def _build_parser() -> argparse.ArgumentParser:
 
 
 def main(argv: list[str] | None = None) -> int:
-    args = _build_parser().parse_args(argv)
+    parser = _build_parser()
+    args = parser.parse_args(argv)
     try:
         if args.command == "update":
             changed = update_registry(
@@ -434,9 +490,11 @@ def main(argv: list[str] | None = None) -> int:
                 source_url=args.source_url,
                 source_file=args.source_file,
                 min_entries=args.min_entries,
-                retrieved_at=_parse_retrieved_at(args.retrieved_at)
-                if args.retrieved_at
-                else None,
+                retrieved_at=(
+                    _parse_retrieved_at(args.retrieved_at)
+                    if args.retrieved_at
+                    else None
+                ),
             )
             count = validate_bundled_registry(
                 registry_path=args.registry,
@@ -454,7 +512,6 @@ def main(argv: list[str] | None = None) -> int:
             )
             print(f"OUI registry valid: {count} IEEE MA-L assignments.")
     except RegistryUpdateError as exc:
-        parser = _build_parser()
         parser.error(str(exc))
     return 0
 
