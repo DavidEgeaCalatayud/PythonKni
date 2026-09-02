@@ -1,5 +1,8 @@
 from __future__ import annotations
 
+import sys as _sys
+import types as _types
+
 from PyQt5.QtWidgets import QLabel, QPushButton, QTabWidget
 
 from pythonkni.infrastructure.paths import NETWORK_INTELLIGENCE_DB
@@ -112,3 +115,31 @@ class Tool(_base.Tool):
         tabs.addTab(self.port_scanner, "Escáner de Puertos")
         tabs.addTab(self.history_tab, "Histórico")
         self.setCentralWidget(tabs)
+
+
+def __getattr__(name):
+    for module in (_base, _base._base, _base._service):
+        try:
+            return getattr(module, name)
+        except AttributeError:
+            continue
+    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
+
+
+class _CompatibilityModule(_types.ModuleType):
+    def __setattr__(self, name, value):
+        if name not in self.__dict__:
+            for module in (_base, _base._base, _base._service):
+                if hasattr(module, name):
+                    setattr(module, name, value)
+        super().__setattr__(name, value)
+
+    def __delattr__(self, name):
+        if name not in self.__dict__:
+            for module in (_base, _base._base, _base._service):
+                if hasattr(module, name):
+                    delattr(module, name)
+        super().__delattr__(name)
+
+
+_sys.modules[__name__].__class__ = _CompatibilityModule
