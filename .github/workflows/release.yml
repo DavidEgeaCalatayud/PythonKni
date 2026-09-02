@@ -6,6 +6,7 @@ on:
       - "v*.*.*"
     branches:
       - "release/v*.*.*"
+      - "release-retry/v*.*.*"
 
 permissions:
   contents: write
@@ -27,6 +28,7 @@ jobs:
         shell: powershell
         run: |
           $bootstrap = $false
+          $recovery = $false
 
           if ($env:GITHUB_REF_TYPE -eq "tag") {
             $tag = $env:GITHUB_REF_NAME
@@ -36,21 +38,18 @@ jobs:
           ) {
             $tag = $Matches[1]
             $bootstrap = $true
+          } elseif (
+            $env:GITHUB_REF_TYPE -eq "branch" -and
+            $env:GITHUB_REF_NAME -match '^release-retry/(v\d+\.\d+\.\d+)$'
+          ) {
+            $tag = $Matches[1]
+            $recovery = $true
           } else {
-            throw "Release workflow requires an exact vX.Y.Z tag or release/vX.Y.Z branch."
+            throw "Release workflow requires an exact vX.Y.Z tag, release/vX.Y.Z branch, or release-retry/vX.Y.Z branch."
           }
 
           if ($tag -notmatch '^v\d+\.\d+\.\d+$') {
             throw "Release tags must use the exact vX.Y.Z format. Received: $tag"
-          }
-
-          $project = Get-Content "pyproject.toml" -Raw
-          if ($project -notmatch '(?m)^version\s*=\s*"([^\"]+)"\s*$') {
-            throw "Could not resolve project.version from pyproject.toml."
-          }
-          $expectedTag = "v$($Matches[1])"
-          if ($tag -ne $expectedTag) {
-            throw "Release ref $tag does not match pyproject.toml version $expectedTag."
           }
 
           git fetch origin main --tags
@@ -58,17 +57,12 @@ jobs:
             throw "Could not fetch main and existing tags."
           }
 
-          git merge-base --is-ancestor $env:GITHUB_SHA origin/main
-          if ($LASTEXITCODE -ne 0) {
-            throw "Release ref $tag must point to a commit contained in main."
+          $mainHead = (git rev-parse origin/main).Trim()
+          if (($bootstrap -or $recovery) -and $mainHead -ne $env:GITHUB_SHA) {
+            throw "Release branch $($env:GITHUB_REF_NAME) must point to the current main tip $mainHead, not $($env:GITHUB_SHA)."
           }
 
           if ($bootstrap) {
-            $mainHead = (git rev-parse origin/main).Trim()
-            if ($mainHead -ne $env:GITHUB_SHA) {
-              throw "Release bootstrap $($env:GITHUB_REF_NAME) must point to the current main tip $mainHead, not $($env:GITHUB_SHA)."
-            }
-
             $existingTagCommit = git rev-parse -q --verify "refs/tags/$tag^{commit}" 2>$null
             $tagExists = $LASTEXITCODE -eq 0
             if ($tagExists) {
@@ -87,9 +81,56 @@ jobs:
                 throw "Could not publish release tag $tag."
               }
             }
+            $releaseCommit = $env:GITHUB_SHA
+          } elseif ($recovery) {
+            $releaseCommit = git rev-parse -q --verify "refs/tags/$tag^{commit}" 2>$null
+            if ($LASTEXITCODE -ne 0) {
+              throw "Release recovery requires existing tag $tag."
+            }
+            $releaseCommit = $releaseCommit.Trim()
+          } else {
+            $releaseCommit = $env:GITHUB_SHA
+          }
+
+          git merge-base --is-ancestor $releaseCommit origin/main
+          if ($LASTEXITCODE -ne 0) {
+            throw "Release tag $tag resolves to $releaseCommit, which is not contained in main."
           }
 
           "tag=$tag" >> $env:GITHUB_OUTPUT
+          "commit=$releaseCommit" >> $env:GITHUB_OUTPUT
+          "recovery=$($recovery.ToString().ToLowerInvariant())" >> $env:GITHUB_OUTPUT
+
+      - name: Checkout immutable tagged source for recovery
+        if: steps.release_meta.outputs.recovery == 'true'
+        shell: powershell
+        env:
+          RELEASE_COMMIT: ${{ steps.release_meta.outputs.commit }}
+        run: |
+          git checkout --detach $env:RELEASE_COMMIT
+          if ($LASTEXITCODE -ne 0) {
+            throw "Could not check out tagged release commit $env:RELEASE_COMMIT."
+          }
+
+          $head = (git rev-parse HEAD).Trim()
+          if ($head -ne $env:RELEASE_COMMIT) {
+            throw "Recovery checkout resolved to $head instead of $env:RELEASE_COMMIT."
+          }
+
+      - name: Validate release source version
+        shell: powershell
+        env:
+          RELEASE_TAG: ${{ steps.release_meta.outputs.tag }}
+        run: |
+          $project = Get-Content "pyproject.toml" -Raw
+          if ($project -notmatch '(?m)^version\s*=\s*"([^\"]+)"\s*$') {
+            throw "Could not resolve project.version from pyproject.toml."
+          }
+
+          $expectedTag = "v$($Matches[1])"
+          if ($env:RELEASE_TAG -ne $expectedTag) {
+            throw "Release tag $env:RELEASE_TAG does not match tagged source version $expectedTag."
+          }
 
       - name: Set up Python
         uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7
@@ -225,9 +266,17 @@ jobs:
           $runtimeLock = "requirements.txt"
           $developmentLock = "requirements-dev.txt"
 
-          gh release view $tag *> $null
-          if ($LASTEXITCODE -eq 0) {
+          cmd /c "gh release view $tag >nul 2>&1"
+          $releaseExists = $LASTEXITCODE -eq 0
+
+          if ($releaseExists) {
             gh release upload $tag $zip $checksum $sbom $ouiMetadata $runtimeLock $developmentLock --clobber
+            if ($LASTEXITCODE -ne 0) {
+              throw "Could not upload assets to existing GitHub Release $tag."
+            }
           } else {
             gh release create $tag $zip $checksum $sbom $ouiMetadata $runtimeLock $developmentLock --title "PythonKni $tag" --generate-notes --verify-tag
+            if ($LASTEXITCODE -ne 0) {
+              throw "Could not create GitHub Release $tag."
+            }
           }
