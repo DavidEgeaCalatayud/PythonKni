@@ -1,6 +1,8 @@
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
+
+import pytest
 
 from pythonkni.camera_auditor.models import RiskLevel
 from pythonkni.network.models import DiscoveredHost, ServiceFingerprint
@@ -8,7 +10,9 @@ from pythonkni.network_intelligence.fingerprints import (
     device_from_asset,
     enrich_asset_with_fingerprints,
     enrich_device_with_fingerprints,
+    persist_asset_fingerprints,
 )
+from pythonkni.network_intelligence.inventory import InventoryStore
 from pythonkni.network_intelligence.models import AssetRecord, DeviceKind, NetworkIntelligenceDevice
 
 
@@ -43,6 +47,17 @@ def _asset() -> AssetRecord:
         is_online=True,
         classification_confidence=80,
     )
+
+
+def _persisted_asset(tmp_path) -> tuple[InventoryStore, AssetRecord]:
+    seed = _asset()
+    store = InventoryStore(tmp_path / "inventory.sqlite3")
+    persisted = store.record_device(
+        seed.scope,
+        device_from_asset(seed),
+        observed_at=seed.first_seen,
+    )
+    return store, persisted
 
 
 def test_fingerprints_enrich_services_and_evidence_without_changing_risk_or_kind():
@@ -147,3 +162,107 @@ def test_asset_enrichment_ignores_fingerprints_for_other_ip():
     )
 
     assert enriched == device_from_asset(asset)
+
+
+def test_persisted_fingerprint_change_records_service_timeline_event(tmp_path):
+    store, asset = _persisted_asset(tmp_path)
+    observed = asset.last_seen + timedelta(minutes=5)
+
+    persisted = persist_asset_fingerprints(
+        store,
+        asset,
+        [
+            ServiceFingerprint(
+                host=asset.hostname,
+                ip=asset.ip,
+                port=22,
+                protocol="ssh",
+                product="OpenSSH",
+                version="9.9",
+            )
+        ],
+        observed_at=observed,
+    )
+
+    assert persisted.services == ("SSH (OpenSSH 9.9)", "HTTPS")
+    assert persisted.risk is asset.risk
+    assert persisted.kind is asset.kind
+    assert persisted.last_change == observed
+    events = store.list_events(scope=asset.scope)
+    service_events = [event for event in events if event.event_type == "service_changed"]
+    assert len(service_events) == 1
+    assert "22/tcp SSH → SSH (OpenSSH 9.9)" in service_events[0].details
+
+
+def test_persisted_new_nerva_port_uses_normal_port_opened_event(tmp_path):
+    store, asset = _persisted_asset(tmp_path)
+    observed = asset.last_seen + timedelta(minutes=5)
+
+    persisted = persist_asset_fingerprints(
+        store,
+        asset,
+        [
+            ServiceFingerprint(
+                host=asset.hostname,
+                ip=asset.ip,
+                port=6379,
+                protocol="redis",
+                product="Redis",
+                version="8.2",
+            )
+        ],
+        observed_at=observed,
+    )
+
+    assert persisted.open_ports == (22, 443, 6379)
+    assert persisted.services[-1] == "REDIS (Redis 8.2)"
+    assert persisted.last_change == observed
+    events = store.list_events(scope=asset.scope)
+    assert any(
+        event.event_type == "port_opened" and "6379/tcp REDIS (Redis 8.2)" in event.details
+        for event in events
+    )
+
+
+def test_persisted_fingerprints_refuse_missing_or_stale_asset(tmp_path):
+    store = InventoryStore(tmp_path / "inventory.sqlite3")
+    missing = _asset()
+    fingerprint = ServiceFingerprint(host="x", ip=missing.ip, port=22, protocol="ssh")
+
+    with pytest.raises(ValueError, match="no longer exists"):
+        persist_asset_fingerprints(store, missing, [fingerprint])
+
+    persisted = store.record_device(
+        missing.scope,
+        device_from_asset(missing),
+        observed_at=missing.first_seen,
+    )
+    changed = NetworkIntelligenceDevice(
+        host=DiscoveredHost(ip="192.168.1.21", hostname=persisted.hostname, mac=persisted.mac),
+        kind=persisted.kind,
+        open_ports=persisted.open_ports,
+        services=persisted.services,
+        evidence=persisted.evidence,
+        risk=persisted.risk,
+        vendor=persisted.vendor,
+        classification_confidence=persisted.classification_confidence,
+        classification_signals=persisted.classification_signals,
+    )
+    store.record_device(missing.scope, changed, observed_at=missing.first_seen + timedelta(minutes=1))
+
+    with pytest.raises(ValueError, match="changed before fingerprints"):
+        persist_asset_fingerprints(store, persisted, [fingerprint])
+
+
+def test_persisted_noop_fingerprint_returns_current_asset_without_new_event(tmp_path):
+    store, asset = _persisted_asset(tmp_path)
+    before_events = store.list_events(scope=asset.scope)
+
+    result = persist_asset_fingerprints(
+        store,
+        asset,
+        [ServiceFingerprint(host="x", ip="192.168.1.99", port=22, protocol="ssh")],
+    )
+
+    assert result == asset
+    assert store.list_events(scope=asset.scope) == before_events
