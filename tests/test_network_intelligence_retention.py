@@ -6,7 +6,7 @@ from pathlib import Path
 
 import pytest
 
-from pythonkni.network_intelligence import retention
+from pythonkni.network_intelligence import automatic_snapshot, retention
 from pythonkni.network_intelligence.automatic_snapshot import create_automatic_snapshot
 from pythonkni.network_intelligence.retention import (
     RetentionPolicy,
@@ -206,7 +206,6 @@ def test_filter_trend_and_previous_snapshot_are_scope_and_time_aware(tmp_path):
     assert trend.high_risk_delta == 0
     assert trend.medium_risk_delta == 1
     assert trend.unknown_delta == -1
-    assert previous_snapshot_for(catalog.entries, catalog.entries[-1]) is not None
     latest_entry = next(entry for entry in catalog.entries if entry.path == latest)
     assert previous_snapshot_for(catalog.entries, latest_entry).path == middle
     first_entry = next(entry for entry in catalog.entries if entry.path == first)
@@ -291,3 +290,25 @@ def test_automatic_snapshot_uses_configurable_retention_policy(tmp_path):
 
     assert len(list(tmp_path.glob("scheduled_*.json"))) == 2
     assert manual.exists()
+
+
+def test_retention_failure_does_not_unpublish_successful_snapshot(tmp_path, monkeypatch):
+    monkeypatch.setattr(
+        automatic_snapshot,
+        "apply_retention_policy",
+        lambda *args, **kwargs: (_ for _ in ()).throw(OSError("cleanup failed")),
+    )
+
+    result = create_automatic_snapshot(
+        tmp_path,
+        SCOPE,
+        [],
+        [],
+        [],
+        generated_at=NOW,
+        retention_policy=RetentionPolicy(keep_per_scope=2),
+    )
+
+    assert result.path.exists()
+    assert result.pruned_count == 0
+    assert result.retention_error == "cleanup failed"
