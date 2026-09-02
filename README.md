@@ -1,12 +1,12 @@
 # PythonKni
 
-![Python](https://img.shields.io/badge/Python-3.10%2B-3776AB)
+![Python](https://img.shields.io/badge/Python-3.13-3776AB)
 ![PyQt5](https://img.shields.io/badge/UI-PyQt5-41CD52)
 ![Platform](https://img.shields.io/badge/platform-Windows-blue)
 ![Build](https://img.shields.io/badge/build-PyInstaller-orange)
-![Tests](https://img.shields.io/badge/tests-686%20pytest-green)
-![Coverage](https://img.shields.io/badge/branch%20coverage-92.9%25-green)
-![Services](https://img.shields.io/badge/service%20coverage-93.2%25-green)
+![Tests](https://img.shields.io/badge/tests-1052%20pytest-green)
+![Coverage](https://img.shields.io/badge/branch%20coverage-92.8%25-green)
+![Services](https://img.shields.io/badge/service%20coverage-93.5%25-green)
 ![Dependencies](https://img.shields.io/badge/dependencies-SHA--256%20locked-blueviolet)
 ![Audit](https://img.shields.io/badge/security-pip--audit-success)
 ![Lint](https://img.shields.io/badge/lint-Ruff%20F%20%2B%20I-purple)
@@ -140,7 +140,7 @@ requirements-dev.in  ──pip-tools──► requirements-dev.txt
        ranges                     exact pins + SHA-256 hashes
 ```
 
-The canonical resolver/build environment is Windows with **CPython 3.10.11**. CI and release jobs:
+The canonical resolver/build environment is Windows with **CPython 3.13.15** using the normal GIL-enabled interpreter. PythonKni supports the Python 3.13 series (`>=3.13,<3.14`). CI and release jobs:
 
 1. install both locks with `pip --require-hashes`;
 2. validate lock structure;
@@ -149,7 +149,7 @@ The canonical resolver/build environment is Windows with **CPython 3.10.11**. CI
 5. generate a CycloneDX JSON SBOM;
 6. continue only if the graph is valid and no known vulnerability is reported.
 
-GitHub Actions are pinned by immutable commit SHA and Dependabot checks Python dependencies and Actions weekly.
+GitHub Actions are pinned by immutable commit SHA and Dependabot checks Python dependencies and Actions weekly. See [`docs/python-runtime.md`](docs/python-runtime.md) for the interpreter support contract.
 
 ### Real distributable validation
 
@@ -175,6 +175,7 @@ PythonKni/
 ├─ assets/
 ├─ docs/
 │  ├─ architecture.md
+│  ├─ python-runtime.md
 │  ├─ security.md
 │  └─ usage.md
 ├─ pythonkni/
@@ -207,10 +208,10 @@ PythonKni/
 ### Python
 
 ```text
-Python >= 3.10
+Python >= 3.13, < 3.14
 ```
 
-The canonical Windows CI/release environment is **CPython 3.10.11**.
+The canonical Windows CI/release environment is **CPython 3.13.15** using the normal GIL-enabled build. Python 3.14+ and free-threaded CPython builds are not currently claimed as supported.
 
 ### Python dependencies
 
@@ -232,7 +233,7 @@ These executables are outside the Python dependency lock and Python SBOM.
 ```powershell
 git clone https://github.com/DavidEgeaCalatayud/PythonKni.git
 cd PythonKni
-py -3.10 -m venv .venv
+py -3.13 -m venv .venv
 .\.venv\Scripts\Activate.ps1
 python -m pip install --require-hashes -r requirements.txt
 python main.py
@@ -246,7 +247,7 @@ python -m pip install --require-hashes -r requirements-dev.txt
 
 ### Updating dependencies
 
-Do not hand-edit generated transitive pins or hashes. Change the relevant `.in` policy and regenerate the lock from the canonical Windows / CPython 3.10.11 environment:
+Do not hand-edit generated transitive pins or hashes. Change the relevant `.in` policy and regenerate the lock from the canonical Windows / CPython 3.13.15 environment:
 
 ```powershell
 python -m piptools compile requirements.in --generate-hashes --allow-unsafe --strip-extras --no-header --output-file requirements.txt
@@ -285,13 +286,13 @@ See [`docs/security.md`](docs/security.md).
 
 ## Testing and coverage
 
-The current behavior-driven suite contains **686 tests**.
+The current behavior-driven suite contains **1,052 tests**.
 
-Measured branch coverage on the canonical Windows CI environment:
+Measured branch coverage on the canonical Windows / CPython 3.13.15 CI environment:
 
 ```text
-Repository-wide                 92.9%
-All service.py modules          93.2%
+Repository-wide                 92.8%
+All service.py modules          93.5%
 ```
 
 Key service coverage:
@@ -447,7 +448,7 @@ Business/OS logic belongs in `service.py`; Qt orchestration belongs in `window.p
 ## Current limitations
 
 - Windows is the only platform currently packaged and enforced by CI.
-- The canonical reproducible environment is Windows / CPython 3.10.11; a broader Python/platform matrix is not currently claimed.
+- The canonical reproducible environment is Windows / CPython 3.13.15; compatibility is currently claimed only for the Python 3.13 series and the normal GIL-enabled interpreter, not Python 3.14+, free-threaded builds or a broader platform matrix.
 - OCR depends on local Tesseract/Poppler installation and document quality.
 - DOCX → PDF conversion is intentionally simplified and cannot reproduce every Microsoft Word layout feature.
 - Network/system capabilities depend on Windows permissions, topology, firewall policy and available OS utilities.
@@ -485,6 +486,7 @@ Business/OS logic belongs in `service.py`; Qt orchestration belongs in `window.p
 ## Documentation
 
 - [`docs/architecture.md`](docs/architecture.md) — dependency boundaries, infrastructure and coverage ratchets
+- [`docs/python-runtime.md`](docs/python-runtime.md) — supported interpreter series, canonical runtime and migration validation contract
 - [`docs/usage.md`](docs/usage.md) — per-tool operation, cancellation, permissions and troubleshooting
 - [`docs/security.md`](docs/security.md) — security controls, sensitive-data flows, destructive operations and supply-chain limits
 - [`CHANGELOG.md`](CHANGELOG.md) — development history
