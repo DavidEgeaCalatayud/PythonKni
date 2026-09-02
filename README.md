@@ -4,8 +4,8 @@
 ![PyQt5](https://img.shields.io/badge/UI-PyQt5-41CD52)
 ![Platform](https://img.shields.io/badge/platform-Windows-blue)
 ![Build](https://img.shields.io/badge/build-PyInstaller-orange)
-![Tests](https://img.shields.io/badge/tests-1068%20pytest-green)
-![Coverage](https://img.shields.io/badge/branch%20coverage-92.8%25-green)
+![Tests](https://img.shields.io/badge/tests-1131%20pytest-green)
+![Coverage](https://img.shields.io/badge/branch%20coverage-93.0%25-green)
 ![Services](https://img.shields.io/badge/service%20coverage-93.5%25-green)
 ![Dependencies](https://img.shields.io/badge/dependencies-SHA--256%20locked-blueviolet)
 ![Audit](https://img.shields.io/badge/security-pip--audit-success)
@@ -28,9 +28,9 @@ The repository is maintained as an application rather than a collection of scrip
 | **File Converter** | Convert images, PDF, DOCX, TXT and KML, including batch TXT/KML workflows |
 | **PDF Toolkit** | Merge, split, extract, reorder and read PDFs through `pypdf`; optional OCR for scanned documents |
 | **Duplicate Finder** | Detect duplicates through staged hashing plus byte verification and move copies with restoration manifests |
-| **Network Explorer** | Discover IPv4 interfaces/hosts, resolve names, inspect ARP data and scan bounded TCP port ranges |
+| **Network Explorer** | Discover IPv4 interfaces/hosts, scan bounded TCP port ranges and explicitly fingerprint known-open services through the pinned Nerva engine |
 | **Camera Exposure Auditor** | Audit authorized local camera exposure through bounded ONVIF/HTTP(S)/RTSP evidence without credentials or media retrieval |
-| **Network Intelligence** | Persist local assets/relationships, score exposure, compare/history snapshots, schedule checks, detect meaningful changes and manage bounded retention |
+| **Network Intelligence** | Persist local assets/relationships, accept explicit service-fingerprint enrichment, score exposure, compare/history snapshots, schedule checks, detect meaningful changes and manage bounded retention |
 | **Process Manager** | Inspect processes, filter resource use, safely terminate selected processes and query optional VirusTotal reports |
 | **Temporary Cleaner** | Preview and clean explicitly authorized temporary/cache targets without following symlinks/reparse points |
 | **WiFi Profiles** | Read locally stored Windows WiFi profiles for authorized support/diagnostics |
@@ -132,25 +132,28 @@ requirements-dev.in  ──pip-tools──► requirements-dev.txt
 
 The canonical resolver/build environment is Windows with **CPython 3.13.15** using the normal GIL-enabled interpreter. PythonKni supports the Python 3.13 series (`>=3.13,<3.14`). CI and release jobs install both locks with `pip --require-hashes`, validate lock structure and installed consistency, run strict runtime/development `pip-audit`, and generate a CycloneDX JSON SBOM before application validation continues.
 
-GitHub Actions are pinned by immutable commit SHA and Dependabot checks Python dependencies and Actions weekly. See [`docs/python-runtime.md`](docs/python-runtime.md).
+The optional service-fingerprinting engine is similarly reproducible: `third_party/nerva.lock.json` pins **Nerva v1.69.4** for Windows amd64 and SHA-256 `59e59eb54c8c5c581031387a0aa23c98983db94301e811f3c9b1802a05fc97f7`. Build/release staging verifies that digest before extraction and requires the upstream Apache-2.0 license; PythonKni never downloads Nerva at application runtime.
+
+GitHub Actions are pinned by immutable commit SHA and Dependabot checks Python dependencies and Actions weekly. See [`docs/python-runtime.md`](docs/python-runtime.md) and [`docs/network-service-fingerprinting.md`](docs/network-service-fingerprinting.md).
 
 ### Network Intelligence quality controls
 
 Network Intelligence keeps normal runtime OUI lookup fully offline while a build/maintenance-time updater can regenerate the bundled registry from the official IEEE MA-L CSV. The checked-in snapshot currently contains **40,046 unique OUI-24 assignments** plus provenance/hash metadata; normal runtime operation performs no IEEE lookup.
 
-CI/release also enforce an incremental structural typing ratchet for `pythonkni/network_intelligence`. The current protected package baseline is **668/721 annotation slots (92.65%)**, **264 fully annotated / 303 tracked callables**, and at most **39 explicit `Any` annotations**. Fifteen strict modules must stay completely annotated with zero explicit `Any`. This is an AST annotation guardrail, not a substitute for semantic checking by `mypy`/`pyright`.
+CI/release also enforce an incremental structural typing ratchet for `pythonkni/network_intelligence`. The current protected package baseline is **683/736 annotation slots (92.8%)**, **269 fully annotated / 308 tracked callables**, and at most **39 explicit `Any` annotations**. Fifteen strict modules must stay completely annotated with zero explicit `Any`. This is an AST annotation guardrail, not a substitute for semantic checking by `mypy`/`pyright`.
 
 See [`docs/network-intelligence-quality-gates.md`](docs/network-intelligence-quality-gates.md) and [`docs/network-oui-registry.md`](docs/network-oui-registry.md).
 
 ### Real distributable validation
 
-A source-test pass is not considered sufficient. CI builds the actual PyInstaller Windows bundle and runs:
+A source-test pass is not considered sufficient. CI first stages the exact pinned Nerva engine and its license/provenance, then builds the actual PyInstaller Windows bundle and verifies the packaged engine with:
 
 ```powershell
+dist\PythonKni\_internal\third_party\nerva\nerva.exe --capabilities
 dist\PythonKni\PythonKni.exe --smoke-test
 ```
 
-The validated bundle is then packaged as ZIP/checksum, compiled into a per-user Inno Setup installer and exercised through a second real lifecycle smoke: silent install, execution of the **installed** EXE, silent uninstall and cleanup verification. See [`docs/windows-installer.md`](docs/windows-installer.md).
+The validated bundle is then packaged as ZIP/checksum, compiled into a per-user Inno Setup installer and exercised through a second real lifecycle smoke: silent install, execution of the **installed** EXE, silent uninstall and cleanup verification. See [`docs/network-service-fingerprinting.md`](docs/network-service-fingerprinting.md) and [`docs/windows-installer.md`](docs/windows-installer.md).
 
 ---
 
@@ -169,6 +172,7 @@ PythonKni/
 ├─ docs/
 │  ├─ architecture.md
 │  ├─ network-intelligence.md
+│  ├─ network-service-fingerprinting.md
 │  ├─ network-scheduled-monitoring.md
 │  ├─ network-change-notifications.md
 │  ├─ network-history-center.md
@@ -186,15 +190,20 @@ PythonKni/
 ├─ pythonkni/
 │  ├─ core/
 │  ├─ infrastructure/
+│  ├─ network/
 │  └─ network_intelligence/
 ├─ scripts/
 │  ├─ benchmark_network_intelligence.py
 │  ├─ build_windows_installer.ps1
 │  ├─ check_dependency_locks.py
 │  ├─ check_network_intelligence_typing.py
+│  ├─ fetch_nerva.ps1
 │  ├─ package_windows_bundle.ps1
 │  ├─ smoke_test_windows_installer.ps1
 │  └─ update_oui_registry.py
+├─ third_party/
+│  ├─ NOTICE.md
+│  └─ nerva.lock.json
 ├─ tests/
 ├─ tools/                       # adapters + shared Qt/runtime helpers
 ├─ main.py
@@ -255,14 +264,16 @@ Never commit or publicly share real API keys, WiFi credentials, private logs, sc
 
 ## Testing and quality gates
 
-The current behavior-driven suite contains **1,068 tests** on Windows / CPython 3.13.15.
+The current behavior-driven suite contains **1,131 tests** on Windows / CPython 3.13.15.
 
 ```text
-Repository-wide branch coverage                 92.8%
+Repository-wide branch coverage                 93.0%
 All pythonkni/*/service.py coverage              93.5%
+Network Explorer base window coverage            93.4%
+Nerva fingerprint adapter coverage               99.2%
 ```
 
-Coverage ratchets remain at **>=92.5% repository-wide** and **>=93.0% across services**, with stronger per-service/per-window floors for already-hardened areas. Network Intelligence additionally has its own structural typing ratchet described above.
+Coverage ratchets remain at **>=92.5% repository-wide** and **>=93.0% across services**, with stronger per-service/per-window floors for already-hardened areas. Network Intelligence additionally has its own structural typing ratchet described above. CI's grouped PowerShell coverage gates explicitly fail on any native subcommand error so an individual ratchet cannot be masked by a later successful command.
 
 ### CI-equivalent validation
 
@@ -280,14 +291,16 @@ python -m scripts.benchmark_network_intelligence
 python -m scripts.check_network_intelligence_typing
 python -m ruff check .
 python -m ruff format --check .
+.\scripts\fetch_nerva.ps1
 pyinstaller --noconfirm --clean PythonKni.spec
+dist\PythonKni\_internal\third_party\nerva\nerva.exe --capabilities
 dist\PythonKni\PythonKni.exe --smoke-test
 .\scripts\package_windows_bundle.ps1 -OutputPrefix "PythonKni-windows-x64"
 .\scripts\build_windows_installer.ps1 -OutputPrefix "PythonKni-windows-x64-setup"
 .\scripts\smoke_test_windows_installer.ps1 -InstallerPath ".\dist\PythonKni-windows-x64-setup.exe"
 ```
 
-The workflow also applies individual coverage ratchets and retains the Windows ZIP/checksum, installer/checksum, `coverage.xml`, Network Intelligence benchmark JSON, CycloneDX SBOM, OUI provenance metadata and both dependency locks with the validated artifact.
+The workflow also applies individual coverage ratchets and retains the Windows ZIP/checksum, installer/checksum, `coverage.xml`, Network Intelligence benchmark JSON, CycloneDX SBOM, OUI provenance metadata, the exact Nerva lock and both dependency locks with the validated artifact.
 
 ---
 
@@ -296,16 +309,18 @@ The workflow also applies individual coverage ratchets and retains the Windows Z
 Local Windows build:
 
 ```powershell
+.\scripts\fetch_nerva.ps1
 pyinstaller --noconfirm --clean PythonKni.spec
+dist\PythonKni\_internal\third_party\nerva\nerva.exe --capabilities
 dist\PythonKni\PythonKni.exe --smoke-test
 .\scripts\package_windows_bundle.ps1 -OutputPrefix "PythonKni-windows-x64"
 .\scripts\build_windows_installer.ps1 -OutputPrefix "PythonKni-windows-x64-setup"
 .\scripts\smoke_test_windows_installer.ps1 -InstallerPath ".\dist\PythonKni-windows-x64-setup.exe"
 ```
 
-Tags matching exact `vX.Y.Z` trigger `.github/workflows/release.yml`. Release validation repeats dependency integrity/audit gates, OUI validation, tests, coverage and Network Intelligence typing ratchets, lint/format, PyInstaller build and frozen smoke testing. Installer-enabled release source additionally builds and smoke-tests the version-bound Inno Setup installer before publication.
+Tags matching exact `vX.Y.Z` trigger `.github/workflows/release.yml`. Release validation repeats dependency integrity/audit gates, OUI validation, tests, coverage and Network Intelligence typing ratchets, lint/format, pinned Nerva staging/packaged capability verification, PyInstaller build and frozen smoke testing. Installer-enabled release source additionally builds and smoke-tests the version-bound Inno Setup installer before publication.
 
-`v0.1.0` is the first published public release and intentionally retains its original immutable source and six validated assets. Installer generation was added afterward; future installer-enabled releases publish the versioned ZIP/checksum, setup EXE/checksum, SBOM, OUI metadata and dependency locks. Historical recovery never injects new installer code into old immutable tags. See [`docs/release-readiness.md`](docs/release-readiness.md) and [`docs/windows-installer.md`](docs/windows-installer.md).
+`v0.1.0` is the first published public release and intentionally retains its original immutable source and six validated assets. Installer and Nerva packaging were added afterward; future enabled releases publish the versioned ZIP/checksum, setup EXE/checksum, SBOM, OUI metadata and dependency locks with Nerva embedded in the application bundle. Historical recovery never injects current installer or Nerva code/binaries into old immutable tags. See [`docs/release-readiness.md`](docs/release-readiness.md), [`docs/network-service-fingerprinting.md`](docs/network-service-fingerprinting.md) and [`docs/windows-installer.md`](docs/windows-installer.md).
 
 Windows Authenticode signing is not yet implemented and remains a separate release-engineering milestone.
 
@@ -342,6 +357,7 @@ For a conventional first-party domain, keep the adapter thin and put business/OS
 - OCR depends on local Tesseract/Poppler installation and document quality.
 - DOCX -> PDF conversion is intentionally simplified and cannot reproduce every Microsoft Word layout feature.
 - Network/system capabilities depend on Windows permissions, topology, firewall policy and available OS utilities.
+- Nerva integration currently fingerprints TCP services on ports already confirmed open; UDP/SCTP and Nerva misconfiguration checks remain deliberately out of scope for this milestone.
 - Localization infrastructure exists, but not every user-visible string is extracted/translated.
 - Windows executable/installer Authenticode signing remains release-engineering work.
 
@@ -365,6 +381,7 @@ For a conventional first-party domain, keep the adapter thin and put business/OS
 
 ### Product evolution
 
+- [x] Add pinned Nerva-backed application-layer service fingerprinting and explicit Network Intelligence enrichment for known-open TCP ports.
 - [ ] Build a **PC Health / System Intelligence dashboard** that composes existing services instead of duplicating their domain logic.
 - [ ] Add a unified operation/history and recovery center for reversible maintenance actions.
 - [ ] Add further defensive device-role context only when backed by explicit persisted evidence.
@@ -377,6 +394,7 @@ For a conventional first-party domain, keep the adapter thin and put business/OS
 
 - [`docs/architecture.md`](docs/architecture.md) — dependency boundaries, quality and packaging gates
 - [`docs/network-intelligence.md`](docs/network-intelligence.md) — Network Intelligence architecture, features and safety boundaries
+- [`docs/network-service-fingerprinting.md`](docs/network-service-fingerprinting.md) — pinned Nerva trust model, safe fingerprinting scope and explicit inventory enrichment
 - [`docs/network-scheduled-monitoring.md`](docs/network-scheduled-monitoring.md) — in-app scheduling and automatic snapshot semantics
 - [`docs/network-change-notifications.md`](docs/network-change-notifications.md) — meaningful-change notification engine
 - [`docs/network-history-center.md`](docs/network-history-center.md) — automatic history catalog, trends and retention
