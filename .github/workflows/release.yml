@@ -4,6 +4,8 @@ on:
   push:
     tags:
       - "v*.*.*"
+    branches:
+      - "release/v*.*.*"
 
 permissions:
   contents: write
@@ -20,19 +22,74 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Validate release tag
+      - name: Resolve and validate release ref
+        id: release_meta
         shell: powershell
         run: |
-          $tag = $env:GITHUB_REF_NAME
+          $bootstrap = $false
+
+          if ($env:GITHUB_REF_TYPE -eq "tag") {
+            $tag = $env:GITHUB_REF_NAME
+          } elseif (
+            $env:GITHUB_REF_TYPE -eq "branch" -and
+            $env:GITHUB_REF_NAME -match '^release/(v\d+\.\d+\.\d+)$'
+          ) {
+            $tag = $Matches[1]
+            $bootstrap = $true
+          } else {
+            throw "Release workflow requires an exact vX.Y.Z tag or release/vX.Y.Z branch."
+          }
+
           if ($tag -notmatch '^v\d+\.\d+\.\d+$') {
             throw "Release tags must use the exact vX.Y.Z format. Received: $tag"
           }
 
-          git fetch origin main
+          $project = Get-Content "pyproject.toml" -Raw
+          if ($project -notmatch '(?m)^version\s*=\s*"([^\"]+)"\s*$') {
+            throw "Could not resolve project.version from pyproject.toml."
+          }
+          $expectedTag = "v$($Matches[1])"
+          if ($tag -ne $expectedTag) {
+            throw "Release ref $tag does not match pyproject.toml version $expectedTag."
+          }
+
+          git fetch origin main --tags
+          if ($LASTEXITCODE -ne 0) {
+            throw "Could not fetch main and existing tags."
+          }
+
           git merge-base --is-ancestor $env:GITHUB_SHA origin/main
           if ($LASTEXITCODE -ne 0) {
-            throw "Release tag $tag must point to a commit contained in main."
+            throw "Release ref $tag must point to a commit contained in main."
           }
+
+          if ($bootstrap) {
+            $mainHead = (git rev-parse origin/main).Trim()
+            if ($mainHead -ne $env:GITHUB_SHA) {
+              throw "Release bootstrap $($env:GITHUB_REF_NAME) must point to the current main tip $mainHead, not $($env:GITHUB_SHA)."
+            }
+
+            $existingTagCommit = git rev-parse -q --verify "refs/tags/$tag^{commit}" 2>$null
+            $tagExists = $LASTEXITCODE -eq 0
+            if ($tagExists) {
+              $existingTagCommit = $existingTagCommit.Trim()
+              if ($existingTagCommit -ne $env:GITHUB_SHA) {
+                throw "Existing tag $tag points to $existingTagCommit instead of $($env:GITHUB_SHA); refusing to move it."
+              }
+            } else {
+              git tag $tag $env:GITHUB_SHA
+              if ($LASTEXITCODE -ne 0) {
+                throw "Could not create release tag $tag."
+              }
+
+              git push origin "refs/tags/$tag"
+              if ($LASTEXITCODE -ne 0) {
+                throw "Could not publish release tag $tag."
+              }
+            }
+          }
+
+          "tag=$tag" >> $env:GITHUB_OUTPUT
 
       - name: Set up Python
         uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7
@@ -135,15 +192,17 @@ jobs:
 
       - name: Package validated release bundle
         shell: powershell
-        run: .\scripts\package_windows_bundle.ps1 -OutputPrefix "PythonKni-${{ github.ref_name }}-windows-x64"
+        env:
+          RELEASE_TAG: ${{ steps.release_meta.outputs.tag }}
+        run: .\scripts\package_windows_bundle.ps1 -OutputPrefix "PythonKni-$env:RELEASE_TAG-windows-x64"
 
       - name: Upload validated release artifact
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
-          name: PythonKni-${{ github.ref_name }}-windows-x64
+          name: PythonKni-${{ steps.release_meta.outputs.tag }}-windows-x64
           path: |
-            dist/PythonKni-${{ github.ref_name }}-windows-x64.zip
-            dist/PythonKni-${{ github.ref_name }}-windows-x64.sha256
+            dist/PythonKni-${{ steps.release_meta.outputs.tag }}-windows-x64.zip
+            dist/PythonKni-${{ steps.release_meta.outputs.tag }}-windows-x64.sha256
             coverage.xml
             dependency-sbom.cdx.json
             assets/network_oui_prefixes.meta.json
@@ -156,8 +215,9 @@ jobs:
         shell: powershell
         env:
           GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ steps.release_meta.outputs.tag }}
         run: |
-          $tag = $env:GITHUB_REF_NAME
+          $tag = $env:RELEASE_TAG
           $zip = "dist\PythonKni-$tag-windows-x64.zip"
           $checksum = "dist\PythonKni-$tag-windows-x64.sha256"
           $sbom = "dependency-sbom.cdx.json"
