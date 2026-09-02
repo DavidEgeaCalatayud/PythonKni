@@ -1,10 +1,10 @@
 import sys
 
-from pythonkni.network_intelligence import notification_window as _notifications
+from pythonkni.network_intelligence import history_center_window as _history_center
 from pythonkni.network_intelligence import service as _service
 from pythonkni.network_intelligence import window as _window
 
-_window.Tool = _notifications.Tool
+_window.Tool = _history_center.Tool
 
 
 def _legacy_getattr(name):
