@@ -2,20 +2,20 @@
 
 This guide describes how to run PythonKni and how the current first-party tools behave from a user's perspective. PythonKni is primarily designed and validated for Windows.
 
-For architecture details, see [`architecture.md`](architecture.md). For authorization, privacy and destructive-operation notes, see [`security.md`](security.md).
+For architecture details, see [`architecture.md`](architecture.md). For the canonical interpreter contract, see [`python-runtime.md`](python-runtime.md). For authorization, privacy and destructive-operation notes, see [`security.md`](security.md).
 
 ## Run PythonKni
 
 ### Supported environment
 
-PythonKni requires **Python 3.10 or newer**. The canonical CI and release environment is **CPython 3.10.11 on Windows**.
+PythonKni supports the **Python 3.13 series** (`>=3.13,<3.14`). The canonical CI and release environment is **CPython 3.13.15 on Windows** using the normal GIL-enabled build.
 
 ### Development mode
 
-Create and activate a Python 3.10 virtual environment, then install the committed SHA-256-locked dependency graphs:
+Create and activate a Python 3.13 virtual environment, then install the committed SHA-256-locked dependency graphs:
 
 ```powershell
-py -3.10 -m venv .venv
+py -3.13 -m venv .venv
 .\.venv\Scripts\Activate.ps1
 python -m pip install --require-hashes -r requirements.txt
 python -m pip install --require-hashes -r requirements-dev.txt
@@ -279,7 +279,7 @@ When reporting a reproducible bug, expandable details plus the relevant `%LOCALA
 When a direct Python dependency must change:
 
 1. change its allowed range in `requirements.in` or `requirements-dev.in`;
-2. regenerate the lock with `pip-tools` on Windows / CPython 3.10.11;
+2. regenerate the lock with `pip-tools` on Windows / CPython 3.13.15;
 3. keep `--generate-hashes --allow-unsafe --strip-extras --no-header`;
 4. run the lock validator, `pip check` and both `pip-audit` gates;
 5. review version/hash changes before committing.
@@ -318,7 +318,7 @@ Do not bypass `--require-hashes`. A mismatch means the artifact is not one of th
 
 ## Development validation
 
-The current behavior-driven suite contains **686 tests**, with **92.9% repository-wide branch coverage** and **93.2% aggregate service coverage** on the canonical Windows CI environment.
+The current behavior-driven suite contains **1,052 tests**, with **92.8% repository-wide branch coverage** and **93.5% aggregate service coverage** on the canonical Windows / CPython 3.13.15 environment.
 
 The normal local validation path is:
 
@@ -337,7 +337,7 @@ pyinstaller --noconfirm --clean PythonKni.spec
 .\dist\PythonKni\PythonKni.exe --smoke-test
 ```
 
-CI and Release additionally enforce individual non-regression floors for every first-party service and for the 13 prioritized presentation windows. Current presentation floors are:
+CI and Release additionally enforce individual non-regression floors for every first-party service and for the prioritized presentation windows. Current presentation floors are:
 
 ```text
 Archive          >= 96.5%      Config           >= 90.0%
