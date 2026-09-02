@@ -4,9 +4,9 @@ from collections import defaultdict
 from dataclasses import replace
 from typing import Iterable
 
-from pythonkni.network.models import ServiceFingerprint
+from pythonkni.network.models import DiscoveredHost, ServiceFingerprint
 
-from .models import NetworkIntelligenceDevice
+from .models import AssetRecord, NetworkIntelligenceDevice
 
 
 def _fingerprint_service_label(fingerprint: ServiceFingerprint) -> str:
@@ -18,14 +18,30 @@ def _fingerprint_service_label(fingerprint: ServiceFingerprint) -> str:
     return fingerprint.protocol.upper()
 
 
+def device_from_asset(asset: AssetRecord) -> NetworkIntelligenceDevice:
+    """Rebuild the domain device represented by one persisted inventory asset."""
+
+    return NetworkIntelligenceDevice(
+        host=DiscoveredHost(ip=asset.ip, hostname=asset.hostname, mac=asset.mac),
+        kind=asset.kind,
+        open_ports=asset.open_ports,
+        services=asset.services,
+        evidence=asset.evidence,
+        risk=asset.risk,
+        vendor=asset.vendor,
+        classification_confidence=asset.classification_confidence,
+        classification_signals=asset.classification_signals,
+    )
+
+
 def enrich_device_with_fingerprints(
     device: NetworkIntelligenceDevice,
     fingerprints: Iterable[ServiceFingerprint],
 ) -> NetworkIntelligenceDevice:
-    """Overlay verified application-layer identities without changing scan/risk semantics.
+    """Overlay verified application-layer identities without changing risk semantics.
 
-    The enrichment is deliberately data-only. It does not run Nerva, does not change
-    risk by itself and therefore remains safe for inventory/history consumers.
+    The enrichment is deliberately data-only. It does not run Nerva and does not
+    change classification or risk by itself.
     """
 
     grouped: dict[int, list[ServiceFingerprint]] = defaultdict(list)
@@ -68,3 +84,33 @@ def enrich_device_with_fingerprints(
         services=tuple(services),
         evidence=tuple(dict.fromkeys(evidence)),
     )
+
+
+def enrich_asset_with_fingerprints(
+    asset: AssetRecord,
+    fingerprints: Iterable[ServiceFingerprint],
+) -> NetworkIntelligenceDevice:
+    """Apply explicitly confirmed fingerprints to a persisted asset observation.
+
+    Fingerprints from Network Explorer originate from ports that were first confirmed
+    open. Those identified ports may extend the smaller Network Intelligence probe
+    set, so they are merged into the observation before applying service labels.
+    """
+
+    matching = tuple(
+        fingerprint
+        for fingerprint in fingerprints
+        if not fingerprint.ip or fingerprint.ip == asset.ip
+    )
+    if not matching:
+        return device_from_asset(asset)
+
+    base = device_from_asset(asset)
+    existing = dict(zip(base.open_ports, base.services))
+    ports = tuple(sorted(set(base.open_ports) | {item.port for item in matching}))
+    expanded = replace(
+        base,
+        open_ports=ports,
+        services=tuple(existing.get(port, f"TCP/{port}") for port in ports),
+    )
+    return enrich_device_with_fingerprints(expanded, matching)
