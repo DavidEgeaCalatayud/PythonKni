@@ -15,9 +15,7 @@ def _source(count: int, *, vendor_prefix: str = "Vendor") -> bytes:
         for index in range(count)
     ]
     return (
-        "Registry,Assignment,Organization Name,Organization Address\n"
-        + "\n".join(rows)
-        + "\n"
+        "Registry,Assignment,Organization Name,Organization Address\n" + "\n".join(rows) + "\n"
     ).encode("utf-8")
 
 
@@ -59,19 +57,25 @@ def test_entry_count_continuity_accepts_exact_configured_boundary(tmp_path):
     source, registry, metadata = _write_valid_registry(tmp_path, count=20)
     source.write_bytes(_source(19, vendor_prefix="Updated"))
 
-    assert updater.update_registry(
-        registry_path=registry,
-        metadata_path=metadata,
-        source_file=source,
-        min_entries=1,
-        max_entry_drop_fraction=0.05,
-        retrieved_at=datetime(2026, 9, 3, tzinfo=timezone.utc),
-    ) is True
-    assert updater.validate_bundled_registry(
-        registry_path=registry,
-        metadata_path=metadata,
-        min_entries=1,
-    ) == 19
+    assert (
+        updater.update_registry(
+            registry_path=registry,
+            metadata_path=metadata,
+            source_file=source,
+            min_entries=1,
+            max_entry_drop_fraction=0.05,
+            retrieved_at=datetime(2026, 9, 3, tzinfo=timezone.utc),
+        )
+        is True
+    )
+    assert (
+        updater.validate_bundled_registry(
+            registry_path=registry,
+            metadata_path=metadata,
+            min_entries=1,
+        )
+        == 19
+    )
 
 
 @pytest.mark.parametrize("value", [-0.01, 1.0, 1.5])
@@ -115,9 +119,7 @@ def test_duplicate_metadata_must_match_ambiguous_registry_value(tmp_path):
         )
 
 
-def test_pair_publication_cleans_first_staged_file_when_second_stage_fails(
-    tmp_path, monkeypatch
-):
+def test_pair_publication_cleans_first_staged_file_when_second_stage_fails(tmp_path, monkeypatch):
     registry = tmp_path / "registry.csv"
     metadata = tmp_path / "metadata.json"
     registry.write_bytes(b"old-registry")
