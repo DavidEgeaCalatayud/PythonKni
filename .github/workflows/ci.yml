@@ -63,6 +63,7 @@ jobs:
 
       - name: Enforce priority-service coverage ratchets
         run: |
+          $PSNativeCommandUseErrorActionPreference = $true
           python -m coverage report --include="pythonkni/archive/service.py" --fail-under=95.0
           python -m coverage report --include="pythonkni/camera_auditor/service.py" --fail-under=94.0
           python -m coverage report --include="pythonkni/converter/service.py" --fail-under=94.0
@@ -79,6 +80,7 @@ jobs:
 
       - name: Enforce priority-window coverage ratchets
         run: |
+          $PSNativeCommandUseErrorActionPreference = $true
           python -m coverage report --include="pythonkni/archive/window.py" --fail-under=96.5
           python -m coverage report --include="pythonkni/camera_auditor/window.py" --fail-under=98.0
           python -m coverage report --include="pythonkni/config/window.py" --fail-under=90.0
