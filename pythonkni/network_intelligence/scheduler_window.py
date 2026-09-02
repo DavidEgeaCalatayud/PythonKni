@@ -15,6 +15,7 @@ from tools.ui_feedback import show_error, show_warning
 
 from .automatic_snapshot import AutomaticSnapshotResult, create_automatic_snapshot
 from .history_window import Tool as HistoryTool
+from .retention import RetentionPolicy
 from .scheduler import (
     DEFAULT_INTERVAL_MINUTES,
     ScheduleConfig,
@@ -227,6 +228,9 @@ class Tool(HistoryTool):
         self._scheduled_scan_active = False
         super().start_scan()
 
+    def _automatic_snapshot_retention_policy(self) -> RetentionPolicy:
+        return RetentionPolicy()
+
     def _automatic_snapshot_published(
         self,
         *,
@@ -267,6 +271,7 @@ class Tool(HistoryTool):
                 relationships,
                 events,
                 generated_at=generated_at,
+                retention_policy=self._automatic_snapshot_retention_policy(),
             )
         except Exception as error:
             show_error(
