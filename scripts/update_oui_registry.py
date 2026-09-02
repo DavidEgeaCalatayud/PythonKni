@@ -62,14 +62,7 @@ def _sha256(data: bytes) -> str:
 
 
 def normalize_assignment(value: str | None) -> str:
-    compact = (
-        (value or "")
-        .strip()
-        .upper()
-        .replace(":", "")
-        .replace("-", "")
-        .replace(".", "")
-    )
+    compact = (value or "").strip().upper().replace(":", "").replace("-", "").replace(".", "")
     if not _HEX_RE.fullmatch(compact):
         raise RegistryUpdateError(f"invalid MA-L assignment: {value!r}")
     return "-".join(compact[index : index + 2] for index in range(0, 6, 2))
@@ -77,9 +70,7 @@ def normalize_assignment(value: str | None) -> str:
 
 def normalize_vendor(value: str | None) -> str:
     normalized = unicodedata.normalize("NFC", value or "")
-    normalized = "".join(
-        char for char in normalized if unicodedata.category(char) != "Cf"
-    )
+    normalized = "".join(char for char in normalized if unicodedata.category(char) != "Cf")
     normalized = " ".join(normalized.split())
     if not normalized:
         raise RegistryUpdateError("vendor name is empty")
@@ -105,8 +96,7 @@ def parse_ieee_ma_l_csv(source: bytes) -> ParsedRegistry:
         required = {"Registry", "Assignment", "Organization Name"}
         if not reader.fieldnames or not required.issubset(set(reader.fieldnames)):
             raise RegistryUpdateError(
-                "IEEE MA-L CSV is missing required columns: "
-                + ", ".join(sorted(required))
+                "IEEE MA-L CSV is missing required columns: " + ", ".join(sorted(required))
             )
 
         vendors_by_prefix: dict[str, set[str]] = {}
@@ -131,9 +121,7 @@ def parse_ieee_ma_l_csv(source: bytes) -> ParsedRegistry:
     duplicates: list[DuplicateAssignment] = []
     for prefix in sorted(vendors_by_prefix):
         vendors = tuple(sorted(vendors_by_prefix[prefix], key=str.casefold))
-        entries.append(
-            RegistryEntry(prefix=prefix, vendor=_render_ambiguous_vendor(vendors))
-        )
+        entries.append(RegistryEntry(prefix=prefix, vendor=_render_ambiguous_vendor(vendors)))
         if len(vendors) > 1:
             duplicates.append(DuplicateAssignment(prefix=prefix, vendors=vendors))
     return ParsedRegistry(entries=tuple(entries), duplicate_assignments=tuple(duplicates))
@@ -205,8 +193,7 @@ def download_ieee_ma_l_csv(
         url,
         headers={
             "User-Agent": (
-                "PythonKni-OUI-Updater/1.0 "
-                "(https://github.com/DavidEgeaCalatayud/PythonKni)"
+                "PythonKni-OUI-Updater/1.0 (https://github.com/DavidEgeaCalatayud/PythonKni)"
             ),
             "Accept": "text/csv,*/*;q=0.1",
         },
@@ -276,9 +263,9 @@ def build_metadata(
         "source_last_modified": source.last_modified,
         "generator": "scripts/update_oui_registry.py",
     }
-    return (
-        json.dumps(payload, ensure_ascii=False, indent=2, sort_keys=True) + "\n"
-    ).encode("utf-8")
+    return (json.dumps(payload, ensure_ascii=False, indent=2, sort_keys=True) + "\n").encode(
+        "utf-8"
+    )
 
 
 def _stage_file(path: Path, content: bytes) -> Path:
@@ -478,8 +465,7 @@ def validate_bundled_registry(
     for key, value in expected.items():
         if metadata.get(key) != value:
             raise RegistryUpdateError(
-                f"OUI metadata mismatch for {key}: "
-                f"expected {value!r}, got {metadata.get(key)!r}"
+                f"OUI metadata mismatch for {key}: expected {value!r}, got {metadata.get(key)!r}"
             )
 
     source_hash = metadata.get("source_sha256")
@@ -503,9 +489,7 @@ def validate_bundled_registry(
         prefix = item.get("prefix")
         vendors = item.get("vendors")
         try:
-            normalized_prefix = normalize_assignment(
-                prefix if isinstance(prefix, str) else None
-            )
+            normalized_prefix = normalize_assignment(prefix if isinstance(prefix, str) else None)
         except RegistryUpdateError as exc:
             raise RegistryUpdateError("OUI metadata duplicate prefix is invalid") from exc
         if normalized_prefix != prefix or not isinstance(vendors, list) or len(vendors) < 2:
@@ -515,8 +499,7 @@ def validate_bundled_registry(
         previous_duplicate_prefix = prefix
 
         normalized_vendors = tuple(
-            normalize_vendor(vendor if isinstance(vendor, str) else None)
-            for vendor in vendors
+            normalize_vendor(vendor if isinstance(vendor, str) else None) for vendor in vendors
         )
         canonical_vendors = tuple(sorted(set(normalized_vendors), key=str.casefold))
         if canonical_vendors != normalized_vendors:
@@ -572,9 +555,7 @@ def main(argv: list[str] | None = None) -> int:
                 source_file=args.source_file,
                 min_entries=args.min_entries,
                 retrieved_at=(
-                    _parse_retrieved_at(args.retrieved_at)
-                    if args.retrieved_at
-                    else None
+                    _parse_retrieved_at(args.retrieved_at) if args.retrieved_at else None
                 ),
                 max_entry_drop_fraction=args.max_entry_drop_percent / 100.0,
             )
