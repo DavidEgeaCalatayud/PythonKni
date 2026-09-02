@@ -16,6 +16,7 @@ from .scheduler import automatic_snapshot_destination
 class AutomaticSnapshotResult:
     path: Path
     pruned_count: int
+    retention_error: str = ""
 
 
 def create_automatic_snapshot(
@@ -56,10 +57,17 @@ def create_automatic_snapshot(
             pass
         raise
 
-    cleanup = apply_retention_policy(
-        root,
-        retention_policy or RetentionPolicy(),
-        now=generated_at,
-        scope=scope,
-    )
+    try:
+        cleanup = apply_retention_policy(
+            root,
+            retention_policy or RetentionPolicy(),
+            now=generated_at,
+            scope=scope,
+        )
+    except Exception as error:
+        return AutomaticSnapshotResult(
+            path=destination,
+            pruned_count=0,
+            retention_error=str(error),
+        )
     return AutomaticSnapshotResult(path=destination, pruned_count=len(cleanup.removed))
