@@ -27,8 +27,7 @@ def test_base_network_worker_reports_discovered_host_and_checked_count(monkeypat
 
     assert any("Dispositivo: 192.168.1.2" in message for message in messages)
     assert summaries == [
-        "Escaneo de 192.168.1.0/30:\n"
-        "192.168.1.2 - Hostname: printer.local - MAC: AA:BB:CC:DD:EE:FF"
+        "Escaneo de 192.168.1.0/30:\n192.168.1.2 - Hostname: printer.local - MAC: AA:BB:CC:DD:EE:FF"
     ]
 
 
