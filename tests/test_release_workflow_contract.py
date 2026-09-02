@@ -32,7 +32,7 @@ def test_release_outputs_drive_packaging_artifact_and_publication():
 
     release_output = "steps.release_meta.outputs.tag"
     assert content.count(release_output) >= 4
-    assert 'RELEASE_TAG: ${{ steps.release_meta.outputs.tag }}' in content
-    assert 'PythonKni-${{ steps.release_meta.outputs.tag }}-windows-x64' in content
-    assert 'gh release create $tag' in content
+    assert "RELEASE_TAG: ${{ steps.release_meta.outputs.tag }}" in content
+    assert "PythonKni-${{ steps.release_meta.outputs.tag }}-windows-x64" in content
+    assert "gh release create $tag" in content
     assert "--verify-tag" in content
