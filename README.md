@@ -304,6 +304,22 @@ Windows executable signing and installer generation are not yet implemented.
 
 A loader-compatible module under `tools/` must end in `_tool.py`, expose `Tool`, inherit `tools.base_tool.BaseTool`, override `setup_ui()`, and define non-empty `name`, `description` and `category` metadata.
 
+Minimal loader-facing contract:
+
+```python
+from tools.base_tool import BaseTool
+
+
+class Tool(BaseTool):
+    name = "My New Tool"
+    description = "Describe what the tool does"
+    category = "Utilities"
+
+    def setup_ui(self):
+        # Build the Qt presentation layer here.
+        pass
+```
+
 For a conventional first-party domain, keep the adapter thin and put business/OS behavior in `service.py` and Qt orchestration in `window.py`. The loader/plugin contract is regression-tested by `tests/test_tool_contract.py`.
 
 ---
