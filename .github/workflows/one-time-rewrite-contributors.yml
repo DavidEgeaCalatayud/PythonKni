@@ -1,0 +1,86 @@
+name: One-time contributor history rewrite
+
+on:
+  push:
+    branches:
+      - maintenance/rewrite-contributors-2026-09-02
+
+permissions:
+  contents: write
+
+jobs:
+  rewrite-main:
+    if: github.repository == 'DavidEgeaCalatayud/PythonKni'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout full history
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          fetch-depth: 0
+          persist-credentials: true
+
+      - name: Rewrite bot attribution while preserving repository contents
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          git fetch origin main --force
+          ORIGINAL_MAIN="$(git rev-parse origin/main)"
+          BEFORE_TREE="$(git rev-parse "${ORIGINAL_MAIN}^{tree}")"
+
+          if [ "$ORIGINAL_MAIN" != "0bdc30fb21e453530380c4e0eba804050b89eee2" ]; then
+            echo "main moved unexpectedly: $ORIGINAL_MAIN" >&2
+            exit 1
+          fi
+
+          git checkout -B main origin/main
+
+          FILTER_BRANCH_SQUELCH_WARNING=1 git filter-branch -f \
+            --env-filter '
+              BOT_EMAIL="41898282+github-actions[bot]@users.noreply.github.com"
+              OWNER_NAME="DavidEgea"
+              OWNER_EMAIL="114010484+DavidEgeaCalatayud@users.noreply.github.com"
+
+              if [ "$GIT_AUTHOR_EMAIL" = "$BOT_EMAIL" ]; then
+                GIT_AUTHOR_NAME="$OWNER_NAME"
+                GIT_AUTHOR_EMAIL="$OWNER_EMAIL"
+                export GIT_AUTHOR_NAME GIT_AUTHOR_EMAIL
+              fi
+
+              if [ "$GIT_COMMITTER_EMAIL" = "$BOT_EMAIL" ]; then
+                GIT_COMMITTER_NAME="$OWNER_NAME"
+                GIT_COMMITTER_EMAIL="$OWNER_EMAIL"
+                export GIT_COMMITTER_NAME GIT_COMMITTER_EMAIL
+              fi
+            ' \
+            --msg-filter 'sed "/^Co-authored-by: github-actions\[bot\] <41898282+github-actions\[bot\]@users\.noreply\.github\.com>$/d"' \
+            -- main
+
+          NEW_MAIN="$(git rev-parse main)"
+          AFTER_TREE="$(git rev-parse "${NEW_MAIN}^{tree}")"
+
+          if [ "$BEFORE_TREE" != "$AFTER_TREE" ]; then
+            echo "Tree changed during history rewrite: $BEFORE_TREE -> $AFTER_TREE" >&2
+            exit 1
+          fi
+
+          if git log main --format='%an <%ae>%n%cn <%ce>%n%B' | grep -F 'github-actions[bot]'; then
+            echo "github-actions[bot] is still reachable from rewritten main" >&2
+            exit 1
+          fi
+
+          if git merge-base --is-ancestor 3eb20ab61dad7dd68fe661a9c29b7f90575819d9 main; then
+            echo "Old bot-authored commit is still reachable from rewritten main" >&2
+            exit 1
+          fi
+
+          if git merge-base --is-ancestor 8741be1c40dcde83ca3ed34cd6db654352ab93fe main; then
+            echo "Old co-authored commit is still reachable from rewritten main" >&2
+            exit 1
+          fi
+
+          echo "Original main: $ORIGINAL_MAIN"
+          echo "Rewritten main: $NEW_MAIN"
+          echo "Preserved tree: $AFTER_TREE"
+
+          git push --force-with-lease=refs/heads/main:${ORIGINAL_MAIN} origin main:main
