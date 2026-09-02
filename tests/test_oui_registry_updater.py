@@ -40,6 +40,10 @@ def test_ieee_parser_accepts_utf8_bom_and_unicode_vendor_names():
     )
 
 
+def test_vendor_normalization_removes_unicode_format_controls():
+    assert updater.normalize_vendor("\u200bASUNG TECHNO CO.,Ltd") == "ASUNG TECHNO CO.,Ltd"
+
+
 @pytest.mark.parametrize(
     "source, message",
     [
