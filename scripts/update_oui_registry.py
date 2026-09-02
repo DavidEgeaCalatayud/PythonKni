@@ -5,6 +5,7 @@ import csv
 import hashlib
 import io
 import json
+import math
 import os
 import re
 import tempfile
@@ -19,6 +20,7 @@ IEEE_MA_L_CSV_URL = "https://standards-oui.ieee.org/oui/oui.csv"
 SOURCE_NAME = "IEEE Registration Authority MA-L Public Listing"
 SCHEMA_VERSION = 1
 DEFAULT_MIN_ENTRIES = 20_000
+DEFAULT_MAX_ENTRY_DROP_FRACTION = 0.05
 MAX_SOURCE_BYTES = 32 * 1024 * 1024
 _HEX_RE = re.compile(r"^[0-9A-F]{6}$")
 _REPO_ROOT = Path(__file__).resolve().parents[1]
@@ -302,14 +304,20 @@ def write_registry_pair(
     registry_bytes: bytes,
     metadata_bytes: bytes,
 ) -> None:
-    registry_temp = _stage_file(registry_path, registry_bytes)
-    metadata_temp = _stage_file(metadata_path, metadata_bytes)
+    registry_temp: Path | None = None
+    metadata_temp: Path | None = None
     try:
+        registry_temp = _stage_file(registry_path, registry_bytes)
+        metadata_temp = _stage_file(metadata_path, metadata_bytes)
         os.replace(registry_temp, registry_path)
+        registry_temp = None
         os.replace(metadata_temp, metadata_path)
+        metadata_temp = None
     finally:
-        registry_temp.unlink(missing_ok=True)
-        metadata_temp.unlink(missing_ok=True)
+        if registry_temp is not None:
+            registry_temp.unlink(missing_ok=True)
+        if metadata_temp is not None:
+            metadata_temp.unlink(missing_ok=True)
 
 
 def _load_metadata(path: Path) -> dict[str, object] | None:
@@ -320,6 +328,46 @@ def _load_metadata(path: Path) -> dict[str, object] | None:
     return value if isinstance(value, dict) else None
 
 
+def _validated_existing_registry_count(
+    *,
+    registry_path: Path,
+    metadata_path: Path,
+    min_entries: int,
+    expected_source_url: str,
+) -> int | None:
+    if not registry_path.is_file() or not metadata_path.is_file():
+        return None
+    try:
+        return validate_bundled_registry(
+            registry_path=registry_path,
+            metadata_path=metadata_path,
+            min_entries=min_entries,
+            expected_source_url=expected_source_url,
+        )
+    except RegistryUpdateError:
+        return None
+
+
+def _enforce_entry_count_continuity(
+    *,
+    previous_count: int | None,
+    new_count: int,
+    max_drop_fraction: float,
+) -> None:
+    if not 0.0 <= max_drop_fraction < 1.0:
+        raise RegistryUpdateError("maximum entry-drop fraction must be in [0, 1)")
+    if previous_count is None:
+        return
+    minimum_allowed = math.ceil(previous_count * (1.0 - max_drop_fraction))
+    if new_count < minimum_allowed:
+        drop_percent = ((previous_count - new_count) / previous_count) * 100.0
+        raise RegistryUpdateError(
+            "IEEE MA-L unique assignment count dropped unexpectedly from "
+            f"{previous_count} to {new_count} ({drop_percent:.2f}%); "
+            f"maximum allowed drop is {max_drop_fraction * 100:.2f}%"
+        )
+
+
 def update_registry(
     *,
     registry_path: Path = DEFAULT_REGISTRY_PATH,
@@ -328,9 +376,17 @@ def update_registry(
     source_file: Path | None = None,
     min_entries: int = DEFAULT_MIN_ENTRIES,
     retrieved_at: datetime | None = None,
+    max_entry_drop_fraction: float = DEFAULT_MAX_ENTRY_DROP_FRACTION,
 ) -> bool:
     if min_entries < 1:
         raise RegistryUpdateError("minimum entry count must be positive")
+
+    previous_count = _validated_existing_registry_count(
+        registry_path=registry_path,
+        metadata_path=metadata_path,
+        min_entries=min_entries,
+        expected_source_url=source_url,
+    )
 
     if source_file is None:
         source = download_ieee_ma_l_csv(source_url)
@@ -351,6 +407,11 @@ def update_registry(
             f"IEEE MA-L CSV contains only {len(parsed.entries)} unique entries; "
             f"expected at least {min_entries}"
         )
+    _enforce_entry_count_continuity(
+        previous_count=previous_count,
+        new_count=len(parsed.entries),
+        max_drop_fraction=max_entry_drop_fraction,
+    )
 
     registry_bytes = render_registry(parsed.entries)
     existing_metadata = _load_metadata(metadata_path)
@@ -429,27 +490,41 @@ def validate_bundled_registry(
         raise RegistryUpdateError("OUI metadata retrieved_at is missing")
     _parse_retrieved_at(retrieved_at)
 
+    registry_by_prefix = {entry.prefix: entry.vendor for entry in entries}
     duplicates = metadata.get("duplicate_assignments")
     duplicate_count = metadata.get("duplicate_assignment_count")
     if not isinstance(duplicates, list) or duplicate_count != len(duplicates):
         raise RegistryUpdateError("OUI metadata duplicate assignment data is invalid")
+
+    previous_duplicate_prefix: str | None = None
     for item in duplicates:
         if not isinstance(item, dict):
             raise RegistryUpdateError("OUI metadata duplicate assignment item is invalid")
         prefix = item.get("prefix")
         vendors = item.get("vendors")
         try:
-            normalized_prefix = normalize_assignment(prefix if isinstance(prefix, str) else None)
+            normalized_prefix = normalize_assignment(
+                prefix if isinstance(prefix, str) else None
+            )
         except RegistryUpdateError as exc:
             raise RegistryUpdateError("OUI metadata duplicate prefix is invalid") from exc
         if normalized_prefix != prefix or not isinstance(vendors, list) or len(vendors) < 2:
             raise RegistryUpdateError("OUI metadata duplicate assignment item is invalid")
+        if previous_duplicate_prefix is not None and prefix <= previous_duplicate_prefix:
+            raise RegistryUpdateError("OUI metadata duplicate assignments are not sorted")
+        previous_duplicate_prefix = prefix
+
         normalized_vendors = tuple(
             normalize_vendor(vendor if isinstance(vendor, str) else None)
             for vendor in vendors
         )
-        if tuple(sorted(set(normalized_vendors), key=str.casefold)) != normalized_vendors:
+        canonical_vendors = tuple(sorted(set(normalized_vendors), key=str.casefold))
+        if canonical_vendors != normalized_vendors:
             raise RegistryUpdateError("OUI metadata duplicate vendors are not canonical")
+        if registry_by_prefix.get(prefix) != _render_ambiguous_vendor(canonical_vendors):
+            raise RegistryUpdateError(
+                f"OUI metadata duplicate assignment does not match registry value: {prefix}"
+            )
     return len(entries)
 
 
@@ -465,6 +540,12 @@ def _build_parser() -> argparse.ArgumentParser:
     update.add_argument("--source-url", default=IEEE_MA_L_CSV_URL)
     update.add_argument("--source-file", type=Path)
     update.add_argument("--min-entries", type=int, default=DEFAULT_MIN_ENTRIES)
+    update.add_argument(
+        "--max-entry-drop-percent",
+        type=float,
+        default=DEFAULT_MAX_ENTRY_DROP_FRACTION * 100.0,
+        help="Reject a refresh that drops more than this percentage from a valid prior registry.",
+    )
     update.add_argument(
         "--retrieved-at",
         help="Override the UTC retrieval timestamp (primarily for reproducible tests).",
@@ -495,6 +576,7 @@ def main(argv: list[str] | None = None) -> int:
                     if args.retrieved_at
                     else None
                 ),
+                max_entry_drop_fraction=args.max_entry_drop_percent / 100.0,
             )
             count = validate_bundled_registry(
                 registry_path=args.registry,
