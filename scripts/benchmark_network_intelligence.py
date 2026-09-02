@@ -8,19 +8,29 @@ from pythonkni.network_intelligence.models import DeviceKind
 from pythonkni.network_intelligence.oui import load_oui_registry, lookup_mac_vendor
 
 LOOKUP_CASES = (
-    ("00:11:32:AA:BB:CC", "Synology"),
-    ("24:5E:BE:11:22:33", "QNAP"),
-    ("0C:75:D2:AA:BB:CC", "Hikvision"),
-    ("74:C9:29:AA:BB:CC", "Dahua"),
-    ("F0:9F:C2:AA:BB:CC", "Ubiquiti"),
+    ("00:11:32:AA:BB:CC", "Synology Incorporated"),
+    ("24:5E:BE:11:22:33", "QNAP Systems, Inc."),
+    (
+        "0C:75:D2:AA:BB:CC",
+        "Hangzhou Hikvision Digital Technology Co.,Ltd.",
+    ),
+    ("74:C9:29:AA:BB:CC", "Zhejiang Dahua Technology Co., Ltd."),
+    ("F0:9F:C2:AA:BB:CC", "Ubiquiti Inc"),
     ("02:00:00:00:00:01", None),
     ("FF:FF:FF:FF:FF:FF", None),
 )
+MIN_REGISTRY_ENTRIES = 20_000
 LOOKUPS = 100_000
 CLASSIFICATIONS = 100_000
 
 
 def _benchmark_oui(registry) -> dict[str, object]:
+    if len(registry) < MIN_REGISTRY_ENTRIES:
+        raise SystemExit(
+            "OUI benchmark preflight failed: bundled registry contains "
+            f"{len(registry)} entries; expected at least {MIN_REGISTRY_ENTRIES}."
+        )
+
     for mac, expected in LOOKUP_CASES:
         actual = lookup_mac_vendor(mac, registry=registry)
         if actual != expected:
