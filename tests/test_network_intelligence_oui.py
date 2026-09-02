@@ -43,8 +43,7 @@ def test_bundled_registry_resolves_priority_network_vendors_offline():
     assert lookup_mac_vendor("00:11:32:AA:BB:CC") == "Synology Incorporated"
     assert lookup_mac_vendor("24:5E:BE:00:00:01") == "QNAP Systems, Inc."
     assert (
-        lookup_mac_vendor("0C:75:D2:12:34:56")
-        == "Hangzhou Hikvision Digital Technology Co.,Ltd."
+        lookup_mac_vendor("0C:75:D2:12:34:56") == "Hangzhou Hikvision Digital Technology Co.,Ltd."
     )
     assert lookup_mac_vendor("EC:71:DB:12:34:56") == "Reolink Innovation Limited"
     assert lookup_mac_vendor("F0:9F:C2:12:34:56") == "Ubiquiti Inc"
