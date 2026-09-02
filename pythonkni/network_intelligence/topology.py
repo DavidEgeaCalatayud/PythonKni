@@ -48,7 +48,7 @@ class NetworkTopology:
     note: str
 
 
-def _asset_sort_key(asset: AssetRecord):
+def _asset_sort_key(asset: AssetRecord) -> tuple[int, int | str]:
     try:
         address = ipaddress.ip_address(asset.ip)
     except ValueError:
