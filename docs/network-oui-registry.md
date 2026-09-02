@@ -23,9 +23,12 @@ MA-M and MA-S are intentionally outside this updater. They use 28-bit and 36-bit
 4. vendor names are Unicode NFC-normalized, Unicode format controls such as zero-width spaces are removed, and whitespace is collapsed;
 5. empty vendor names, invalid prefixes, malformed CSV and unexpected registry types fail the update;
 6. output entries are sorted lexicographically by OUI and written with canonical CSV headers/newlines;
-7. the generated registry must contain at least 20,000 unique assignments, preventing a truncated upstream response from replacing the bundled dataset.
+7. the generated registry must contain at least 20,000 unique assignments, preventing an obviously truncated upstream response from replacing the bundled dataset;
+8. when a valid prior registry exists, a refresh that reduces the unique assignment count by more than 5% is rejected by default, adding a relative truncation guard on top of the absolute floor.
 
-Given identical source bytes, the generated registry bytes are identical.
+Given identical source bytes, the generated registry bytes are identical. `.gitattributes` pins `assets/network_oui_prefixes.csv` to LF line endings so its SHA-256 remains byte-identical after Git checkout on Windows and Linux.
+
+The relative continuity threshold can be overridden deliberately with `--max-entry-drop-percent` during maintenance if IEEE performs a documented large-scale registry correction. The normal scheduled workflow uses the conservative 5% default.
 
 ## Duplicate IEEE assignments
 
@@ -38,7 +41,7 @@ When the same OUI has multiple distinct organization names, the updater:
 - stores one unique OUI row whose vendor value preserves every conflicting organization separated by ` / `;
 - records the conflict in `network_oui_prefixes.meta.json` under `duplicate_assignments`.
 
-Exact duplicate rows for the same normalized OUI/vendor collapse to one entry. The bundled CSV therefore always has unique prefixes while retaining upstream ambiguity instead of silently overwriting it.
+Exact duplicate rows for the same normalized OUI/vendor collapse to one entry. The bundled CSV therefore always has unique prefixes while retaining upstream ambiguity instead of silently overwriting it. Offline validation also verifies that every duplicate declared in metadata matches the exact ambiguous vendor value stored in the registry.
 
 ## Provenance metadata
 
