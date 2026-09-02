@@ -63,6 +63,9 @@ def normalize_assignment(value: str | None) -> str:
 
 def normalize_vendor(value: str | None) -> str:
     normalized = unicodedata.normalize("NFC", value or "")
+    normalized = "".join(
+        char for char in normalized if unicodedata.category(char) != "Cf"
+    )
     normalized = " ".join(normalized.split())
     if not normalized:
         raise RegistryUpdateError("vendor name is empty")
