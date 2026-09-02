@@ -62,6 +62,9 @@ jobs:
       - name: Compile Python files
         run: python -m compileall .
 
+      - name: Validate bundled IEEE OUI registry
+        run: python scripts/update_oui_registry.py validate
+
       - name: Run tests and collect branch coverage
         run: python -m pytest --cov=pythonkni --cov=tools --cov-branch --cov-report=term-missing --cov-report=xml
 
@@ -140,6 +143,7 @@ jobs:
             dist/PythonKni-${{ github.ref_name }}-windows-x64.sha256
             coverage.xml
             dependency-sbom.cdx.json
+            assets/network_oui_prefixes.meta.json
             requirements.txt
             requirements-dev.txt
           if-no-files-found: error
@@ -154,12 +158,13 @@ jobs:
           $zip = "dist\PythonKni-$tag-windows-x64.zip"
           $checksum = "dist\PythonKni-$tag-windows-x64.sha256"
           $sbom = "dependency-sbom.cdx.json"
+          $ouiMetadata = "assets\network_oui_prefixes.meta.json"
           $runtimeLock = "requirements.txt"
           $developmentLock = "requirements-dev.txt"
 
           gh release view $tag *> $null
           if ($LASTEXITCODE -eq 0) {
-            gh release upload $tag $zip $checksum $sbom $runtimeLock $developmentLock --clobber
+            gh release upload $tag $zip $checksum $sbom $ouiMetadata $runtimeLock $developmentLock --clobber
           } else {
-            gh release create $tag $zip $checksum $sbom $runtimeLock $developmentLock --title "PythonKni $tag" --generate-notes --verify-tag
+            gh release create $tag $zip $checksum $sbom $ouiMetadata $runtimeLock $developmentLock --title "PythonKni $tag" --generate-notes --verify-tag
           }
