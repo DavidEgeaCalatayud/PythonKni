@@ -1,6 +1,6 @@
 # Release readiness
 
-This document records the first-release gate for PythonKni after the Network Intelligence roadmap and Python runtime/quality-gate work through PR #64.
+This document records the first-release gate for PythonKni after the Network Intelligence roadmap, runtime/quality-gate work and public documentation synchronization.
 
 ## Intended first version
 
@@ -10,11 +10,11 @@ This document records the first-release gate for PythonKni after the Network Int
 0.1.0
 ```
 
-The coherent first release tag is therefore **`v0.1.0`**. This document does not assert that the tag or GitHub Release already exists; release status is established only after the tag-triggered workflow finishes successfully and the published assets are verified.
+The coherent first release tag is therefore **`v0.1.0`**. This document does not assert that the tag or GitHub Release already exists; release status is established only after the Release workflow finishes successfully and the published assets are verified.
 
 ## Current validated baseline
 
-The pre-release `main` baseline before this documentation synchronization has been validated on Windows / **CPython 3.13.15** with:
+The current pre-release `main` baseline has been validated on Windows / **CPython 3.13.15** with:
 
 - **1,060/1,060 tests** passing;
 - **92.8%** repository branch coverage;
@@ -30,7 +30,7 @@ The pre-release `main` baseline before this documentation synchronization has be
 - frozen `PythonKni.exe --smoke-test`;
 - ZIP/checksum artifact publication.
 
-A release tag must repeat the Release workflow on the exact tagged commit; a previous CI artifact is supporting evidence, not a substitute for the release run.
+A release must repeat the Release workflow on the exact release commit; a previous CI artifact is supporting evidence, not a substitute for the release run.
 
 ## Functional milestone completed
 
@@ -40,24 +40,38 @@ The quality/toolchain milestone also includes the CPython 3.13.15 runtime contra
 
 ## Release workflow contract
 
-A tag matching exact `vX.Y.Z` triggers `.github/workflows/release.yml`. The workflow must:
+`.github/workflows/release.yml` supports two controlled entry points that resolve to the same immutable `vX.Y.Z` release tag:
 
-1. confirm the tag uses exact semantic `vX.Y.Z` syntax and points to a commit contained in `main`;
-2. install both committed dependency locks with `--require-hashes`;
-3. validate locks, `pip check`, runtime/dev audits and CycloneDX SBOM;
-4. compile source and validate the bundled OUI registry offline;
-5. run the full test suite and coverage ratchets;
-6. enforce the Network Intelligence structural typing ratchet;
-7. run Ruff check/format;
-8. build with PyInstaller and run the frozen smoke test;
-9. package the versioned Windows ZIP + SHA-256 checksum;
-10. upload retained workflow artifacts and publish/update the GitHub Release with the validated files.
+1. a direct tag matching exact `vX.Y.Z` syntax; or
+2. a bootstrap branch matching exact `release/vX.Y.Z` syntax.
 
-The release is complete only after the workflow conclusion is `success` and the GitHub Release assets are present for the exact tag commit.
+Both paths require the resolved tag to match `project.version` in `pyproject.toml` and require the release SHA to be contained in `main`.
+
+The bootstrap branch path is deliberately stricter:
+
+- it must point to the **current tip of `main`** when the Release workflow starts;
+- if the tag does not yet exist, the workflow creates it at that exact SHA using the repository-scoped GitHub token;
+- if the tag already exists at the same SHA, the workflow is idempotent and continues;
+- if the tag already exists at a different SHA, the workflow fails and **never moves or rewrites the existing tag**.
+
+After resolving the release tag, the same workflow must:
+
+1. install both committed dependency locks with `--require-hashes`;
+2. validate locks, `pip check`, runtime/dev audits and CycloneDX SBOM;
+3. compile source and validate the bundled OUI registry offline;
+4. run the full test suite and coverage ratchets;
+5. enforce the Network Intelligence structural typing ratchet;
+6. run Ruff check/format;
+7. build with PyInstaller and run the frozen smoke test;
+8. package the versioned Windows ZIP + SHA-256 checksum;
+9. upload retained workflow artifacts; and
+10. publish/update the GitHub Release with the validated files.
+
+The release is complete only after the Release workflow conclusion is `success`, the immutable tag resolves to the intended `main` commit and the GitHub Release assets are present for that exact tag.
 
 ## Expected release assets
 
-The release path publishes the versioned Windows ZIP/checksum plus supply-chain evidence including the CycloneDX SBOM, OUI provenance metadata and runtime/development locks. CI additionally retains `coverage.xml` and the Network Intelligence benchmark artifact for build evidence.
+The release path publishes the versioned Windows ZIP/checksum plus supply-chain evidence including the CycloneDX SBOM, OUI provenance metadata and runtime/development locks. The retained workflow artifact also includes `coverage.xml` as build evidence.
 
 ## Known distribution limitations
 
