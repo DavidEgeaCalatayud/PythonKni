@@ -151,6 +151,11 @@ def test_history_center_dialog_indexes_filters_and_navigates(qtbot, tmp_path):
 
     assert dialog.table.rowCount() == 4
     assert "4 snapshot" in dialog.summary_label.text()
+    assert "2 scopes" in dialog.summary_label.text()
+    assert dialog.chart.entries == ()
+    assert "Selecciona un scope" in dialog.chart.empty_message
+    assert dialog.keep_spin.minimum() == 2
+
     scope_index = dialog.scope_filter.findData(SCOPE)
     dialog.scope_filter.setCurrentIndex(scope_index)
     time_index = dialog.time_filter.findData(7)
@@ -159,6 +164,7 @@ def test_history_center_dialog_indexes_filters_and_navigates(qtbot, tmp_path):
     assert dialog.table.rowCount() == 2
     assert [entry.path for entry in dialog.filtered_entries] == [second, latest]
     assert "Score 88 → 91" in dialog.summary_label.text()
+    assert dialog.chart.entries == dialog.filtered_entries
     assert latest.name in dialog.detail_area.toPlainText()
     assert dialog.previous_button.isEnabled()
     dialog._move_selection(-1)
@@ -184,13 +190,18 @@ def test_history_center_dialog_saves_retention_policy(qtbot, tmp_path):
     assert "Política guardada" in dialog.catalog_status.text()
 
 
-def test_history_center_dialog_cleanup_requires_confirmation_and_preserves_manual(
+def test_history_center_dialog_cleanup_requires_confirmation_and_preserves_baseline_pair(
     qtbot, monkeypatch, tmp_path
 ):
     automatic_dir = tmp_path / "scheduled"
     retention_path = tmp_path / "retention.json"
     now = datetime.now(timezone.utc)
     old = _write_snapshot(automatic_dir, "scheduled_192_old.json", now - timedelta(days=10))
+    previous = _write_snapshot(
+        automatic_dir,
+        "scheduled_192_previous.json",
+        now - timedelta(days=1),
+    )
     latest = _write_snapshot(automatic_dir, "scheduled_192_latest.json", now)
     manual = automatic_dir / "manual.json"
     manual.write_text("manual", encoding="utf-8")
@@ -201,15 +212,16 @@ def test_history_center_dialog_cleanup_requires_confirmation_and_preserves_manua
         RetentionPolicy(),
     )
     qtbot.addWidget(dialog)
-    dialog.keep_spin.setValue(1)
+    dialog.keep_spin.setValue(2)
     monkeypatch.setattr(QMessageBox, "question", lambda *args, **kwargs: QMessageBox.Yes)
 
     dialog._clean_now()
 
     assert not old.exists()
+    assert previous.exists()
     assert latest.exists()
     assert manual.exists()
-    assert load_retention_policy(retention_path).keep_per_scope == 1
+    assert load_retention_policy(retention_path).keep_per_scope == 2
     assert "1 snapshot" in dialog.catalog_status.text()
 
 
