@@ -100,6 +100,9 @@ jobs:
       - name: Run Network Intelligence benchmark smoke
         run: python -m scripts.benchmark_network_intelligence | Tee-Object -FilePath network-intelligence-benchmark.json
 
+      - name: Enforce Network Intelligence typing ratchet
+        run: python -m scripts.check_network_intelligence_typing
+
       - name: Ruff check
         run: python -m ruff check .
 

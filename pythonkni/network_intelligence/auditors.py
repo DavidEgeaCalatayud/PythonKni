@@ -7,7 +7,12 @@ from .models import AssetRecord, AuditFinding, DeviceAuditReport, DeviceKind
 _SEVERITY_ORDER = {RiskLevel.LOW: 0, RiskLevel.MEDIUM: 1, RiskLevel.HIGH: 2}
 
 
-def _finding(severity, title, evidence, recommendation):
+def _finding(
+    severity: RiskLevel,
+    title: str,
+    evidence: str,
+    recommendation: str,
+) -> AuditFinding:
     return AuditFinding(
         severity=severity,
         title=title,
