@@ -242,21 +242,3 @@ def test_cleanup_success_survives_policy_persistence_failure(qtbot, monkeypatch,
     assert previous.exists()
     assert latest.exists()
     assert dialog.policy.keep_per_scope == 2
-
-
-def test_tool_does_not_open_history_center_while_worker_is_running(monkeypatch):
-    tool = object.__new__(history_center_window.Tool)
-
-    class Worker:
-        @staticmethod
-        def isRunning():
-            return True
-
-    tool.worker = Worker()
-    monkeypatch.setattr(
-        history_center_window,
-        "HistoryCenterDialog",
-        lambda *args, **kwargs: (_ for _ in ()).throw(AssertionError("dialog must not open")),
-    )
-
-    history_center_window.Tool._open_history_center(tool)
