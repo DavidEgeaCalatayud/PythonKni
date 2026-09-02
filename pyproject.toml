@@ -3,7 +3,7 @@ name = "pythonkni"
 version = "0.1.0"
 description = "Aplicacion de escritorio en Python y PyQt5 con herramientas de mantenimiento, red y archivos."
 readme = "README.md"
-requires-python = ">=3.10"
+requires-python = ">=3.13,<3.14"
 license = { file = "LICENSE" }
 authors = [
   { name = "PythonKni contributors" }
@@ -51,7 +51,7 @@ output = "coverage.xml"
 
 [tool.ruff]
 line-length = 100
-target-version = "py310"
+target-version = "py313"
 
 [tool.ruff.lint]
 select = ["F", "I"]
