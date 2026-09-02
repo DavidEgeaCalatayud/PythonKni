@@ -45,3 +45,19 @@ def test_release_outputs_drive_safe_packaging_artifact_and_publication():
     assert "gh release create $tag" in content
     assert "gh release upload $tag" in content
     assert "--verify-tag" in content
+
+
+def test_release_installer_is_required_for_new_sources_and_optional_for_historical_recovery():
+    content = RELEASE_WORKFLOW.read_text(encoding="utf-8")
+
+    assert "id: installer_support" in content
+    assert "RELEASE_RECOVERY: ${{ steps.release_meta.outputs.recovery }}" in content
+    assert "Release source is missing the Windows installer pipeline" in content
+    assert "steps.installer_support.outputs.enabled == 'true'" in content
+    assert ".\\scripts\\build_windows_installer.ps1" in content
+    assert "-ExpectedTag $env:RELEASE_TAG" in content
+    assert ".\\scripts\\smoke_test_windows_installer.ps1" in content
+    assert "PythonKni-$tag-windows-x64-setup.exe" in content
+    assert "PythonKni-$tag-windows-x64-setup.sha256" in content
+    assert "$installer $installerChecksum --clobber" in content
+    assert "$installer $installerChecksum --title" in content
