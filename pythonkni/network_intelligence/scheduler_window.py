@@ -12,13 +12,20 @@ from pythonkni.infrastructure.paths import (
     ensure_app_dirs,
 )
 from tools.ui_feedback import show_error, show_warning
+from tools.worker import Worker
 
 from .automatic_snapshot import AutomaticSnapshotResult, create_automatic_snapshot
+from .fingerprint_policy import (
+    FingerprintPolicy,
+    ScheduledFingerprintResult,
+    run_scheduled_fingerprinting,
+)
 from .history_window import Tool as HistoryTool
 from .retention import RetentionPolicy
 from .scheduler import (
     DEFAULT_INTERVAL_MINUTES,
     ScheduleConfig,
+    change_fingerprint_policy,
     change_schedule_interval,
     create_schedule,
     disable_schedule,
@@ -40,6 +47,12 @@ INTERVAL_OPTIONS = (
     (720, "12 h"),
     (1440, "24 h"),
 )
+FINGERPRINT_POLICY_OPTIONS = (
+    (FingerprintPolicy.DISABLED, "Desactivado"),
+    (FingerprintPolicy.MANUAL, "Sólo manual"),
+    (FingerprintPolicy.AUTOMATIC_AFTER_DISCOVERY, "Automático después del descubrimiento"),
+    (FingerprintPolicy.CHANGED_SERVICES_ONLY, "Sólo activos con cambios conocidos"),
+)
 
 
 def _local_time(value: datetime | None) -> str:
@@ -48,13 +61,32 @@ def _local_time(value: datetime | None) -> str:
     return value.astimezone().strftime("%d/%m/%Y %H:%M:%S")
 
 
+def _run_scheduled_fingerprint_worker(
+    worker: Worker,
+    inventory,
+    scope: str,
+    policy: FingerprintPolicy,
+    changed_since: datetime | None,
+) -> ScheduledFingerprintResult:
+    return run_scheduled_fingerprinting(
+        inventory,
+        scope,
+        policy,
+        stop_event=worker.cancel_event,
+        changed_since=changed_since,
+        on_progress=lambda message: worker.report_progress({"message": message}),
+    )
+
+
 class Tool(HistoryTool):
-    """Network Intelligence with opt-in in-app scheduling and automatic snapshots."""
+    """Network Intelligence with opt-in scheduling, fingerprints and automatic snapshots."""
 
     def setup_ui(self) -> None:
         super().setup_ui()
         ensure_app_dirs()
         self._scheduled_scan_active = False
+        self._scheduled_postscan_pending = False
+        self._scheduled_fingerprint_worker_active = False
         self._scheduler_closing = False
         self.schedule_config = self._load_schedule()
 
@@ -72,8 +104,29 @@ class Tool(HistoryTool):
         self.schedule_status.setWordWrap(True)
         schedule_row.addWidget(self.schedule_status, 1)
 
+        fingerprint_row = QHBoxLayout()
+        fingerprint_row.addWidget(QLabel("Fingerprint programado:"))
+        self.fingerprint_policy_combo = QComboBox()
+        for policy, label in FINGERPRINT_POLICY_OPTIONS:
+            self.fingerprint_policy_combo.addItem(label, policy.value)
+        self.fingerprint_policy_combo.currentIndexChanged.connect(
+            self._fingerprint_policy_changed
+        )
+        self.fingerprint_policy_combo.setToolTip(
+            "El fingerprinting automático usa únicamente TCP sobre puertos ya conocidos y nunca "
+            "activa Nerva --misconfigs. UDP, SCTP y misconfiguraciones siguen siendo explícitos."
+        )
+        fingerprint_row.addWidget(self.fingerprint_policy_combo, 1)
+        fingerprint_note = QLabel(
+            "Límites: 32 activos · 16 puertos/activo · sin misconfigs automáticos."
+        )
+        fingerprint_note.setWordWrap(True)
+        fingerprint_row.addWidget(fingerprint_note, 1)
+
         layout = self.centralWidget().layout()
-        layout.insertLayout(min(7, layout.count()), schedule_row)
+        insertion = min(7, layout.count())
+        layout.insertLayout(insertion, schedule_row)
+        layout.insertLayout(insertion + 1, fingerprint_row)
 
         if self.schedule_config.enabled:
             self.scope_input.setText(self.schedule_config.scope)
@@ -101,19 +154,35 @@ class Tool(HistoryTool):
         value = self.schedule_interval.currentData()
         return int(value) if value is not None else DEFAULT_INTERVAL_MINUTES
 
+    def _selected_fingerprint_policy(self) -> FingerprintPolicy:
+        value = self.fingerprint_policy_combo.currentData()
+        try:
+            return FingerprintPolicy(str(value))
+        except ValueError:
+            return FingerprintPolicy.MANUAL
+
     def _set_interval_control(self, minutes: int) -> None:
         index = self.schedule_interval.findData(minutes)
         if index < 0:
             index = self.schedule_interval.findData(DEFAULT_INTERVAL_MINUTES)
         self.schedule_interval.setCurrentIndex(max(0, index))
 
+    def _set_fingerprint_policy_control(self, policy: FingerprintPolicy) -> None:
+        index = self.fingerprint_policy_combo.findData(policy.value)
+        if index < 0:
+            index = self.fingerprint_policy_combo.findData(FingerprintPolicy.MANUAL.value)
+        self.fingerprint_policy_combo.setCurrentIndex(max(0, index))
+
     def _schedule_summary(self) -> str:
         config = self.schedule_config
         if not config.enabled:
             return "Desactivada · no se ejecutan scans automáticos con esta ventana cerrada."
+        policy_label = dict(FINGERPRINT_POLICY_OPTIONS).get(
+            config.fingerprint_policy, config.fingerprint_policy.value
+        )
         summary = (
             f"Scope {config.scope} · próxima {_local_time(config.next_run_at)} · "
-            f"último éxito {_local_time(config.last_success_at)}"
+            f"último éxito {_local_time(config.last_success_at)} · fingerprint {policy_label}"
         )
         if config.last_snapshot:
             summary += f" · snapshot {Path(config.last_snapshot).name}"
@@ -124,15 +193,19 @@ class Tool(HistoryTool):
             return
         self.schedule_checkbox.blockSignals(True)
         self.schedule_interval.blockSignals(True)
+        self.fingerprint_policy_combo.blockSignals(True)
         self.schedule_checkbox.setChecked(self.schedule_config.enabled)
         self._set_interval_control(self.schedule_config.interval_minutes)
+        self._set_fingerprint_policy_control(self.schedule_config.fingerprint_policy)
         self.schedule_checkbox.blockSignals(False)
         self.schedule_interval.blockSignals(False)
+        self.fingerprint_policy_combo.blockSignals(False)
         self.schedule_status.setText(self._schedule_summary())
 
         running = self.worker is not None and self.worker.isRunning()
         self.schedule_checkbox.setEnabled(not running)
         self.schedule_interval.setEnabled(not running)
+        self.fingerprint_policy_combo.setEnabled(not running)
         self.scope_input.setEnabled(not running and not self.schedule_config.enabled)
 
     def _save_schedule_candidate(self, candidate: ScheduleConfig) -> bool:
@@ -157,6 +230,7 @@ class Tool(HistoryTool):
                     self._active_scope(),
                     self._selected_interval(),
                     now=datetime.now(timezone.utc),
+                    fingerprint_policy=self._selected_fingerprint_policy(),
                 )
             except ValueError as error:
                 show_warning(self, self.name, str(error))
@@ -194,6 +268,17 @@ class Tool(HistoryTool):
                 f"{_local_time(candidate.next_run_at)}."
             )
 
+    def _fingerprint_policy_changed(self, _index: int) -> None:
+        candidate = change_fingerprint_policy(
+            self.schedule_config,
+            self._selected_fingerprint_policy(),
+        )
+        if self._save_schedule_candidate(candidate):
+            self.status_label.setText(
+                "Política de fingerprinting programado actualizada. "
+                "Las comprobaciones --misconfigs continúan siendo exclusivamente manuales."
+            )
+
     def _check_schedule(self) -> None:
         if self._scheduler_closing or not self.schedule_config.enabled:
             return
@@ -216,6 +301,7 @@ class Tool(HistoryTool):
 
         self.scope_input.setText(candidate.scope)
         self._scheduled_scan_active = True
+        self._scheduled_postscan_pending = False
         self.status_label.setText(
             f"Ejecución programada iniciada para {candidate.scope}. Próxima ventana: "
             f"{_local_time(candidate.next_run_at)}."
@@ -226,6 +312,7 @@ class Tool(HistoryTool):
 
     def start_scan(self) -> None:
         self._scheduled_scan_active = False
+        self._scheduled_postscan_pending = False
         super().start_scan()
 
     def _automatic_snapshot_retention_policy(self) -> RetentionPolicy:
@@ -247,6 +334,7 @@ class Tool(HistoryTool):
         if not scheduled:
             return
         if not persistence_ok:
+            self._scheduled_postscan_pending = False
             self.schedule_status.setText(self._schedule_summary())
             self.status_label.setText(
                 "La ejecución programada terminó, pero la persistencia del inventario o de las "
@@ -255,6 +343,89 @@ class Tool(HistoryTool):
             )
             return
 
+        self._scheduled_postscan_pending = True
+        if self.schedule_config.fingerprint_policy.automatic:
+            self.status_label.setText(
+                "Descubrimiento programado completado. Preparando fingerprinting TCP acotado "
+                "antes de publicar el snapshot automático."
+            )
+        else:
+            self.status_label.setText(
+                "Descubrimiento programado completado. Preparando snapshot automático."
+            )
+
+    def _start_scheduled_fingerprinting(self) -> None:
+        policy = self.schedule_config.fingerprint_policy
+        if not policy.automatic:
+            self._publish_scheduled_snapshot()
+            return
+
+        scope = self.schedule_config.scope or self._active_scope()
+        worker = Worker(
+            _run_scheduled_fingerprint_worker,
+            self.inventory,
+            scope,
+            policy,
+            self.schedule_config.last_success_at,
+            parent=self,
+        )
+        worker.progress.connect(self._scheduled_fingerprint_progress)
+        worker.result.connect(self._scheduled_fingerprint_finished)
+        worker.error.connect(self._scheduled_fingerprint_failed)
+        worker.cancelled.connect(self._scheduled_fingerprint_cancelled)
+        worker.finished.connect(self._worker_finished)
+        self.worker = worker
+        self._scheduled_fingerprint_worker_active = True
+        self._set_running(True)
+        self.start_managed_worker(worker, cancel=worker.cancel)
+
+    def _scheduled_fingerprint_progress(self, payload) -> None:
+        if isinstance(payload, dict) and payload.get("message"):
+            self.status_label.setText(str(payload["message"]))
+
+    def _scheduled_fingerprint_finished(self, result) -> None:
+        if not isinstance(result, ScheduledFingerprintResult):
+            self._publish_scheduled_snapshot(" · fingerprinting automático sin resumen")
+            return
+
+        status = (
+            f" · fingerprint automático {result.fingerprinted_assets}/{result.attempted_assets} "
+            f"activos · {result.fingerprints} servicios"
+        )
+        if result.errors:
+            show_warning(
+                self,
+                self.name,
+                "El scan programado terminó, pero parte del fingerprinting automático no estuvo "
+                "disponible. El snapshot conservará el inventario válido obtenido.",
+                details="\n".join(result.errors),
+            )
+            status += f" · {len(result.errors)} error(es) de fingerprinting"
+        self.refresh_inventory(keep_status=True)
+        self._publish_scheduled_snapshot(status)
+
+    def _scheduled_fingerprint_failed(self, error) -> None:
+        show_warning(
+            self,
+            self.name,
+            "El scan programado terminó, pero falló el subpaso de fingerprinting automático. "
+            "El snapshot se publicará con el inventario válido disponible.",
+            details=str(error),
+        )
+        self._publish_scheduled_snapshot(" · fingerprinting automático no disponible")
+
+    def _scheduled_fingerprint_cancelled(self) -> None:
+        self._scheduled_postscan_pending = False
+        self.status_label.setText(
+            "Fingerprinting automático cancelado; no se publicó snapshot porque el enriquecimiento "
+            "programado quedó incompleto. "
+            f"Próximo intento: {_local_time(self.schedule_config.next_run_at)}."
+        )
+
+    def _publish_scheduled_snapshot(self, fingerprint_status: str = "") -> None:
+        if not self._scheduled_postscan_pending:
+            return
+        self._scheduled_postscan_pending = False
         generated_at = datetime.now(timezone.utc)
         scope = self.schedule_config.scope or self._active_scope()
         previous_snapshot = (
@@ -325,11 +496,13 @@ class Tool(HistoryTool):
             retention = ""
         self.status_label.setText(
             f"Ejecución programada completada · snapshot automático {snapshot.path}{retention}"
-            f"{post_snapshot_status} · próxima {_local_time(self.schedule_config.next_run_at)}."
+            f"{fingerprint_status}{post_snapshot_status} · próxima "
+            f"{_local_time(self.schedule_config.next_run_at)}."
         )
 
     def _scan_failed(self, error) -> None:
         scheduled = self._scheduled_scan_active
+        self._scheduled_postscan_pending = False
         super()._scan_failed(error)
         if scheduled:
             self.status_label.setText(
@@ -339,6 +512,7 @@ class Tool(HistoryTool):
 
     def _scan_cancelled(self) -> None:
         scheduled = self._scheduled_scan_active
+        self._scheduled_postscan_pending = False
         super()._scan_cancelled()
         if scheduled:
             self.status_label.setText(
@@ -348,7 +522,22 @@ class Tool(HistoryTool):
             )
 
     def _worker_finished(self) -> None:
+        was_fingerprint_worker = self._scheduled_fingerprint_worker_active
+        pending = self._scheduled_scan_active and self._scheduled_postscan_pending
         super()._worker_finished()
+
+        if was_fingerprint_worker:
+            self._scheduled_fingerprint_worker_active = False
+            self._scheduled_scan_active = False
+            self._sync_schedule_controls()
+            return
+
+        if pending:
+            if self.schedule_config.fingerprint_policy.automatic:
+                self._start_scheduled_fingerprinting()
+                return
+            self._publish_scheduled_snapshot()
+
         self._scheduled_scan_active = False
         self._sync_schedule_controls()
 
@@ -357,6 +546,7 @@ class Tool(HistoryTool):
         if hasattr(self, "schedule_checkbox"):
             self.schedule_checkbox.setEnabled(not running)
             self.schedule_interval.setEnabled(not running)
+            self.fingerprint_policy_combo.setEnabled(not running)
             self.scope_input.setEnabled(not running and not self.schedule_config.enabled)
 
     def closeEvent(self, event) -> None:  # noqa: N802 - Qt API name
