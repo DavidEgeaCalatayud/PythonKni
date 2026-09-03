@@ -9,7 +9,10 @@ from pathlib import Path
 
 from pythonkni.camera_auditor.service import parse_camera_scope
 
-SCHEDULE_SCHEMA_VERSION = 1
+from .fingerprint_policy import FingerprintPolicy
+
+SCHEDULE_SCHEMA_VERSION = 2
+SUPPORTED_SCHEDULE_SCHEMA_VERSIONS = frozenset({1, SCHEDULE_SCHEMA_VERSION})
 DEFAULT_INTERVAL_MINUTES = 60
 MIN_INTERVAL_MINUTES = 15
 MAX_INTERVAL_MINUTES = 24 * 60
@@ -50,6 +53,15 @@ def _validate_interval(interval_minutes: int) -> int:
     return interval_minutes
 
 
+def _coerce_fingerprint_policy(value: object) -> FingerprintPolicy:
+    if isinstance(value, FingerprintPolicy):
+        return value
+    try:
+        return FingerprintPolicy(str(value))
+    except ValueError as error:
+        raise ValueError("Unsupported scheduled fingerprint policy.") from error
+
+
 def canonical_schedule_scope(scope: str) -> str:
     if not isinstance(scope, str):
         raise ValueError("Schedule scope must be a CIDR string.")
@@ -65,6 +77,7 @@ class ScheduleConfig:
     last_started_at: datetime | None = None
     last_success_at: datetime | None = None
     last_snapshot: str = ""
+    fingerprint_policy: FingerprintPolicy = FingerprintPolicy.MANUAL
 
 
 def disabled_schedule() -> ScheduleConfig:
@@ -76,6 +89,7 @@ def create_schedule(
     interval_minutes: int,
     *,
     now: datetime,
+    fingerprint_policy: FingerprintPolicy = FingerprintPolicy.MANUAL,
 ) -> ScheduleConfig:
     canonical_scope = canonical_schedule_scope(scope)
     interval = _validate_interval(interval_minutes)
@@ -85,6 +99,7 @@ def create_schedule(
         scope=canonical_scope,
         interval_minutes=interval,
         next_run_at=now_utc + timedelta(minutes=interval),
+        fingerprint_policy=_coerce_fingerprint_policy(fingerprint_policy),
     )
 
 
@@ -101,6 +116,13 @@ def change_schedule_interval(
     interval = _validate_interval(interval_minutes)
     next_run_at = _utc(now) + timedelta(minutes=interval) if config.enabled else None
     return replace(config, interval_minutes=interval, next_run_at=next_run_at)
+
+
+def change_fingerprint_policy(
+    config: ScheduleConfig,
+    policy: FingerprintPolicy,
+) -> ScheduleConfig:
+    return replace(config, fingerprint_policy=_coerce_fingerprint_policy(policy))
 
 
 def schedule_due(config: ScheduleConfig, *, now: datetime) -> bool:
@@ -146,6 +168,7 @@ def _validated_config(config: ScheduleConfig) -> ScheduleConfig:
         raise ValueError("Schedule last_snapshot must be a string.")
 
     interval = _validate_interval(config.interval_minutes)
+    policy = _coerce_fingerprint_policy(config.fingerprint_policy)
     scope = config.scope.strip()
     if config.enabled:
         scope = canonical_schedule_scope(scope)
@@ -163,7 +186,12 @@ def _validated_config(config: ScheduleConfig) -> ScheduleConfig:
         if value is not None:
             _utc(value)
 
-    return replace(config, scope=scope, interval_minutes=interval)
+    return replace(
+        config,
+        scope=scope,
+        interval_minutes=interval,
+        fingerprint_policy=policy,
+    )
 
 
 def load_schedule(path: str | Path) -> ScheduleConfig:
@@ -174,7 +202,8 @@ def load_schedule(path: str | Path) -> ScheduleConfig:
     payload = json.loads(source.read_text(encoding="utf-8"))
     if not isinstance(payload, dict):
         raise ValueError("Schedule file must contain a JSON object.")
-    if payload.get("schema_version") != SCHEDULE_SCHEMA_VERSION:
+    schema_version = payload.get("schema_version")
+    if schema_version not in SUPPORTED_SCHEDULE_SCHEMA_VERSIONS:
         raise ValueError("Unsupported Network Intelligence schedule schema version.")
 
     enabled = payload.get("enabled", False)
@@ -187,6 +216,11 @@ def load_schedule(path: str | Path) -> ScheduleConfig:
     if not isinstance(last_snapshot, str):
         raise ValueError("Schedule last_snapshot must be a string.")
 
+    policy_value = (
+        payload.get("fingerprint_policy", FingerprintPolicy.MANUAL.value)
+        if schema_version >= 2
+        else FingerprintPolicy.MANUAL.value
+    )
     config = ScheduleConfig(
         enabled=enabled,
         scope=scope,
@@ -195,6 +229,7 @@ def load_schedule(path: str | Path) -> ScheduleConfig:
         last_started_at=_parse_timestamp(payload.get("last_started_at"), "last_started_at"),
         last_success_at=_parse_timestamp(payload.get("last_success_at"), "last_success_at"),
         last_snapshot=last_snapshot,
+        fingerprint_policy=_coerce_fingerprint_policy(policy_value),
     )
     return _validated_config(config)
 
@@ -212,6 +247,7 @@ def save_schedule(path: str | Path, config: ScheduleConfig) -> None:
         "last_started_at": _utc_text(validated.last_started_at),
         "last_success_at": _utc_text(validated.last_success_at),
         "last_snapshot": validated.last_snapshot,
+        "fingerprint_policy": validated.fingerprint_policy.value,
     }
 
     fd, temp_name = tempfile.mkstemp(
