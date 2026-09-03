@@ -2,7 +2,7 @@
 
 `Network Intelligence` is PythonKni's persistent local asset, exposure, relationship, history and change-intelligence layer. It sits above Network Explorer and the specialized device auditors.
 
-It answers both current-state and historical questions: what devices exist, how they were classified, what evidence supports that classification, how they are related, how exposure is scored, what changed between observations/snapshots, how those changes trend over time, and which changes deserve a local notification.
+It answers both current-state and historical questions: what devices exist, how they were classified, what evidence supports that classification, how they are related, which TCP/UDP services were observed, how exposure is scored, what changed between observations/snapshots, how those changes trend over time, and which changes deserve a local notification.
 
 ## Platform flow
 
@@ -18,11 +18,14 @@ Device classification + confidence/explainability
 Persistent Asset Inventory (SQLite)
         ├─ stable identity reconciliation
         ├─ relationship evidence / topology
+        ├─ service fingerprint evidence
+        ├─ security findings
         ├─ contextual Network Security Score
         ├─ timeline / device auditors
         └─ deterministic snapshot reporting
                        ↓
              automatic/saved snapshots
+                ├─ optional bounded TCP fingerprint policy
                 ├─ offline comparison
                 ├─ Security Score History
                 ├─ History Center + trends
@@ -40,6 +43,8 @@ pythonkni/network_intelligence/
 ├── oui.py
 ├── identity.py
 ├── inventory.py
+├── fingerprints.py
+├── fingerprint_policy.py
 ├── score.py
 ├── relationships.py
 ├── relationship_store.py
@@ -67,7 +72,7 @@ pythonkni/network_intelligence/
 └── window.py
 ```
 
-The domain reuses `pythonkni/network/service.py` for host discovery and `pythonkni/camera_auditor/service.py` for ONVIF/HTTP(S)/RTSP camera evidence.
+The domain reuses `pythonkni/network/service.py` for host discovery and `pythonkni/camera_auditor/service.py` for ONVIF/HTTP(S)/RTSP camera evidence. Application-layer service intelligence is normalized by `pythonkni/network/fingerprinting.py` before Network Intelligence persists it.
 
 ## Offline MAC OUI / Vendor Intelligence
 
@@ -89,17 +94,32 @@ Confidence bands are LOW `0..39`, MEDIUM `40..69` and HIGH `70..100`. This score
 
 ## Asset Inventory and identity reconciliation
 
-Inventory uses standard-library SQLite under PythonKni's runtime data directory. Assets persist stable identifier, IP/MAC/hostname/vendor, type/confidence/signals, services/ports, exposure risk/evidence, lifecycle timestamps and online/offline state.
+Inventory uses standard-library SQLite under PythonKni's runtime data directory. Assets persist stable identifier, IP/MAC/hostname/vendor, type/confidence/signals, TCP services/ports, transport-qualified evidence, exposure risk/evidence, lifecycle timestamps and online/offline state.
 
 A valid MAC is preferred as stable identity. An active `ip:<address>` fallback is promoted transactionally to `mac:<address>` when stronger evidence appears, preserving `first_seen` and rewriting timeline/relationship references. Legacy duplicates are repaired only with corroborated transition evidence; ambiguous offline IP reuse is deliberately **not** merged merely because the IP matches.
 
+## Service intelligence and security findings
+
+Network Explorer can explicitly apply normalized Nerva findings to one exact online persisted asset. Persistence remains transport-aware:
+
+- existing `open_ports` and `services` remain TCP-only for backward compatibility;
+- a TCP identity/product/version transition generates `service_changed`;
+- UDP/SCTP observations are retained as transport-qualified evidence and generate `service_observed`, avoiding collisions such as `53/tcp` versus `53/udp`;
+- new normalized Nerva security findings generate `security_finding` timeline events;
+- the asset is reloaded before mutation and no synthetic asset is created from Nerva output;
+- classification, confidence and persisted `RiskLevel` remain unchanged solely because service/finding evidence was accepted.
+
+The normalized finding model preserves Nerva's useful `id`, severity, title, description, impact, recommendation, CVSS and evidence fields. See [`network-service-fingerprinting.md`](network-service-fingerprinting.md).
+
 ## Network Timeline / Change Detection
 
-Completed snapshots record meaningful transitions including new/returned/disappeared devices, IP/type/risk changes, opened/closed ports and identity reconciliation. Partial/cancelled scans never mark devices disappeared.
+Completed scans and accepted enrichment record meaningful transitions including new/returned/disappeared devices, IP/type/risk changes, opened/closed TCP ports, service identity changes, transport observations, security findings and identity reconciliation. Partial/cancelled scans never mark devices disappeared.
 
 ## Network Security Score
 
 The dashboard calculates a deterministic `0..100` score from online assets. Base deductions cover elevated risk, unknown devices, exposed RTSP/clear-text HTTP and newly observed unknown assets. A bounded contextual layer can add small review-priority deductions for elevated-risk Router/NAS roles, a **confirmed** default gateway and **confirmed physical links** to relevant infrastructure.
+
+Persisted Nerva findings contribute only through explicit deterministic project rules: critical `-12`, high `-8`, medium `-4`, low `-1`, info/unknown `0`, with a maximum **20-point finding deduction per asset**. The finding engine therefore cannot arbitrarily overwrite the asset risk model or dominate the entire network score.
 
 Inferred/unknown relationships and generic same-LAN membership do not receive contextual deductions. Offline assets are excluded and physical-link context is deduplicated. The score is a project-defined prioritization heuristic, not a vulnerability score, exploitability probability or compromise model.
 
@@ -121,13 +141,38 @@ Security Score History loads two or more validated saved snapshots for one scope
 
 See [`network-score-history.md`](network-score-history.md).
 
-## Scheduled monitoring and automatic snapshots
+## Scheduled monitoring, fingerprint policy and automatic snapshots
 
-Scheduling is opt-in and in-process. A versioned schedule stores canonical local scope, interval, next run and success metadata. Scheduled checks run only while Network Intelligence is open; no Windows Scheduled Task, service or daemon is installed. An overdue run is picked up when the window is opened again.
+Scheduling is opt-in and in-process. A versioned schedule stores canonical local scope, interval, next run, success metadata and one of four fingerprint policies:
 
-A scheduler-owned JSON snapshot is published atomically only after the successful inventory/relationship persistence path. Failed/cancelled/incomplete-persistence runs create neither a successful automatic snapshot nor downstream change notification.
+```text
+Disabled
+Manual only
+Automatic after discovery
+Only assets with known changes
+```
 
-See [`network-scheduled-monitoring.md`](network-scheduled-monitoring.md).
+Scheduled checks run only while Network Intelligence is open; no Windows Scheduled Task, service or daemon is installed. An overdue run is picked up when the window is opened again.
+
+`Disabled` and `Manual only` preserve the historical path: after successful inventory/relationship persistence the scheduler publishes its automatic snapshot immediately.
+
+The two automatic policies insert a bounded fingerprint step between persistence and snapshot publication. That step is deliberately narrower than manual Service Intelligence:
+
+- only online existing assets;
+- only already-known TCP ports;
+- maximum 32 assets;
+- maximum 16 ports per asset;
+- 8 Nerva workers;
+- maximum 2 concurrent connections per host;
+- 1500 ms Nerva timeout;
+- no UDP or SCTP;
+- Nerva `--misconfigs` is never enabled.
+
+An unavailable/timed-out Nerva substep degrades gracefully: valid discovery data can still produce the snapshot with warning/status evidence. Deliberate cancellation of automatic fingerprinting prevents publishing a snapshot that would falsely imply configured enrichment completed.
+
+Failed/cancelled/incomplete-persistence discovery runs create neither a successful automatic snapshot nor downstream change notification.
+
+See [`network-scheduled-monitoring.md`](network-scheduled-monitoring.md) and [`network-service-fingerprinting.md`](network-service-fingerprinting.md).
 
 ## Change Notification Engine
 
@@ -153,7 +198,9 @@ Router, NAS, Printer and PC auditors consume the persisted device snapshot inste
 
 The retained Network Intelligence benchmark measures deterministic classification and OUI throughput but keeps shared-runner timing informational rather than a pass/fail threshold.
 
-A separate AST structural typing ratchet prevents annotation regression. Current protected package metrics are **668/721 annotated slots (92.65%)**, **264 fully annotated / 303 tracked callables**, and **39 explicit `Any`** at most. Fifteen strict modules must remain fully annotated with zero explicit `Any`. This is intentionally incremental and does not claim semantic static type checking.
+The structural typing ratchet prevents annotation regression. The Service Intelligence v2 branch currently validates **728/785 annotation slots (92.74%)**, **283 fully annotated / 326 tracked callables**, with the explicit-`Any` ceiling unchanged at **39**. Fifteen strict modules must remain fully annotated with zero explicit `Any`. This is intentionally incremental and does not claim semantic static type checking.
+
+The current full Windows suite validates **1,175 tests**, **92.9% repository branch coverage** and **93.5% aggregate service coverage** before packaging gates run.
 
 See [`network-intelligence-quality-gates.md`](network-intelligence-quality-gates.md).
 
@@ -162,12 +209,16 @@ See [`network-intelligence-quality-gates.md`](network-intelligence-quality-gates
 Network Intelligence is intended for authorized LAN administration and keeps these boundaries:
 
 - private/local/link-local/loopback IPv4 only;
-- maximum 256 hosts per Network Intelligence run;
+- maximum 256 hosts per Network Intelligence discovery run;
 - bounded concurrency and short timeouts;
 - fixed curated identification ports/ONVIF within selected scope;
 - OUI/vendor lookup fully offline at runtime;
 - historical comparison/history/notification/retention read saved local state only;
+- scheduled fingerprinting is bounded TCP-only and never enables `--misconfigs`;
+- UDP probing and misconfiguration checks require explicit user actions in Network Explorer;
+- SCTP is capability-aware and unavailable in the validated Windows bundle because Nerva v1.69.4 restricts it to Linux;
 - no username/password or default-credential attempts;
+- no brute force or exploitation;
 - no stream/camera-image retrieval;
 - no internet-wide discovery, dorking or scraping;
 - cooperative cancellation through managed workers;
@@ -175,11 +226,12 @@ Network Intelligence is intended for authorized LAN administration and keeps the
 
 ## Current platform status and next layers
 
-The previously planned layers for scheduled checks, change notifications, history/trends/retention and build-time OUI expansion are now implemented. Network Intelligence currently spans:
+Network Intelligence now spans:
 
 ```text
-Discover → Inventory → Classify → Relate → Score → Report
-        → Schedule → Snapshot → Compare/History → Detect change → Notify/Retain
+Discover → Inventory → Classify → Relate → Fingerprint/Enrich → Score → Report
+        → Schedule → Optional bounded TCP fingerprint → Snapshot
+        → Compare/History → Detect change → Notify/Retain
 ```
 
 Future work should remain incremental: add further defensive device-role context only when backed by explicit persisted evidence, reduce remaining structural typing debt/promote more strict modules, and consider a semantic type checker as a separate migration rather than weakening the existing gate.
