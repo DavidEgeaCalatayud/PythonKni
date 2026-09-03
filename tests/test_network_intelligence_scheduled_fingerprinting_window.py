@@ -130,9 +130,7 @@ def test_worker_finished_launches_automatic_fingerprinting(qtbot, monkeypatch, t
     assert tool._scheduled_scan_active
 
 
-def test_start_scheduled_fingerprinting_manual_falls_back_to_snapshot(
-    qtbot, monkeypatch, tmp_path
-):
+def test_start_scheduled_fingerprinting_manual_falls_back_to_snapshot(qtbot, monkeypatch, tmp_path):
     tool, _schedule_path = _make_tool(qtbot, monkeypatch, tmp_path)
     published = []
     monkeypatch.setattr(tool, "_publish_scheduled_snapshot", lambda *args: published.append(args))
