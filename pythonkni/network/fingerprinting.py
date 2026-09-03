@@ -197,13 +197,16 @@ def _security_findings_for(item: Mapping[str, Any]) -> tuple[ServiceSecurityFind
             raise ValueError("Resultado Nerva con un security finding no válido.")
         finding_id = str(entry.get("id") or entry.get("finding_id") or "unknown").strip()
         description = str(entry.get("description") or entry.get("title") or finding_id).strip()
-        evidence = str(entry.get("evidence") or "").strip()
         findings.append(
             ServiceSecurityFinding(
                 finding_id=finding_id or "unknown",
                 severity=_finding_severity(entry.get("severity")),
                 description=description or finding_id or "Security finding",
-                evidence=evidence,
+                title=str(entry.get("title") or "").strip(),
+                impact=str(entry.get("impact") or "").strip(),
+                recommendation=str(entry.get("recommendation") or "").strip(),
+                cvss=str(entry.get("cvss") or "").strip(),
+                evidence=str(entry.get("evidence") or "").strip(),
             )
         )
     return tuple(findings)
