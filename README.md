@@ -4,8 +4,8 @@
 ![PyQt5](https://img.shields.io/badge/UI-PyQt5-41CD52)
 ![Platform](https://img.shields.io/badge/platform-Windows-blue)
 ![Build](https://img.shields.io/badge/build-PyInstaller-orange)
-![Tests](https://img.shields.io/badge/tests-1131%20pytest-green)
-![Coverage](https://img.shields.io/badge/branch%20coverage-93.0%25-green)
+![Tests](https://img.shields.io/badge/tests-1175%20pytest-green)
+![Coverage](https://img.shields.io/badge/branch%20coverage-92.9%25-green)
 ![Services](https://img.shields.io/badge/service%20coverage-93.5%25-green)
 ![Dependencies](https://img.shields.io/badge/dependencies-SHA--256%20locked-blueviolet)
 ![Audit](https://img.shields.io/badge/security-pip--audit-success)
@@ -28,9 +28,9 @@ The repository is maintained as an application rather than a collection of scrip
 | **File Converter** | Convert images, PDF, DOCX, TXT and KML, including batch TXT/KML workflows |
 | **PDF Toolkit** | Merge, split, extract, reorder and read PDFs through `pypdf`; optional OCR for scanned documents |
 | **Duplicate Finder** | Detect duplicates through staged hashing plus byte verification and move copies with restoration manifests |
-| **Network Explorer** | Discover IPv4 interfaces/hosts, scan bounded TCP port ranges and explicitly fingerprint known-open services through the pinned Nerva engine |
+| **Network Explorer** | Discover IPv4 interfaces/hosts, scan bounded TCP ranges, identify known-open TCP services, explicitly probe bounded UDP profiles, run explicit Nerva misconfiguration checks and expose SCTP only when the upstream platform capability exists |
 | **Camera Exposure Auditor** | Audit authorized local camera exposure through bounded ONVIF/HTTP(S)/RTSP evidence without credentials or media retrieval |
-| **Network Intelligence** | Persist local assets/relationships, accept explicit service-fingerprint enrichment, score exposure, compare/history snapshots, schedule checks, detect meaningful changes and manage bounded retention |
+| **Network Intelligence** | Persist assets/relationships and service evidence, apply bounded finding-aware Security Score rules, compare/history snapshots, schedule checks, optionally fingerprint known TCP services before snapshots, detect meaningful changes and manage retention |
 | **Process Manager** | Inspect processes, filter resource use, safely terminate selected processes and query optional VirusTotal reports |
 | **Temporary Cleaner** | Preview and clean explicitly authorized temporary/cache targets without following symlinks/reparse points |
 | **WiFi Profiles** | Read locally stored Windows WiFi profiles for authorized support/diagnostics |
@@ -81,7 +81,7 @@ services ─────► pythonkni/core + pythonkni/infrastructure
 
 `tests/test_architecture_boundaries.py` makes these rules executable. Models and infrastructure cannot depend on Qt/tool presentation code, services cannot import windows, and OS mutations remain in the owning service instead of leaking into widgets.
 
-Network Intelligence is a larger composed domain under `pythonkni/network_intelligence/`; its pure persistence/scoring/history/notification components remain separated from Qt composition and are covered by domain-specific regressions and an incremental structural typing ratchet.
+Network Intelligence is a larger composed domain under `pythonkni/network_intelligence/`; persistence, scoring, fingerprints, scheduling, history and notification logic remain separated from Qt composition and are covered by domain-specific regressions and an incremental structural typing ratchet.
 
 See [`docs/architecture.md`](docs/architecture.md) for the detailed dependency rules and quality gates.
 
@@ -132,15 +132,42 @@ requirements-dev.in  ──pip-tools──► requirements-dev.txt
 
 The canonical resolver/build environment is Windows with **CPython 3.13.15** using the normal GIL-enabled interpreter. PythonKni supports the Python 3.13 series (`>=3.13,<3.14`). CI and release jobs install both locks with `pip --require-hashes`, validate lock structure and installed consistency, run strict runtime/development `pip-audit`, and generate a CycloneDX JSON SBOM before application validation continues.
 
-The optional service-fingerprinting engine is similarly reproducible: `third_party/nerva.lock.json` pins **Nerva v1.69.4** for Windows amd64 and SHA-256 `59e59eb54c8c5c581031387a0aa23c98983db94301e811f3c9b1802a05fc97f7`. Build/release staging verifies that digest before extraction and requires the upstream Apache-2.0 license; PythonKni never downloads Nerva at application runtime.
+The optional service-intelligence engine is similarly reproducible: `third_party/nerva.lock.json` pins **Nerva v1.69.4** for Windows amd64 and SHA-256 `59e59eb54c8c5c581031387a0aa23c98983db94301e811f3c9b1802a05fc97f7`. Build/release staging verifies that digest before extraction and requires the upstream Apache-2.0 license; PythonKni never downloads Nerva at application runtime.
 
 GitHub Actions are pinned by immutable commit SHA and Dependabot checks Python dependencies and Actions weekly. See [`docs/python-runtime.md`](docs/python-runtime.md) and [`docs/network-service-fingerprinting.md`](docs/network-service-fingerprinting.md).
+
+### Service Intelligence v2
+
+Network Explorer deliberately separates increasingly active operations:
+
+```text
+TCP port discovery
+      ↓ explicit
+Identify services
+      ↓ separate explicit action
+Check insecure configurations (--misconfigs)
+
+UDP profile/probe ── explicit + bounded
+SCTP ─────────────── advanced + capability-aware
+```
+
+Normal TCP service identification still operates on ports already confirmed open. UDP probing uses finite selected profiles/timeouts and preserves protocol uncertainty: an identified responder is `open`, while an unanswered probe is `open|filtered` rather than falsely marked closed. The first-party model also supports `closed` and `unknown` when explicit evidence exists.
+
+`--misconfigs` is only enabled by the dedicated **Check insecure configurations** action. Its normalized findings retain id, severity, title, description, impact, recommendation, CVSS and evidence. No mode performs credentials/default-password guessing, brute force or exploitation.
+
+SCTP is modeled but Nerva v1.69.4 exposes it only on Linux, so the validated Windows application disables/refuses SCTP instead of claiming unsupported behavior.
+
+Network Intelligence persists UDP/SCTP observations as transport-qualified evidence rather than inserting them into the legacy TCP `open_ports` tuple. Security findings can influence the project-defined Security Score only through deterministic bounded deductions: critical `-12`, high `-8`, medium `-4`, low `-1`, info/unknown `0`, maximum **20 points per asset**. Service evidence alone does not rewrite the device classification or persisted `RiskLevel`.
+
+Scheduled monitoring offers `Disabled`, `Manual only`, `Automatic after discovery` and `Only assets with known changes`. Automatic modes are intentionally narrower than the manual UI: known TCP ports only, maximum 32 assets and 16 ports per asset, 8 Nerva workers, 2 connections per host, 1500 ms timeout, and **never** `--misconfigs`, UDP or SCTP.
+
+See [`docs/network-service-fingerprinting.md`](docs/network-service-fingerprinting.md) and [`docs/network-intelligence.md`](docs/network-intelligence.md).
 
 ### Network Intelligence quality controls
 
 Network Intelligence keeps normal runtime OUI lookup fully offline while a build/maintenance-time updater can regenerate the bundled registry from the official IEEE MA-L CSV. The checked-in snapshot currently contains **40,046 unique OUI-24 assignments** plus provenance/hash metadata; normal runtime operation performs no IEEE lookup.
 
-CI/release also enforce an incremental structural typing ratchet for `pythonkni/network_intelligence`. The current protected package baseline is **683/736 annotation slots (92.8%)**, **269 fully annotated / 308 tracked callables**, and at most **39 explicit `Any` annotations**. Fifteen strict modules must stay completely annotated with zero explicit `Any`. This is an AST annotation guardrail, not a substitute for semantic checking by `mypy`/`pyright`.
+CI/release also enforce an incremental structural typing ratchet for `pythonkni/network_intelligence`. The Service Intelligence v2 baseline is **728/785 annotation slots (92.74%)**, **283 fully annotated / 326 tracked callables**, and at most **39 explicit `Any` annotations**. Fifteen strict modules must stay completely annotated with zero explicit `Any`. This is an AST annotation guardrail, not a substitute for semantic checking by `mypy`/`pyright`.
 
 See [`docs/network-intelligence-quality-gates.md`](docs/network-intelligence-quality-gates.md) and [`docs/network-oui-registry.md`](docs/network-oui-registry.md).
 
@@ -191,7 +218,11 @@ PythonKni/
 │  ├─ core/
 │  ├─ infrastructure/
 │  ├─ network/
+│  │  ├─ fingerprinting.py
+│  │  └─ service_intelligence_window.py
 │  └─ network_intelligence/
+│     ├─ fingerprints.py
+│     └─ fingerprint_policy.py
 ├─ scripts/
 │  ├─ benchmark_network_intelligence.py
 │  ├─ build_windows_installer.ps1
@@ -264,13 +295,14 @@ Never commit or publicly share real API keys, WiFi credentials, private logs, sc
 
 ## Testing and quality gates
 
-The current behavior-driven suite contains **1,131 tests** on Windows / CPython 3.13.15.
+The current behavior-driven suite contains **1,175 tests** on Windows / CPython 3.13.15.
 
 ```text
-Repository-wide branch coverage                 93.0%
+Repository-wide branch coverage                 92.9%
 All pythonkni/*/service.py coverage              93.5%
 Network Explorer base window coverage            93.4%
-Nerva fingerprint adapter coverage               99.2%
+Nerva fingerprint adapter coverage               98.8%
+Scheduled fingerprint-policy coverage            96.0%
 ```
 
 Coverage ratchets remain at **>=92.5% repository-wide** and **>=93.0% across services**, with stronger per-service/per-window floors for already-hardened areas. Network Intelligence additionally has its own structural typing ratchet described above. CI's grouped PowerShell coverage gates explicitly fail on any native subcommand error so an individual ratchet cannot be masked by a later successful command.
@@ -357,7 +389,9 @@ For a conventional first-party domain, keep the adapter thin and put business/OS
 - OCR depends on local Tesseract/Poppler installation and document quality.
 - DOCX -> PDF conversion is intentionally simplified and cannot reproduce every Microsoft Word layout feature.
 - Network/system capabilities depend on Windows permissions, topology, firewall policy and available OS utilities.
-- Nerva integration currently fingerprints TCP services on ports already confirmed open; UDP/SCTP and Nerva misconfiguration checks remain deliberately out of scope for this milestone.
+- Nerva SCTP fingerprinting is unavailable in the validated Windows package because Nerva v1.69.4 restricts SCTP to Linux.
+- UDP probing is intentionally bounded and preserves `open|filtered` uncertainty when there is no conclusive response.
+- Misconfiguration checks are explicit only and are never part of normal or scheduled fingerprinting.
 - Localization infrastructure exists, but not every user-visible string is extracted/translated.
 - Windows executable/installer Authenticode signing remains release-engineering work.
 
@@ -382,6 +416,7 @@ For a conventional first-party domain, keep the adapter thin and put business/OS
 ### Product evolution
 
 - [x] Add pinned Nerva-backed application-layer service fingerprinting and explicit Network Intelligence enrichment for known-open TCP ports.
+- [x] Add Service Intelligence v2: explicit misconfiguration checks, bounded UDP probing, capability-aware SCTP and scheduled TCP fingerprint policies.
 - [ ] Build a **PC Health / System Intelligence dashboard** that composes existing services instead of duplicating their domain logic.
 - [ ] Add a unified operation/history and recovery center for reversible maintenance actions.
 - [ ] Add further defensive device-role context only when backed by explicit persisted evidence.
@@ -393,8 +428,8 @@ For a conventional first-party domain, keep the adapter thin and put business/OS
 ## Documentation
 
 - [`docs/architecture.md`](docs/architecture.md) — dependency boundaries, quality and packaging gates
-- [`docs/network-intelligence.md`](docs/network-intelligence.md) — Network Intelligence architecture, features and safety boundaries
-- [`docs/network-service-fingerprinting.md`](docs/network-service-fingerprinting.md) — pinned Nerva trust model, safe fingerprinting scope and explicit inventory enrichment
+- [`docs/network-intelligence.md`](docs/network-intelligence.md) — Network Intelligence architecture, service evidence, scheduling and safety boundaries
+- [`docs/network-service-fingerprinting.md`](docs/network-service-fingerprinting.md) — pinned Nerva trust model, TCP/UDP/SCTP/misconfiguration modes and scheduled fingerprint contract
 - [`docs/network-scheduled-monitoring.md`](docs/network-scheduled-monitoring.md) — in-app scheduling and automatic snapshot semantics
 - [`docs/network-change-notifications.md`](docs/network-change-notifications.md) — meaningful-change notification engine
 - [`docs/network-history-center.md`](docs/network-history-center.md) — automatic history catalog, trends and retention
