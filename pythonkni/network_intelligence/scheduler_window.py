@@ -349,10 +349,12 @@ class Tool(HistoryTool):
                 "Descubrimiento programado completado. Preparando fingerprinting TCP acotado "
                 "antes de publicar el snapshot automático."
             )
-        else:
-            self.status_label.setText(
-                "Descubrimiento programado completado. Preparando snapshot automático."
-            )
+            return
+
+        self.status_label.setText(
+            "Descubrimiento programado completado. Preparando snapshot automático."
+        )
+        self._publish_scheduled_snapshot()
 
     def _start_scheduled_fingerprinting(self) -> None:
         policy = self.schedule_config.fingerprint_policy
