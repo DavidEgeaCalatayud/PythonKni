@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 import math
 import os
+import platform
 import shutil
 import socket
 import subprocess
@@ -14,7 +15,14 @@ from typing import Any
 
 from pythonkni.infrastructure.paths import PROJECT_ROOT
 
-from .models import OpenPort, ServiceFingerprint
+from .models import (
+    OpenPort,
+    SecurityFindingSeverity,
+    ServiceFingerprint,
+    ServiceSecurityFinding,
+    UdpPortState,
+    UdpProbeResult,
+)
 
 DEFAULT_NERVA_TIMEOUT_MS = 2000
 DEFAULT_NERVA_WORKERS = 20
@@ -22,6 +30,7 @@ DEFAULT_NERVA_MAX_HOST_CONNECTIONS = 4
 PROCESS_POLL_SECONDS = 0.10
 PROCESS_STOP_GRACE_SECONDS = 2.0
 MAX_DIAGNOSTIC_CHARS = 2000
+SUPPORTED_TRANSPORTS = frozenset({"tcp", "udp", "sctp"})
 
 
 class FingerprintEngineUnavailable(RuntimeError):
@@ -30,6 +39,10 @@ class FingerprintEngineUnavailable(RuntimeError):
 
 class FingerprintExecutionError(RuntimeError):
     """Raised when Nerva cannot complete a fingerprint batch."""
+
+
+class FingerprintCapabilityUnavailable(RuntimeError):
+    """Raised when a requested Nerva transport is unsupported on this platform."""
 
 
 def resolve_nerva_executable(explicit_path: str | os.PathLike[str] | None = None) -> Path:
@@ -67,6 +80,15 @@ def _normalize_ports(ports: Iterable[int | OpenPort]) -> list[int]:
     return sorted(normalized)
 
 
+def transport_available(transport: str, *, system_name: str | None = None) -> bool:
+    normalized = str(transport).strip().lower()
+    if normalized not in SUPPORTED_TRANSPORTS:
+        return False
+    if normalized != "sctp":
+        return True
+    return (system_name or platform.system()).strip().lower() == "linux"
+
+
 def build_nerva_command(
     executable: str | os.PathLike[str],
     ip: str,
@@ -75,6 +97,9 @@ def build_nerva_command(
     timeout_ms: int = DEFAULT_NERVA_TIMEOUT_MS,
     workers: int = DEFAULT_NERVA_WORKERS,
     max_host_connections: int = DEFAULT_NERVA_MAX_HOST_CONNECTIONS,
+    transport: str = "tcp",
+    misconfigs: bool = False,
+    system_name: str | None = None,
 ) -> list[str]:
     normalized_ports = _normalize_ports(ports)
     if not normalized_ports:
@@ -85,9 +110,19 @@ def build_nerva_command(
         raise ValueError("Los workers de Nerva deben estar entre 1 y 100.")
     if max_host_connections < 1 or max_host_connections > 20:
         raise ValueError("El límite por host debe estar entre 1 y 20 conexiones.")
+    if not isinstance(misconfigs, bool):
+        raise ValueError("misconfigs debe ser un booleano explícito.")
+
+    normalized_transport = str(transport).strip().lower()
+    if normalized_transport not in SUPPORTED_TRANSPORTS:
+        raise ValueError(f"Transporte Nerva no compatible: {transport}")
+    if not transport_available(normalized_transport, system_name=system_name):
+        raise FingerprintCapabilityUnavailable(
+            "SCTP no está disponible en esta plataforma. Nerva v1.69.4 limita SCTP a Linux."
+        )
 
     targets = ",".join(f"{ip}:{port}" for port in normalized_ports)
-    return [
+    command = [
         str(executable),
         "--json",
         "--targets",
@@ -99,6 +134,13 @@ def build_nerva_command(
         "--max-host-conn",
         str(max_host_connections),
     ]
+    if normalized_transport == "udp":
+        command.append("--udp")
+    elif normalized_transport == "sctp":
+        command.append("--sctp")
+    if misconfigs:
+        command.append("--misconfigs")
+    return command
 
 
 def _metadata_for(item: Mapping[str, Any]) -> dict[str, object]:
@@ -110,7 +152,15 @@ def _metadata_for(item: Mapping[str, Any]) -> dict[str, object]:
     else:
         metadata = {"value": metadata_value}
 
-    structural = {"host", "ip", "port", "protocol", "transport", "metadata"}
+    structural = {
+        "host",
+        "ip",
+        "port",
+        "protocol",
+        "transport",
+        "metadata",
+        "security_findings",
+    }
     for key, value in item.items():
         if key not in structural and key not in metadata:
             metadata[key] = value
@@ -124,6 +174,42 @@ def _first_text(*sources: Mapping[str, Any], keys: Sequence[str]) -> str:
             if isinstance(value, str) and value.strip():
                 return value.strip()
     return ""
+
+
+def _finding_severity(value: object) -> SecurityFindingSeverity:
+    normalized = str(value or "").strip().lower()
+    try:
+        return SecurityFindingSeverity(normalized)
+    except ValueError:
+        return SecurityFindingSeverity.UNKNOWN
+
+
+def _security_findings_for(item: Mapping[str, Any]) -> tuple[ServiceSecurityFinding, ...]:
+    raw = item.get("security_findings")
+    if raw is None:
+        return ()
+    if not isinstance(raw, list):
+        raise ValueError("Resultado Nerva con security_findings no válido.")
+
+    findings: list[ServiceSecurityFinding] = []
+    for entry in raw:
+        if not isinstance(entry, Mapping):
+            raise ValueError("Resultado Nerva con un security finding no válido.")
+        finding_id = str(entry.get("id") or entry.get("finding_id") or "unknown").strip()
+        description = str(entry.get("description") or entry.get("title") or finding_id).strip()
+        findings.append(
+            ServiceSecurityFinding(
+                finding_id=finding_id or "unknown",
+                severity=_finding_severity(entry.get("severity")),
+                description=description or finding_id or "Security finding",
+                title=str(entry.get("title") or "").strip(),
+                impact=str(entry.get("impact") or "").strip(),
+                recommendation=str(entry.get("recommendation") or "").strip(),
+                cvss=str(entry.get("cvss") or "").strip(),
+                evidence=str(entry.get("evidence") or "").strip(),
+            )
+        )
+    return tuple(findings)
 
 
 def _parse_fingerprint(item: Mapping[str, Any]) -> ServiceFingerprint:
@@ -161,6 +247,8 @@ def _parse_fingerprint(item: Mapping[str, Any]) -> ServiceFingerprint:
         product=product,
         version=version,
         metadata=metadata,
+        state="open",
+        security_findings=_security_findings_for(item),
     )
 
 
@@ -196,7 +284,7 @@ def parse_nerva_output(output: str, *, allow_partial: bool = False) -> list[Serv
             raise ValueError("Nerva devolvió una estructura JSON no compatible.")
 
     results = [_parse_fingerprint(item) for item in payloads]
-    return sorted(results, key=lambda item: (item.ip, item.port, item.protocol))
+    return sorted(results, key=lambda item: (item.ip, item.port, item.transport, item.protocol))
 
 
 def _diagnostic(stderr: str) -> str:
@@ -229,6 +317,9 @@ def fingerprint_open_ports(
     timeout_ms: int = DEFAULT_NERVA_TIMEOUT_MS,
     workers: int = DEFAULT_NERVA_WORKERS,
     max_host_connections: int = DEFAULT_NERVA_MAX_HOST_CONNECTIONS,
+    transport: str = "tcp",
+    misconfigs: bool = False,
+    system_name: str | None = None,
     on_found: Callable[[ServiceFingerprint], None] | None = None,
     popen_factory: Callable[..., subprocess.Popen[str]] = subprocess.Popen,
     monotonic: Callable[[], float] = time.monotonic,
@@ -247,6 +338,9 @@ def fingerprint_open_ports(
         timeout_ms=timeout_ms,
         workers=workers,
         max_host_connections=max_host_connections,
+        transport=transport,
+        misconfigs=misconfigs,
+        system_name=system_name,
     )
     process = popen_factory(
         command,
@@ -296,3 +390,65 @@ def fingerprint_open_ports(
         for result in results:
             on_found(result)
     return results
+
+
+def classify_udp_state(
+    *,
+    identified: bool = False,
+    explicitly_closed: bool = False,
+    probe_sent: bool = False,
+) -> UdpPortState:
+    if identified:
+        return UdpPortState.OPEN
+    if explicitly_closed:
+        return UdpPortState.CLOSED
+    if probe_sent:
+        return UdpPortState.OPEN_FILTERED
+    return UdpPortState.UNKNOWN
+
+
+def probe_udp_ports(
+    target: str,
+    ports: Iterable[int | OpenPort],
+    *,
+    stop_event: threading.Event | None = None,
+    executable: str | os.PathLike[str] | None = None,
+    timeout_ms: int = DEFAULT_NERVA_TIMEOUT_MS,
+    workers: int = DEFAULT_NERVA_WORKERS,
+    max_host_connections: int = DEFAULT_NERVA_MAX_HOST_CONNECTIONS,
+    popen_factory: Callable[..., subprocess.Popen[str]] = subprocess.Popen,
+    monotonic: Callable[[], float] = time.monotonic,
+) -> list[UdpProbeResult]:
+    stop_event = stop_event or threading.Event()
+    normalized_ports = _normalize_ports(ports)
+    if not normalized_ports or stop_event.is_set():
+        return []
+
+    ip = socket.gethostbyname(target)
+    fingerprints = fingerprint_open_ports(
+        target,
+        normalized_ports,
+        stop_event=stop_event,
+        executable=executable,
+        timeout_ms=timeout_ms,
+        workers=workers,
+        max_host_connections=max_host_connections,
+        transport="udp",
+        misconfigs=False,
+        popen_factory=popen_factory,
+        monotonic=monotonic,
+    )
+    by_port: dict[int, ServiceFingerprint] = {}
+    for fingerprint in fingerprints:
+        by_port.setdefault(fingerprint.port, fingerprint)
+
+    return [
+        UdpProbeResult(
+            host=target,
+            ip=ip,
+            port=port,
+            state=classify_udp_state(identified=port in by_port, probe_sent=True),
+            fingerprint=by_port.get(port),
+        )
+        for port in normalized_ports
+    ]

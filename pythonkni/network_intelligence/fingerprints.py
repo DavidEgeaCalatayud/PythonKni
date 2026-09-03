@@ -6,7 +6,7 @@ from dataclasses import replace
 from datetime import datetime
 from typing import Iterable
 
-from pythonkni.network.models import DiscoveredHost, ServiceFingerprint
+from pythonkni.network.models import DiscoveredHost, ServiceFingerprint, ServiceSecurityFinding
 
 from .inventory import InventoryStore, _iso, utc_now
 from .models import AssetRecord, NetworkIntelligenceDevice
@@ -19,6 +19,38 @@ def _fingerprint_service_label(fingerprint: ServiceFingerprint) -> str:
     if identity:
         return f"{fingerprint.protocol.upper()} ({identity})"
     return fingerprint.protocol.upper()
+
+
+def _fingerprint_evidence(fingerprint: ServiceFingerprint) -> str:
+    identity = " ".join(
+        part for part in (fingerprint.product.strip(), fingerprint.version.strip()) if part
+    )
+    detail = f" — {identity}" if identity else ""
+    return (
+        f"Fingerprint de aplicación {fingerprint.port}/{fingerprint.transport}: "
+        f"{fingerprint.protocol}{detail}."
+    )
+
+
+def _finding_evidence(
+    fingerprint: ServiceFingerprint,
+    finding: ServiceSecurityFinding,
+) -> str:
+    details = [
+        f"Nerva finding [{finding.severity.value}] {finding.finding_id} "
+        f"on {fingerprint.port}/{fingerprint.transport}: {finding.description}"
+    ]
+    if finding.title and finding.title != finding.description:
+        details.append(f"title: {finding.title}")
+    if finding.cvss:
+        details.append(f"CVSS: {finding.cvss}")
+    if finding.impact:
+        details.append(f"impact: {finding.impact}")
+    if finding.recommendation:
+        details.append(f"recommendation: {finding.recommendation}")
+    if finding.evidence:
+        details.append(f"evidence: {finding.evidence}")
+    return " · ".join(details)
 
 
 def device_from_asset(asset: AssetRecord) -> NetworkIntelligenceDevice:
@@ -41,22 +73,27 @@ def enrich_device_with_fingerprints(
     device: NetworkIntelligenceDevice,
     fingerprints: Iterable[ServiceFingerprint],
 ) -> NetworkIntelligenceDevice:
-    """Overlay verified application-layer identities without changing risk semantics.
+    """Overlay application identities and findings without changing classification/risk.
 
-    The enrichment is deliberately data-only. It does not run Nerva and does not
-    change classification or risk by itself.
+    The legacy ``open_ports``/``services`` fields remain TCP-only. UDP/SCTP identities are
+    retained as transport-qualified evidence so ``53/tcp`` and ``53/udp`` cannot collide.
+    Security findings are also persisted as deterministic evidence and are scored separately.
+    TCP identities are accepted only for ports already present in the device observation.
     """
 
-    grouped: dict[int, list[ServiceFingerprint]] = defaultdict(list)
-    for fingerprint in fingerprints:
-        if fingerprint.ip and fingerprint.ip != device.host.ip:
-            continue
-        if fingerprint.port not in device.open_ports:
-            continue
-        grouped[fingerprint.port].append(fingerprint)
-
-    if not grouped:
+    matching = tuple(
+        fingerprint
+        for fingerprint in fingerprints
+        if (not fingerprint.ip or fingerprint.ip == device.host.ip)
+        and (fingerprint.transport != "tcp" or fingerprint.port in device.open_ports)
+    )
+    if not matching:
         return device
+
+    grouped_tcp: dict[int, list[ServiceFingerprint]] = defaultdict(list)
+    for fingerprint in matching:
+        if fingerprint.transport == "tcp":
+            grouped_tcp[fingerprint.port].append(fingerprint)
 
     existing = dict(zip(device.open_ports, device.services))
     services: list[str] = []
@@ -64,23 +101,22 @@ def enrich_device_with_fingerprints(
 
     for port in device.open_ports:
         matches = sorted(
-            grouped.get(port, ()),
+            grouped_tcp.get(port, ()),
             key=lambda item: (item.protocol, item.product, item.version),
         )
         if not matches:
             services.append(existing.get(port, f"TCP/{port}"))
             continue
-
         labels = tuple(dict.fromkeys(_fingerprint_service_label(item) for item in matches))
         services.append(" / ".join(labels))
-        for match in matches:
-            identity = " ".join(
-                part for part in (match.product.strip(), match.version.strip()) if part
-            )
-            detail = f" — {identity}" if identity else ""
-            evidence.append(
-                f"Fingerprint de aplicación {port}/{match.transport}: {match.protocol}{detail}."
-            )
+
+    for fingerprint in sorted(
+        matching,
+        key=lambda item: (item.transport, item.port, item.protocol, item.product, item.version),
+    ):
+        evidence.append(_fingerprint_evidence(fingerprint))
+        for finding in fingerprint.security_findings:
+            evidence.append(_finding_evidence(fingerprint, finding))
 
     return replace(
         device,
@@ -93,11 +129,11 @@ def enrich_asset_with_fingerprints(
     asset: AssetRecord,
     fingerprints: Iterable[ServiceFingerprint],
 ) -> NetworkIntelligenceDevice:
-    """Apply explicitly confirmed fingerprints to a persisted asset observation.
+    """Apply accepted fingerprints to one persisted asset observation.
 
-    Fingerprints from Network Explorer originate from ports that were first confirmed
-    open. Those identified ports may extend the smaller Network Intelligence probe
-    set, so they are merged into the observation before applying service labels.
+    TCP fingerprints may extend the legacy TCP port set because Network Explorer confirmed
+    those ports open first. UDP/SCTP observations never enter that TCP-only tuple; they are
+    represented with transport-qualified evidence and timeline events instead.
     """
 
     matching = tuple(
@@ -110,7 +146,8 @@ def enrich_asset_with_fingerprints(
 
     base = device_from_asset(asset)
     existing = dict(zip(base.open_ports, base.services))
-    ports = tuple(sorted(set(base.open_ports) | {item.port for item in matching}))
+    tcp_ports = {item.port for item in matching if item.transport == "tcp"}
+    ports = tuple(sorted(set(base.open_ports) | tcp_ports))
     expanded = replace(
         base,
         open_ports=ports,
@@ -126,13 +163,12 @@ def persist_asset_fingerprints(
     *,
     observed_at: datetime | None = None,
 ) -> AssetRecord:
-    """Persist explicitly accepted service identities and track identity changes.
+    """Persist accepted service identities/findings and track meaningful changes.
 
-    The caller must resolve an existing ``AssetRecord`` first. The record is reloaded
-    and revalidated immediately before mutation so this path cannot synthesize a new
-    inventory asset from Nerva output alone. Risk and classification remain unchanged.
-    Existing-port product/version changes become ``service_changed`` timeline events;
-    newly observed ports continue through the inventory's normal ``port_opened`` path.
+    The asset is reloaded immediately before mutation, so Nerva output cannot synthesize an
+    inventory asset. TCP service identity changes become ``service_changed`` events. New
+    UDP/SCTP observations become ``service_observed`` events, and newly observed Nerva security
+    findings become ``security_finding`` events. Device classification and risk remain unchanged.
     """
 
     current = store.get_asset(asset.asset_id)
@@ -142,8 +178,13 @@ def persist_asset_fingerprints(
         raise ValueError("The Network Intelligence asset changed before fingerprints were applied.")
     asset = current
 
+    matching = tuple(
+        fingerprint
+        for fingerprint in fingerprints
+        if not fingerprint.ip or fingerprint.ip == asset.ip
+    )
     observed_at = observed_at or utc_now()
-    enriched = enrich_asset_with_fingerprints(asset, fingerprints)
+    enriched = enrich_asset_with_fingerprints(asset, matching)
     if (
         enriched.open_ports == asset.open_ports
         and enriched.services == asset.services
@@ -158,10 +199,14 @@ def persist_asset_fingerprints(
         for port in sorted(before_services.keys() & after_services.keys())
         if before_services[port] != after_services[port]
     )
+    previous_evidence = set(asset.evidence)
+    new_evidence = set(enriched.evidence) - previous_evidence
 
     with closing(store._connect()) as connection:
         asset_id = store._upsert_device(connection, asset.scope, enriched, observed_at)
+        custom_change = False
         for port, before, after in changed_services:
+            custom_change = True
             store._event(
                 connection,
                 asset_id=asset_id,
@@ -172,7 +217,44 @@ def persist_asset_fingerprints(
                 details=f"{port}/tcp {before} → {after}",
                 ip=asset.ip,
             )
-        if changed_services:
+
+        for fingerprint in matching:
+            fingerprint_evidence = _fingerprint_evidence(fingerprint)
+            if fingerprint.transport != "tcp" and fingerprint_evidence in new_evidence:
+                custom_change = True
+                store._event(
+                    connection,
+                    asset_id=asset_id,
+                    scope=asset.scope,
+                    created_at=observed_at,
+                    event_type="service_observed",
+                    summary="Transport service observed",
+                    details=(
+                        f"{fingerprint.port}/{fingerprint.transport} "
+                        f"{_fingerprint_service_label(fingerprint)}"
+                    ),
+                    ip=asset.ip,
+                )
+            for finding in fingerprint.security_findings:
+                finding_evidence = _finding_evidence(fingerprint, finding)
+                if finding_evidence not in new_evidence:
+                    continue
+                custom_change = True
+                store._event(
+                    connection,
+                    asset_id=asset_id,
+                    scope=asset.scope,
+                    created_at=observed_at,
+                    event_type="security_finding",
+                    summary="Service security finding detected",
+                    details=(
+                        f"[{finding.severity.value}] {finding.finding_id} · "
+                        f"{fingerprint.port}/{fingerprint.transport} · {finding.description}"
+                    ),
+                    ip=asset.ip,
+                )
+
+        if custom_change:
             connection.execute(
                 "UPDATE assets SET last_change = ? WHERE asset_id = ?",
                 (_iso(observed_at), asset_id),

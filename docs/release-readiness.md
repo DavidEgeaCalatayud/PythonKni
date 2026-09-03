@@ -1,6 +1,6 @@
 # Release readiness
 
-This document records PythonKni's Windows release-engineering contract after the verified `v0.1.0` release, the first-class installer milestone and the pinned Nerva service-fingerprinting integration.
+This document records PythonKni's Windows release-engineering contract after the verified `v0.1.0` release, the first-class installer milestone, pinned Nerva integration and Service Intelligence v2.
 
 ## Released baseline
 
@@ -16,39 +16,44 @@ Installer generation and Nerva packaging were added **after** `v0.1.0`, so the h
 
 ## Current validated baseline
 
-The current Nerva-enabled installer branch baseline has been validated on Windows / **CPython 3.13.15** with:
+The Service Intelligence v2 branch has reached the following Windows / **CPython 3.13.15** source-validation baseline before final distribution acceptance:
 
-- **1,131/1,131 tests** passing;
-- **93.0%** repository branch coverage;
+- **1,175/1,175 tests** passing;
+- **92.9%** repository branch coverage;
 - **93.5%** aggregate `service.py` coverage;
 - **93.4%** `pythonkni/network/window.py` coverage;
-- **99.2%** `pythonkni/network/fingerprinting.py` coverage;
+- **98.8%** `pythonkni/network/fingerprinting.py` coverage;
+- **96.0%** scheduled fingerprint-policy coverage;
 - exact SHA-256-locked runtime/development dependency graphs;
 - `pip check` plus strict runtime/development `pip-audit` with no known vulnerabilities;
 - CycloneDX runtime SBOM generation;
 - offline validation of the **40,046-assignment** bundled IEEE MA-L registry and provenance metadata;
 - Network Intelligence benchmark smoke;
-- Network Intelligence structural typing ratchet at **683/736 annotation slots (92.8%)**, **269 fully annotated / 308 tracked callables**, with the explicit-`Any` ceiling unchanged at 39;
-- Ruff check/format;
-- exact Nerva **v1.69.4** Windows amd64 pin and SHA-256 validation before extraction;
-- required upstream Apache-2.0 license retention during Nerva staging;
-- PyInstaller Windows build containing the staged Nerva engine;
-- packaged `nerva.exe --capabilities` verification;
-- frozen `PythonKni.exe --smoke-test`;
-- ZIP/checksum artifact generation;
-- Inno Setup installer generation using the preinstalled runner toolchain;
-- real installed-app smoke: silent install, installed executable smoke, silent uninstall and cleanup verification;
-- installer executable + SHA-256 artifact retention.
+- Network Intelligence structural typing ratchet at **728/785 annotation slots (92.74%)**, **283 fully annotated / 326 tracked callables**, with the explicit-`Any` ceiling unchanged at 39;
+- all repository/service/window/refactored-code coverage ratchets preserved.
 
-Grouped CI coverage ratchets also fail immediately on native-command errors, preventing an individual floor failure from being masked by a later successful PowerShell command.
+Final release acceptance additionally requires the exact candidate commit to pass Ruff check/format, pinned Nerva staging, PyInstaller packaging, packaged Nerva capabilities validation, frozen application smoke, ZIP/checksum generation, Inno Setup generation, installed-app lifecycle smoke and artifact upload. A source-test pass is not sufficient on its own.
+
+Grouped CI coverage ratchets fail immediately on native-command errors, preventing an individual floor failure from being masked by a later successful PowerShell command.
 
 A release must repeat the Release workflow against the exact immutable release commit; a previous CI artifact is supporting evidence, not a substitute for the release run.
 
 ## Functional milestone completed
 
-The current Network Intelligence platform includes persistent inventory/identity reconciliation, classification confidence, relationships/topology/physical evidence, contextual Security Score, deterministic snapshot reporting, offline snapshot comparison, Security Score History, opt-in scheduled checks, automatic snapshots, local change notifications, History Center/trends/configurable retention and a reproducible build-time IEEE OUI registry updater.
+The Network Intelligence platform includes persistent inventory/identity reconciliation, classification confidence, relationships/topology/physical evidence, contextual Security Score, deterministic snapshot reporting, offline snapshot comparison, Security Score History, opt-in scheduled checks, automatic snapshots, local change notifications, History Center/trends/configurable retention and a reproducible build-time IEEE OUI registry updater.
 
-Network Explorer additionally supports explicit application-layer fingerprinting of already-confirmed open TCP ports through the pinned Nerva engine. Results are normalized into PythonKni-owned models, can be exported as JSON and can be explicitly applied to one matching online Network Intelligence asset. Service/product/version changes then participate in persisted timeline and snapshot comparison without automatically changing the asset's risk or classification.
+Service Intelligence v2 extends the pinned Nerva integration with intentionally separated capabilities:
+
+- normal TCP service identification remains explicit and operates on known-open ports;
+- bounded explicit UDP probing preserves UDP uncertainty instead of interpreting silence as closed;
+- Nerva `--misconfigs` is available only through a separate explicit **Check insecure configurations** action;
+- SCTP is modeled as an advanced capability, but Nerva v1.69.4 restricts SCTP to Linux, so the validated Windows application truthfully disables/refuses that mode;
+- normalized security findings retain id/severity/title/description/impact/recommendation/CVSS/evidence;
+- UDP/SCTP observations are transport-qualified and cannot collide with the legacy TCP port inventory;
+- findings and service observations produce explicit timeline evidence without automatically rewriting asset classification or `RiskLevel`;
+- persisted findings can affect the Network Security Score only through deterministic bounded rules: critical `-12`, high `-8`, medium `-4`, low `-1`, info/unknown `0`, capped at **20 points per asset**.
+
+Network Intelligence also persists a configurable fingerprint policy: Disabled, Manual only, Automatic after discovery, or Only assets with known changes. Automatic policies run between successful discovery persistence and snapshot publication, but are deliberately constrained to known TCP ports with maximum 32 assets, 16 ports per asset, 8 Nerva workers, 2 host connections and a 1500 ms probe timeout. Scheduled execution never enables `--misconfigs`, UDP or SCTP.
 
 The quality/toolchain milestone also includes the CPython 3.13.15 runtime contract, incremental Network Intelligence structural typing ratchet, first-class per-user Windows installer pipeline and reproducible Nerva staging/packaging contract.
 
@@ -114,9 +119,9 @@ requirements.txt
 requirements-dev.txt
 ```
 
-Nerva is embedded inside the validated Windows application bundle rather than published as an independent PythonKni release asset. The retained workflow evidence includes `coverage.xml` and the exact `third_party/nerva.lock.json` provenance pin. The historical `v0.1.0` release predates both installer and Nerva support and therefore correctly retains its original six assets only.
+Nerva is embedded inside the validated Windows application bundle rather than published as an independent PythonKni release asset. Retained workflow evidence includes `coverage.xml`, benchmark JSON and the exact `third_party/nerva.lock.json` provenance pin. The historical `v0.1.0` release predates both installer and Nerva support and therefore correctly retains its original six assets only.
 
-## Nerva distribution contract
+## Nerva distribution and capability contract
 
 `third_party/nerva.lock.json` pins Nerva `v1.69.4` for Windows amd64 and SHA-256:
 
@@ -126,7 +131,9 @@ Nerva is embedded inside the validated Windows application bundle rather than pu
 
 `scripts/fetch_nerva.ps1` downloads only that exact upstream archive during explicit build/CI/release preparation, verifies the digest before extraction and requires the upstream Apache-2.0 license. Normal application runtime does not download or update Nerva.
 
-PyInstaller packages the staged engine, license and provenance. CI/release then execute the packaged `nerva.exe --capabilities` before accepting the Windows bundle. The current product integration uses Nerva only as an explicit fingerprinting step for TCP ports already confirmed open by Network Explorer; broader protocol/misconfiguration modes are not part of this milestone.
+PyInstaller packages the staged engine, license and provenance. CI/release execute the packaged `nerva.exe --capabilities` before accepting the Windows bundle.
+
+The application does not assume every Nerva capability is portable across operating systems. The validated Windows Nerva binary is used for TCP, UDP and explicit misconfiguration checks. SCTP is capability-gated because the pinned upstream release restricts it to Linux. Scheduled Network Intelligence fingerprinting is intentionally narrower than the engine: TCP-only known ports and no misconfiguration probes.
 
 See [`network-service-fingerprinting.md`](network-service-fingerprinting.md).
 
@@ -145,6 +152,7 @@ See [`windows-installer.md`](windows-installer.md) for the installation, checksu
 These do not block the current technical distribution model, but remain explicit:
 
 - Windows is the only packaged/validated platform;
+- SCTP service fingerprinting is not available in that Windows package because Nerva v1.69.4 exposes SCTP only on Linux;
 - the executable and installer are not yet Authenticode/code signed, so Windows SmartScreen/reputation warnings remain possible;
 - Python 3.14+, free-threaded CPython and non-Windows packaging are not claimed;
 - optional OCR workflows still depend on local Tesseract/Poppler;
@@ -155,4 +163,4 @@ These do not block the current technical distribution model, but remain explicit
 1. add representative screenshots/demo media;
 2. define certificate ownership, identity and secret handling for Authenticode signing;
 3. sign the executable/installer once that policy is established;
-4. keep dependency/OUI/runtime/typing/installer/Nerva gates non-regressive while product features evolve.
+4. keep dependency/OUI/runtime/typing/installer/Nerva/Service Intelligence gates non-regressive while product features evolve.
