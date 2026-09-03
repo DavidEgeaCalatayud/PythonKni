@@ -36,11 +36,21 @@ def _finding_evidence(
     fingerprint: ServiceFingerprint,
     finding: ServiceSecurityFinding,
 ) -> str:
-    evidence = f" · {finding.evidence}" if finding.evidence else ""
-    return (
+    details = [
         f"Nerva finding [{finding.severity.value}] {finding.finding_id} "
-        f"on {fingerprint.port}/{fingerprint.transport}: {finding.description}{evidence}"
-    )
+        f"on {fingerprint.port}/{fingerprint.transport}: {finding.description}"
+    ]
+    if finding.title and finding.title != finding.description:
+        details.append(f"title: {finding.title}")
+    if finding.cvss:
+        details.append(f"CVSS: {finding.cvss}")
+    if finding.impact:
+        details.append(f"impact: {finding.impact}")
+    if finding.recommendation:
+        details.append(f"recommendation: {finding.recommendation}")
+    if finding.evidence:
+        details.append(f"evidence: {finding.evidence}")
+    return " · ".join(details)
 
 
 def device_from_asset(asset: AssetRecord) -> NetworkIntelligenceDevice:
