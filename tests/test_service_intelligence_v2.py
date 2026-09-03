@@ -3,14 +3,12 @@ from __future__ import annotations
 import threading
 from dataclasses import replace
 from datetime import datetime, timedelta, timezone
-from pathlib import Path
 
 import pytest
 
 from pythonkni.camera_auditor.models import RiskLevel
 from pythonkni.network import fingerprinting
 from pythonkni.network.models import (
-    DiscoveredHost,
     SecurityFindingSeverity,
     ServiceFingerprint,
     ServiceSecurityFinding,
