@@ -62,15 +62,11 @@ def test_nerva_command_modes_are_explicit_and_transport_bounded():
     assert "--sctp" not in base
     assert "--misconfigs" not in base
 
-    udp = fingerprinting.build_nerva_command(
-        "nerva.exe", "192.0.2.1", [53], transport="udp"
-    )
+    udp = fingerprinting.build_nerva_command("nerva.exe", "192.0.2.1", [53], transport="udp")
     assert udp[-1] == "--udp"
     assert "--misconfigs" not in udp
 
-    findings = fingerprinting.build_nerva_command(
-        "nerva.exe", "192.0.2.1", [22], misconfigs=True
-    )
+    findings = fingerprinting.build_nerva_command("nerva.exe", "192.0.2.1", [22], misconfigs=True)
     assert findings[-1] == "--misconfigs"
     assert "--udp" not in findings
 
@@ -87,12 +83,13 @@ def test_nerva_command_modes_are_explicit_and_transport_bounded():
             system_name="Windows",
         )
     with pytest.raises(ValueError, match="Transporte"):
-        fingerprinting.build_nerva_command(
-            "nerva.exe", "192.0.2.1", [80], transport="icmp"
-        )
+        fingerprinting.build_nerva_command("nerva.exe", "192.0.2.1", [80], transport="icmp")
     with pytest.raises(ValueError, match="booleano"):
         fingerprinting.build_nerva_command(
-            "nerva.exe", "192.0.2.1", [80], misconfigs="yes"  # type: ignore[arg-type]
+            "nerva.exe",
+            "192.0.2.1",
+            [80],
+            misconfigs="yes",  # type: ignore[arg-type]
         )
 
 
@@ -195,9 +192,7 @@ def test_udp_and_security_findings_persist_without_polluting_tcp_ports(tmp_path)
         security_findings=(finding,),
     )
 
-    persisted = persist_asset_fingerprints(
-        store, asset, [fingerprint], observed_at=observed
-    )
+    persisted = persist_asset_fingerprints(store, asset, [fingerprint], observed_at=observed)
 
     assert persisted.open_ports == asset.open_ports
     assert persisted.services == asset.services
@@ -205,7 +200,9 @@ def test_udp_and_security_findings_persist_without_polluting_tcp_ports(tmp_path)
     assert any("161/udp: snmp" in item for item in persisted.evidence)
     assert any("Nerva finding [high] snmp-public-community" in item for item in persisted.evidence)
     events = store.list_events(scope=SCOPE)
-    assert any(event.event_type == "service_observed" and "161/udp" in event.details for event in events)
+    assert any(
+        event.event_type == "service_observed" and "161/udp" in event.details for event in events
+    )
     assert any(
         event.event_type == "security_finding" and "snmp-public-community" in event.details
         for event in events
@@ -249,7 +246,12 @@ class _FakeStore:
 
 def test_scheduled_fingerprinting_is_tcp_only_bounded_and_never_enables_misconfigs(monkeypatch):
     assets = [
-        _asset(asset_id=f"asset-{index}", ip=f"192.168.1.{index + 10}", ports=tuple(range(1, 30)), services=tuple("X" for _ in range(29)))
+        _asset(
+            asset_id=f"asset-{index}",
+            ip=f"192.168.1.{index + 10}",
+            ports=tuple(range(1, 30)),
+            services=tuple("X" for _ in range(29)),
+        )
         for index in range(3)
     ]
     store = _FakeStore(assets)
