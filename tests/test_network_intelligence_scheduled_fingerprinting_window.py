@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import threading
 from datetime import datetime, timedelta, timezone
-from types import SimpleNamespace
 
 from pythonkni.network_intelligence import reporting_window, scheduler_window
 from pythonkni.network_intelligence import window as base_window
