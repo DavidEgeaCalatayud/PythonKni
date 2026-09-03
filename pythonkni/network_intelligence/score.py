@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import re
 from collections import Counter
 from datetime import datetime, timezone
 
@@ -20,6 +21,18 @@ _ROLE_RISK_DEDUCTIONS = {
 }
 _GATEWAY_RISK_DEDUCTIONS = {RiskLevel.HIGH: 4, RiskLevel.MEDIUM: 2}
 _INFRASTRUCTURE_LINK_DEDUCTIONS = {RiskLevel.HIGH: 2, RiskLevel.MEDIUM: 1}
+_SECURITY_FINDING_DEDUCTIONS = {
+    "critical": 12,
+    "high": 8,
+    "medium": 4,
+    "low": 1,
+    "info": 0,
+    "unknown": 0,
+}
+_SECURITY_FINDING_CAP_PER_ASSET = 20
+_SECURITY_FINDING_PATTERN = re.compile(
+    r"^Nerva finding \[(critical|high|medium|low|info|unknown)\] ", re.IGNORECASE
+)
 
 
 def _risk_weight(risk: RiskLevel, weights: dict[RiskLevel, int]) -> int:
@@ -107,6 +120,40 @@ def _contextual_deductions(
     return deductions, tuple(findings)
 
 
+def _service_security_deductions(online: list[AssetRecord]) -> tuple[int, tuple[str, ...]]:
+    deductions = 0
+    severity_counts: Counter[str] = Counter()
+    affected_assets = 0
+
+    for asset in online:
+        asset_deduction = 0
+        matched = False
+        for evidence in dict.fromkeys(asset.evidence):
+            match = _SECURITY_FINDING_PATTERN.match(evidence)
+            if match is None:
+                continue
+            matched = True
+            severity = match.group(1).lower()
+            severity_counts[severity] += 1
+            asset_deduction += _SECURITY_FINDING_DEDUCTIONS[severity]
+        if matched:
+            affected_assets += 1
+        deductions += min(asset_deduction, _SECURITY_FINDING_CAP_PER_ASSET)
+
+    if not severity_counts:
+        return 0, ()
+
+    ordered = ", ".join(
+        f"{severity}={severity_counts[severity]}"
+        for severity in ("critical", "high", "medium", "low", "info", "unknown")
+        if severity_counts[severity]
+    )
+    return deductions, (
+        f"{sum(severity_counts.values())} persisted service-security finding(s) affect "
+        f"{affected_assets} online asset(s) ({ordered}; {deductions} bounded deduction).",
+    )
+
+
 def calculate_security_score(
     assets: list[AssetRecord],
     *,
@@ -135,8 +182,12 @@ def calculate_security_score(
         + len(cleartext_http) * 2
         + len(new_unknown_today) * 3
     )
+    service_deductions, service_findings = _service_security_deductions(online)
     contextual_deductions, contextual_findings = _contextual_deductions(online, relationships)
-    score = max(0, min(100, 100 - base_deductions - contextual_deductions))
+    score = max(
+        0,
+        min(100, 100 - base_deductions - service_deductions - contextual_deductions),
+    )
 
     findings: list[str] = []
     if cameras_with_rtsp:
@@ -149,6 +200,7 @@ def calculate_security_score(
         findings.append(f"{len(new_unknown_today)} unknown device(s) appeared today.")
     if risk_counts[RiskLevel.HIGH]:
         findings.append(f"{risk_counts[RiskLevel.HIGH]} high-risk device(s) require review.")
+    findings.extend(service_findings)
     findings.extend(contextual_findings)
     if not findings:
         findings.append("No critical findings in the current online inventory.")
