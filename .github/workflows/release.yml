@@ -169,6 +169,42 @@ jobs:
 
           "enabled=$($installerEnabled.ToString().ToLowerInvariant())" >> $env:GITHUB_OUTPUT
 
+      - name: Detect Nerva support in release source
+        id: nerva_support
+        shell: powershell
+        env:
+          RELEASE_RECOVERY: ${{ steps.release_meta.outputs.recovery }}
+        run: |
+          $requiredNervaFiles = @(
+            "third_party\nerva.lock.json",
+            "third_party\NOTICE.md",
+            "scripts\fetch_nerva.ps1"
+          )
+          $missingNervaFiles = @(
+            $requiredNervaFiles | Where-Object {
+              -not (Test-Path -LiteralPath $_ -PathType Leaf)
+            }
+          )
+
+          $nervaEnabled = $missingNervaFiles.Count -eq 0
+          if ($nervaEnabled) {
+            $spec = Get-Content -LiteralPath "PythonKni.spec" -Raw
+            if ($spec -notmatch 'third_party/nerva/nerva\.exe') {
+              $nervaEnabled = $false
+              $missingNervaFiles += "PythonKni.spec Nerva binary contract"
+            }
+          }
+
+          if (-not $nervaEnabled -and $env:RELEASE_RECOVERY -ne "true") {
+            throw "Release source is missing the pinned Nerva packaging pipeline: $($missingNervaFiles -join ', ')"
+          }
+
+          if (-not $nervaEnabled) {
+            Write-Host "Historical recovery source predates Nerva support; recovering historical assets without Nerva."
+          }
+
+          "enabled=$($nervaEnabled.ToString().ToLowerInvariant())" >> $env:GITHUB_OUTPUT
+
       - name: Set up Python
         uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7
         with:
@@ -252,8 +288,27 @@ jobs:
       - name: Ruff format check
         run: python -m ruff format --check .
 
+      - name: Stage pinned Nerva engine
+        if: steps.nerva_support.outputs.enabled == 'true'
+        shell: powershell
+        run: .\scripts\fetch_nerva.ps1
+
       - name: Build Windows bundle
         run: pyinstaller --noconfirm --clean PythonKni.spec
+
+      - name: Verify packaged Nerva engine
+        if: steps.nerva_support.outputs.enabled == 'true'
+        shell: powershell
+        run: |
+          $nerva = Join-Path $PWD "dist\PythonKni\_internal\third_party\nerva\nerva.exe"
+          if (-not (Test-Path -LiteralPath $nerva -PathType Leaf)) {
+            throw "PyInstaller did not package the verified Nerva engine at $nerva"
+          }
+
+          & $nerva --capabilities | Out-Null
+          if ($LASTEXITCODE -ne 0) {
+            throw "Packaged Nerva capability smoke failed with exit code $LASTEXITCODE"
+          }
 
       - name: Smoke test packaged application
         shell: powershell
@@ -303,6 +358,18 @@ jobs:
           if-no-files-found: error
           retention-days: 30
 
+      - name: Upload validated Nerva provenance artifact
+        if: steps.nerva_support.outputs.enabled == 'true'
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: PythonKni-${{ steps.release_meta.outputs.tag }}-nerva-provenance
+          path: |
+            third_party/nerva.lock.json
+            third_party/NOTICE.md
+            third_party/nerva/source.json
+          if-no-files-found: error
+          retention-days: 30
+
       - name: Upload validated installer artifact
         if: steps.installer_support.outputs.enabled == 'true'
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
@@ -320,6 +387,7 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           RELEASE_TAG: ${{ steps.release_meta.outputs.tag }}
           INSTALLER_ENABLED: ${{ steps.installer_support.outputs.enabled }}
+          NERVA_ENABLED: ${{ steps.nerva_support.outputs.enabled }}
         run: |
           $tag = $env:RELEASE_TAG
           $zip = "dist\PythonKni-$tag-windows-x64.zip"
@@ -330,7 +398,9 @@ jobs:
           $ouiMetadata = "assets\network_oui_prefixes.meta.json"
           $runtimeLock = "requirements.txt"
           $developmentLock = "requirements-dev.txt"
+          $nervaLock = "third_party\nerva.lock.json"
           $installerEnabled = $env:INSTALLER_ENABLED -eq "true"
+          $nervaEnabled = $env:NERVA_ENABLED -eq "true"
 
           if ($installerEnabled) {
             foreach ($path in @($installer, $installerChecksum)) {
@@ -340,24 +410,29 @@ jobs:
             }
           }
 
+          if ($nervaEnabled -and -not (Test-Path -LiteralPath $nervaLock -PathType Leaf)) {
+            throw "Validated Nerva provenance asset not found: $nervaLock"
+          }
+
+          $baseAssets = @($zip, $checksum, $sbom, $ouiMetadata, $runtimeLock, $developmentLock)
+          $releaseAssets = @($baseAssets)
+          if ($nervaEnabled) {
+            $releaseAssets += $nervaLock
+          }
+          if ($installerEnabled) {
+            $releaseAssets += @($installer, $installerChecksum)
+          }
+
           cmd /c "gh release view $tag >nul 2>&1"
           $releaseExists = $LASTEXITCODE -eq 0
 
           if ($releaseExists) {
-            if ($installerEnabled) {
-              gh release upload $tag $zip $checksum $sbom $ouiMetadata $runtimeLock $developmentLock $installer $installerChecksum --clobber
-            } else {
-              gh release upload $tag $zip $checksum $sbom $ouiMetadata $runtimeLock $developmentLock --clobber
-            }
+            gh release upload $tag @releaseAssets --clobber
             if ($LASTEXITCODE -ne 0) {
               throw "Could not upload assets to existing GitHub Release $tag."
             }
           } else {
-            if ($installerEnabled) {
-              gh release create $tag $zip $checksum $sbom $ouiMetadata $runtimeLock $developmentLock $installer $installerChecksum --title "PythonKni $tag" --generate-notes --verify-tag
-            } else {
-              gh release create $tag $zip $checksum $sbom $ouiMetadata $runtimeLock $developmentLock --title "PythonKni $tag" --generate-notes --verify-tag
-            }
+            gh release create $tag @releaseAssets --title "PythonKni $tag" --generate-notes --verify-tag
             if ($LASTEXITCODE -ne 0) {
               throw "Could not create GitHub Release $tag."
             }

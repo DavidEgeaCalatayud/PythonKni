@@ -1,6 +1,6 @@
 # Release readiness
 
-This document records PythonKni's Windows release-engineering contract after the verified `v0.1.0` release and the first-class installer milestone.
+This document records PythonKni's Windows release-engineering contract after the verified `v0.1.0` release, the first-class installer milestone and the pinned Nerva service-fingerprinting integration.
 
 ## Released baseline
 
@@ -12,28 +12,35 @@ This document records PythonKni's Windows release-engineering contract after the
 
 `v0.1.0` is published as the first public release. Its tag remains an immutable reference to the exact released source revision. The release contains the validated portable Windows ZIP/checksum plus the CycloneDX SBOM, OUI provenance metadata and both dependency locks.
 
-Installer generation was added **after** `v0.1.0`, so the historical `v0.1.0` release intentionally remains unchanged. Future releases built from installer-enabled source add the versioned setup executable and its SHA-256 checksum.
+Installer generation and Nerva packaging were added **after** `v0.1.0`, so the historical `v0.1.0` release intentionally remains unchanged. Future releases built from current source add the versioned setup executable/checksum and embed the verified Nerva engine in the application bundle.
 
 ## Current validated baseline
 
-The current installer-enabled branch baseline has been validated on Windows / **CPython 3.13.15** with:
+The current Nerva-enabled installer branch baseline has been validated on Windows / **CPython 3.13.15** with:
 
-- **1,068/1,068 tests** passing;
-- **92.8%** repository branch coverage;
+- **1,131/1,131 tests** passing;
+- **93.0%** repository branch coverage;
 - **93.5%** aggregate `service.py` coverage;
+- **93.4%** `pythonkni/network/window.py` coverage;
+- **99.2%** `pythonkni/network/fingerprinting.py` coverage;
 - exact SHA-256-locked runtime/development dependency graphs;
 - `pip check` plus strict runtime/development `pip-audit` with no known vulnerabilities;
 - CycloneDX runtime SBOM generation;
 - offline validation of the **40,046-assignment** bundled IEEE MA-L registry and provenance metadata;
 - Network Intelligence benchmark smoke;
-- Network Intelligence structural typing ratchet (**92.65%** current annotation coverage);
+- Network Intelligence structural typing ratchet at **683/736 annotation slots (92.8%)**, **269 fully annotated / 308 tracked callables**, with the explicit-`Any` ceiling unchanged at 39;
 - Ruff check/format;
-- PyInstaller Windows build;
+- exact Nerva **v1.69.4** Windows amd64 pin and SHA-256 validation before extraction;
+- required upstream Apache-2.0 license retention during Nerva staging;
+- PyInstaller Windows build containing the staged Nerva engine;
+- packaged `nerva.exe --capabilities` verification;
 - frozen `PythonKni.exe --smoke-test`;
 - ZIP/checksum artifact generation;
 - Inno Setup installer generation using the preinstalled runner toolchain;
 - real installed-app smoke: silent install, installed executable smoke, silent uninstall and cleanup verification;
 - installer executable + SHA-256 artifact retention.
+
+Grouped CI coverage ratchets also fail immediately on native-command errors, preventing an individual floor failure from being masked by a later successful PowerShell command.
 
 A release must repeat the Release workflow against the exact immutable release commit; a previous CI artifact is supporting evidence, not a substitute for the release run.
 
@@ -41,7 +48,9 @@ A release must repeat the Release workflow against the exact immutable release c
 
 The current Network Intelligence platform includes persistent inventory/identity reconciliation, classification confidence, relationships/topology/physical evidence, contextual Security Score, deterministic snapshot reporting, offline snapshot comparison, Security Score History, opt-in scheduled checks, automatic snapshots, local change notifications, History Center/trends/configurable retention and a reproducible build-time IEEE OUI registry updater.
 
-The quality/toolchain milestone also includes the CPython 3.13.15 runtime contract, incremental Network Intelligence structural typing ratchet and first-class per-user Windows installer pipeline enforced by CI and future releases.
+Network Explorer additionally supports explicit application-layer fingerprinting of already-confirmed open TCP ports through the pinned Nerva engine. Results are normalized into PythonKni-owned models, can be exported as JSON and can be explicitly applied to one matching online Network Intelligence asset. Service/product/version changes then participate in persisted timeline and snapshot comparison without automatically changing the asset's risk or classification.
+
+The quality/toolchain milestone also includes the CPython 3.13.15 runtime contract, incremental Network Intelligence structural typing ratchet, first-class per-user Windows installer pipeline and reproducible Nerva staging/packaging contract.
 
 ## Release workflow contract
 
@@ -69,7 +78,7 @@ The recovery branch path is also deliberately constrained:
 - the workflow then checks out that **exact tagged commit in detached HEAD state** and verifies its `project.version` before installing, testing, building or publishing anything;
 - recovery therefore repairs publication without moving the immutable tag or silently rebuilding a different source revision.
 
-Historical recovery has one compatibility rule: if an immutable old tag predates the installer pipeline, recovery republishes only the assets that source revision knows how to build. It never injects current installer code into old tagged source. New direct/bootstrap releases require installer support to be present.
+Historical recovery has compatibility rules for both later distribution milestones. If an immutable old tag predates installer or Nerva support, recovery republishes only the assets and runtime contents supported by that tagged source. It never injects current installer code or a current Nerva binary into old immutable source. New direct/bootstrap releases require the corresponding support files to be present.
 
 After resolving and checking out the release source, the same workflow must:
 
@@ -79,11 +88,12 @@ After resolving and checking out the release source, the same workflow must:
 4. run the full test suite and coverage ratchets;
 5. enforce the Network Intelligence structural typing ratchet;
 6. run Ruff check/format;
-7. build with PyInstaller and run the frozen smoke test;
-8. package the versioned Windows ZIP + SHA-256 checksum;
-9. for installer-enabled source, build the version-bound Inno Setup installer and run the installed-app lifecycle smoke;
-10. upload retained workflow artifacts; and
-11. publish/update the GitHub Release with the validated files.
+7. for Nerva-enabled source, stage the exact pinned engine only after SHA-256/license validation;
+8. build with PyInstaller, verify the packaged Nerva engine when enabled and run the frozen smoke test;
+9. package the versioned Windows ZIP + SHA-256 checksum;
+10. for installer-enabled source, build the version-bound Inno Setup installer and run the installed-app lifecycle smoke;
+11. upload retained workflow artifacts; and
+12. publish/update the GitHub Release with the validated files.
 
 The publication probe is intentionally compatible with the Windows PowerShell runner: a missing GitHub Release is treated as the expected create path rather than as a terminating native-command error. Existing releases use an idempotent asset upload with `--clobber`; missing releases are created with `--verify-tag`.
 
@@ -91,7 +101,7 @@ The release is complete only after the Release workflow conclusion is `success`,
 
 ## Expected release assets
 
-For installer-enabled source, future releases publish:
+For current installer/Nerva-enabled source, future releases publish:
 
 ```text
 PythonKni-vX.Y.Z-windows-x64.zip
@@ -104,7 +114,21 @@ requirements.txt
 requirements-dev.txt
 ```
 
-The retained workflow artifacts also include build evidence such as `coverage.xml`. The historical `v0.1.0` release predates installer support and therefore correctly contains its original six assets only.
+Nerva is embedded inside the validated Windows application bundle rather than published as an independent PythonKni release asset. The retained workflow evidence includes `coverage.xml` and the exact `third_party/nerva.lock.json` provenance pin. The historical `v0.1.0` release predates both installer and Nerva support and therefore correctly retains its original six assets only.
+
+## Nerva distribution contract
+
+`third_party/nerva.lock.json` pins Nerva `v1.69.4` for Windows amd64 and SHA-256:
+
+```text
+59e59eb54c8c5c581031387a0aa23c98983db94301e811f3c9b1802a05fc97f7
+```
+
+`scripts/fetch_nerva.ps1` downloads only that exact upstream archive during explicit build/CI/release preparation, verifies the digest before extraction and requires the upstream Apache-2.0 license. Normal application runtime does not download or update Nerva.
+
+PyInstaller packages the staged engine, license and provenance. CI/release then execute the packaged `nerva.exe --capabilities` before accepting the Windows bundle. The current product integration uses Nerva only as an explicit fingerprinting step for TCP ports already confirmed open by Network Explorer; broader protocol/misconfiguration modes are not part of this milestone.
+
+See [`network-service-fingerprinting.md`](network-service-fingerprinting.md).
 
 ## Installer contract
 
@@ -131,4 +155,4 @@ These do not block the current technical distribution model, but remain explicit
 1. add representative screenshots/demo media;
 2. define certificate ownership, identity and secret handling for Authenticode signing;
 3. sign the executable/installer once that policy is established;
-4. keep dependency/OUI/runtime/typing/installer gates non-regressive while product features evolve.
+4. keep dependency/OUI/runtime/typing/installer/Nerva gates non-regressive while product features evolve.

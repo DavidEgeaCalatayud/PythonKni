@@ -1,7 +1,11 @@
 import sys
 
 from pythonkni.network import camera_handoff_window as _window
+from pythonkni.network import fingerprint_inventory_window as _fingerprint_window
 from pythonkni.network import service as _service
+
+_window.__dict__["PortScanner"] = _fingerprint_window.PortScanner
+_window.__dict__["Tool"] = _fingerprint_window.Tool
 
 
 def _legacy_getattr(name):

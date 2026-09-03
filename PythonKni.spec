@@ -9,9 +9,19 @@ from PyInstaller.utils.hooks import collect_all
 datas = [
     ('tools', 'tools'),
     ('assets', 'assets'),
+    ('third_party/NOTICE.md', 'third_party'),
+    ('third_party/nerva.lock.json', 'third_party'),
 ]
 binaries = []
 hiddenimports = []
+
+nerva_binary = Path('third_party/nerva/nerva.exe')
+if nerva_binary.is_file():
+    binaries.append((str(nerva_binary), 'third_party/nerva'))
+    for optional_name in ('source.json', 'LICENSE', 'LICENSE.txt', 'LICENSE.md'):
+        optional_path = nerva_binary.parent / optional_name
+        if optional_path.is_file():
+            datas.append((str(optional_path), 'third_party/nerva'))
 
 
 def local_python_modules(root_name):

@@ -19,5 +19,9 @@ tools/config.json
 .mypy_cache/
 .ruff_cache/
 
+# Nerva is fetched from the exact release pinned in third_party/nerva.lock.json.
+# Never commit the generated third-party binary/runtime extraction directory.
+third_party/nerva/
+
 .DS_Store
 Thumbs.db

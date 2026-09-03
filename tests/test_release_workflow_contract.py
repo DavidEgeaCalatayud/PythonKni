@@ -42,8 +42,8 @@ def test_release_outputs_drive_safe_packaging_artifact_and_publication():
     assert "PythonKni-${{ steps.release_meta.outputs.tag }}-windows-x64" in content
     assert 'cmd /c "gh release view $tag >nul 2>&1"' in content
     assert "gh release view $tag *> $null" not in content
-    assert "gh release create $tag" in content
-    assert "gh release upload $tag" in content
+    assert "gh release create $tag @releaseAssets" in content
+    assert "gh release upload $tag @releaseAssets --clobber" in content
     assert "--verify-tag" in content
 
 
@@ -59,5 +59,23 @@ def test_release_installer_is_required_for_new_sources_and_optional_for_historic
     assert ".\\scripts\\smoke_test_windows_installer.ps1" in content
     assert "PythonKni-$tag-windows-x64-setup.exe" in content
     assert "PythonKni-$tag-windows-x64-setup.sha256" in content
-    assert "$installer $installerChecksum --clobber" in content
-    assert "$installer $installerChecksum --title" in content
+    assert "$releaseAssets += @($installer, $installerChecksum)" in content
+
+
+def test_release_nerva_is_pinned_for_new_sources_and_skipped_for_historical_recovery():
+    content = RELEASE_WORKFLOW.read_text(encoding="utf-8")
+
+    assert "id: nerva_support" in content
+    assert '"third_party\\nerva.lock.json"' in content
+    assert '"scripts\\fetch_nerva.ps1"' in content
+    assert "Release source is missing the pinned Nerva packaging pipeline" in content
+    assert "Historical recovery source predates Nerva support" in content
+    assert "steps.nerva_support.outputs.enabled == 'true'" in content
+    assert "Stage pinned Nerva engine" in content
+    assert ".\\scripts\\fetch_nerva.ps1" in content
+    assert "Verify packaged Nerva engine" in content
+    assert "dist\\PythonKni\\_internal\\third_party\\nerva\\nerva.exe" in content
+    assert "--capabilities" in content
+    assert "NERVA_ENABLED: ${{ steps.nerva_support.outputs.enabled }}" in content
+    assert '$nervaLock = "third_party\\nerva.lock.json"' in content
+    assert "$releaseAssets += $nervaLock" in content
