@@ -68,19 +68,21 @@ def enrich_device_with_fingerprints(
     The legacy ``open_ports``/``services`` fields remain TCP-only. UDP/SCTP identities are
     retained as transport-qualified evidence so ``53/tcp`` and ``53/udp`` cannot collide.
     Security findings are also persisted as deterministic evidence and are scored separately.
+    TCP identities are accepted only for ports already present in the device observation.
     """
 
     matching = tuple(
         fingerprint
         for fingerprint in fingerprints
-        if not fingerprint.ip or fingerprint.ip == device.host.ip
+        if (not fingerprint.ip or fingerprint.ip == device.host.ip)
+        and (fingerprint.transport != "tcp" or fingerprint.port in device.open_ports)
     )
     if not matching:
         return device
 
     grouped_tcp: dict[int, list[ServiceFingerprint]] = defaultdict(list)
     for fingerprint in matching:
-        if fingerprint.transport == "tcp" and fingerprint.port in device.open_ports:
+        if fingerprint.transport == "tcp":
             grouped_tcp[fingerprint.port].append(fingerprint)
 
     existing = dict(zip(device.open_ports, device.services))
