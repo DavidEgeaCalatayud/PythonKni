@@ -185,7 +185,9 @@ class PortScanner(_inventory_window.PortScanner):
         self.sctp_button.setEnabled(sctp_supported)
         self.sctp_ports_input.setEnabled(sctp_supported)
         if not sctp_supported:
-            explanation = "Nerva v1.69.4 soporta SCTP únicamente en Linux; no disponible en Windows."
+            explanation = (
+                "Nerva v1.69.4 soporta SCTP únicamente en Linux; no disponible en Windows."
+            )
             self.sctp_button.setToolTip(explanation)
             self.sctp_ports_input.setToolTip(explanation)
         sctp_row.addWidget(self.sctp_button)
