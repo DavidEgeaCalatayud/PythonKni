@@ -9,7 +9,7 @@ from . import fingerprint_inventory_window as _inventory_window
 from . import fingerprinting
 from . import window as _network_window
 
-DEFAULT_UDP_PORTS = "53,123,161,5353"
+DEFAULT_UDP_PORTS = "53,67,68,123,161,5353"
 DEFAULT_SCTP_PORTS = "3868"
 MAX_EXPLICIT_TRANSPORT_PORTS = 32
 
@@ -168,7 +168,7 @@ class PortScanner(_inventory_window.PortScanner):
         udp_row = QHBoxLayout()
         udp_row.addWidget(QLabel("UDP:"))
         self.udp_ports_input = QLineEdit(DEFAULT_UDP_PORTS)
-        self.udp_ports_input.setPlaceholderText("53,123,161,5353")
+        self.udp_ports_input.setPlaceholderText("53,67,68,123,161,5353")
         udp_row.addWidget(self.udp_ports_input, 1)
         self.udp_button = QPushButton("Analizar UDP (Nerva)")
         self.udp_button.clicked.connect(self.scan_udp_services)
@@ -227,7 +227,15 @@ class PortScanner(_inventory_window.PortScanner):
             else:
                 positions[key] = len(merged)
                 merged.append(item)
-        merged.sort(key=lambda item: (item.transport, item.port, item.protocol, item.product, item.version))
+        merged.sort(
+            key=lambda item: (
+                item.transport,
+                item.port,
+                item.protocol,
+                item.product,
+                item.version,
+            )
+        )
         super()._remember_fingerprints(tuple(merged))
 
     def _transport_failed(self, error):
@@ -314,9 +322,7 @@ class PortScanner(_inventory_window.PortScanner):
                 part for part in (fingerprint.product, fingerprint.version) if part
             ).strip()
             label = f"{fingerprint.protocol} {identity}".strip()
-            self.result_area.append(
-                f"UDP  {item.port}/udp  {item.state.value} · {label}"
-            )
+            self.result_area.append(f"UDP  {item.port}/udp  {item.state.value} · {label}")
 
     def scan_sctp_services(self) -> None:
         if not fingerprinting.transport_available("sctp"):
