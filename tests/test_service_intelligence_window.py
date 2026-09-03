@@ -120,7 +120,11 @@ def test_udp_action_validates_target_ports_and_starts_worker(qtbot, monkeypatch)
 
     scanner.result_area.clear()
     scanner.ip_input.setText("example.test")
-    monkeypatch.setattr(service_intelligence_window.UdpFingerprintWorker, "start", lambda self: None)
+    monkeypatch.setattr(
+        service_intelligence_window.UdpFingerprintWorker,
+        "start",
+        lambda self: None,
+    )
     scanner.scan_udp_services()
     assert isinstance(scanner.worker, service_intelligence_window.UdpFingerprintWorker)
     assert scanner.worker.ports == (53, 161)
@@ -217,7 +221,11 @@ def test_workers_delegate_exact_modes_and_report_failures(monkeypatch):
         calls.append((target, tuple(ports), kwargs))
         return expected
 
-    monkeypatch.setattr(service_intelligence_window.fingerprinting, "fingerprint_open_ports", fake_fingerprint)
+    monkeypatch.setattr(
+        service_intelligence_window.fingerprinting,
+        "fingerprint_open_ports",
+        fake_fingerprint,
+    )
     worker = service_intelligence_window.TransportFingerprintWorker(
         "x", (22,), transport="tcp", misconfigs=True
     )
