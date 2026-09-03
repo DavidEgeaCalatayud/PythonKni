@@ -30,6 +30,9 @@ def _scanner(qtbot, monkeypatch, *, sctp=False):
 
 def test_parse_port_list_is_deterministic_and_bounded():
     assert service_intelligence_window._parse_port_list("161, 53,53") == (53, 161)
+    assert service_intelligence_window._parse_port_list(
+        service_intelligence_window.DEFAULT_UDP_PORTS
+    ) == (53, 67, 68, 123, 161, 5353)
     with pytest.raises(ValueError, match="al menos"):
         service_intelligence_window._parse_port_list("  ")
     with pytest.raises(ValueError, match="no válido"):
