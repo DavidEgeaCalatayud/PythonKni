@@ -47,6 +47,10 @@ class ServiceSecurityFinding:
     finding_id: str
     severity: SecurityFindingSeverity
     description: str
+    title: str = ""
+    impact: str = ""
+    recommendation: str = ""
+    cvss: str = ""
     evidence: str = ""
 
 
