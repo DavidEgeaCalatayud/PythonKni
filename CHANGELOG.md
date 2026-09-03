@@ -40,6 +40,7 @@ The project has not published a tagged release for the work below yet, so the cu
 - Added History Center with per-scope/time filters, native Qt Security Score/high-risk trends, navigation/comparison and configurable safe retention. (PR #61)
 - Added deterministic build/maintenance-time generation of the bundled OUI registry from the official IEEE MA-L source, provenance metadata and monthly/manual PR maintenance. (PR #62)
 - Added an incremental AST-based Network Intelligence structural typing ratchet enforced by CI and Release. (PR #64)
+- Added opt-in Nerva-backed TCP service fingerprinting for already-discovered open ports, with normalized first-party fingerprints, explicit Network Intelligence persistence/history integration and a dedicated fingerprint inventory UI. (PR #71)
 
 ### Changed
 
@@ -58,6 +59,7 @@ The project has not published a tagged release for the work below yet, so the cu
 - Existing Network Intelligence inventories migrate in place while active provisional IP identities can reconcile transactionally to canonical MAC identities; ambiguous DHCP reuse remains separate. (PR #54)
 - The bundled OUI dataset moved from a small curated snapshot to a reproducibly generated official IEEE MA-L snapshot containing 40,046 unique assignments and provenance/hash metadata; runtime lookup remains fully offline. (PR #62)
 - The canonical supported runtime moved from CPython 3.10.11 / Python >=3.10 to **CPython 3.13.15** with source/runtime range `>=3.13,<3.14`, Ruff `py313` and aligned OUI maintenance. (PR #63)
+- CI and installer packaging now stage the exact pinned Nerva Windows engine, verify its SHA-256/provenance contract, bundle its Apache-2.0 notice and validate the packaged engine before distribution; coverage ratchet command groups also fail fast on native-command errors. (PR #71)
 
 ### Fixed
 
@@ -81,6 +83,7 @@ The project has not published a tagged release for the work below yet, so the cu
 - Runtime/development dependency graphs are exact-version/SHA-256 locked and audited; validated artifacts include CycloneDX SBOM evidence. (PR #36)
 - Camera Auditor and Network Intelligence preserve authorized local/private scope boundaries with no credential/default-password attempts, no camera-content retrieval and no internet-wide discovery. (PRs #43-#64)
 - Runtime OUI lookup remains fully offline; only explicit build/maintenance activity can contact the official IEEE source. (PR #62)
+- Service fingerprinting remains an explicit post-discovery action over known-open TCP ports; the first milestone does not enable Nerva misconfiguration probes, credential behavior, UDP or SCTP scanning, and the runtime performs no third-party binary download. (PR #71)
 
 ### Testing and CI
 
@@ -93,6 +96,7 @@ The project has not published a tagged release for the work below yet, so the cu
 - OUI registry correctness/provenance validation is an offline CI/release gate and the benchmark JSON is retained with CI evidence. (PR #62)
 - CPython 3.13.15 compatibility is regression-tested across CI, Release, maintenance workflow, project metadata and Ruff target. (PR #63)
 - Network Intelligence typing regressions and the enforced structural ratchet bring the current suite to **1,060 tests**, **92.8% repository branch coverage** and **93.5% aggregate service coverage**. (PR #64)
+- Nerva fingerprinting and distribution regressions expand the suite to **1,131 tests**, **93.0% repository branch coverage** and **93.5% aggregate service coverage**; CI validates the pinned engine before and after PyInstaller packaging and through the installed-app lifecycle smoke. (PR #71)
 
 ### Documentation
 
@@ -103,7 +107,8 @@ The project has not published a tagged release for the work below yet, so the cu
 - Added the CPython 3.13 runtime support/migration contract. (PR #63)
 - Added Network Intelligence structural typing metric/policy documentation. (PR #64)
 - Synchronized README, architecture, usage, Network Intelligence, changelog and first-release readiness around the completed #55-#64 platform milestone.
+- Added `docs/network-service-fingerprinting.md` and synchronized README/release readiness around the Nerva supply-chain, packaging, persistence and operational contract. (PR #71)
 
 ### Development cycle covered
 
-This Unreleased section consolidates the major merged hardening/refactoring and Network Intelligence work from **PR #2 through PR #64** across the August-September 2026 development cycle. PR #1 was intentionally not merged and was superseded by later Temp Cleaner work; PR #56 was closed without merge and is not included in the release contents.
+This Unreleased section consolidates the major merged hardening/refactoring and Network Intelligence work from **PR #2 through PR #71** across the August-September 2026 development cycle. PR #1 was intentionally not merged and was superseded by later Temp Cleaner work; PR #56 was closed without merge and is not included in the release contents.
