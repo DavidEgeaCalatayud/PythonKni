@@ -90,8 +90,7 @@ def run_scheduled_fingerprinting(
         )
     if max_ports_per_host < 1 or max_ports_per_host > MAX_SCHEDULED_PORTS_PER_HOST:
         raise ValueError(
-            "Scheduled ports per host must be between 1 and "
-            f"{MAX_SCHEDULED_PORTS_PER_HOST}."
+            f"Scheduled ports per host must be between 1 and {MAX_SCHEDULED_PORTS_PER_HOST}."
         )
 
     stop_event = stop_event or threading.Event()
