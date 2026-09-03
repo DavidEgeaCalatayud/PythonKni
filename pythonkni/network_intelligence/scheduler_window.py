@@ -109,9 +109,7 @@ class Tool(HistoryTool):
         self.fingerprint_policy_combo = QComboBox()
         for policy, label in FINGERPRINT_POLICY_OPTIONS:
             self.fingerprint_policy_combo.addItem(label, policy.value)
-        self.fingerprint_policy_combo.currentIndexChanged.connect(
-            self._fingerprint_policy_changed
-        )
+        self.fingerprint_policy_combo.currentIndexChanged.connect(self._fingerprint_policy_changed)
         self.fingerprint_policy_combo.setToolTip(
             "El fingerprinting automático usa únicamente TCP sobre puertos ya conocidos y nunca "
             "activa Nerva --misconfigs. UDP, SCTP y misconfiguraciones siguen siendo explícitos."
