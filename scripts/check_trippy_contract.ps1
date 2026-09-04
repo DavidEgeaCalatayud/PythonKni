@@ -25,9 +25,27 @@ $helpOutput = (& $Executable --help 2>&1 | Out-String)
 if ($LASTEXITCODE -ne 0) {
     throw "Trippy --help failed with exit code $LASTEXITCODE."
 }
-foreach ($required in @("--mode", "--protocol", "--report-cycles", "--max-ttl", "icmp", "udp", "tcp")) {
+
+$requiredOptions = @(
+    "--mode",
+    "--protocol",
+    "--report-cycles",
+    "--addr-family",
+    "--dns-resolve-method",
+    "--max-ttl",
+    "--target-port",
+    "--multipath-strategy",
+    "--min-round-duration",
+    "--max-round-duration"
+)
+foreach ($required in $requiredOptions) {
     if ($helpOutput -notmatch [regex]::Escape($required)) {
         throw "Trippy CLI contract is missing '$required'."
+    }
+}
+foreach ($protocol in @("icmp", "udp", "tcp")) {
+    if ($helpOutput -notmatch [regex]::Escape($protocol)) {
+        throw "Trippy CLI contract no longer advertises protocol '$protocol'."
     }
 }
 
