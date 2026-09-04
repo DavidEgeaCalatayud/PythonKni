@@ -3,6 +3,7 @@ Set-StrictMode -Version Latest
 
 $repositoryRoot = Split-Path -Parent $PSScriptRoot
 $tailcatStageScript = Join-Path $PSScriptRoot "fetch_tailcat.ps1"
+$trippyStageScript = Join-Path $PSScriptRoot "fetch_trippy.ps1"
 
 function Invoke-OptionalTailcatStage {
     if (Test-Path -LiteralPath $tailcatStageScript -PathType Leaf) {
@@ -12,6 +13,21 @@ function Invoke-OptionalTailcatStage {
             throw "Tailcat staging failed with exit code $LASTEXITCODE."
         }
     }
+}
+
+function Invoke-OptionalTrippyStage {
+    if (Test-Path -LiteralPath $trippyStageScript -PathType Leaf) {
+        Write-Host "Staging optional pinned Trippy path backend for the shared runtime bundle..."
+        & $trippyStageScript
+        if ($LASTEXITCODE -ne 0) {
+            throw "Trippy staging failed with exit code $LASTEXITCODE."
+        }
+    }
+}
+
+function Invoke-OptionalNativeSiblingStages {
+    Invoke-OptionalTailcatStage
+    Invoke-OptionalTrippyStage
 }
 
 $lockPath = Join-Path $repositoryRoot "third_party\nerva.lock.json"
@@ -46,7 +62,7 @@ if ((Test-Path -LiteralPath $targetExe -PathType Leaf) -and (Test-Path -LiteralP
         $existing = Get-Content -LiteralPath $sourceMetadata -Raw | ConvertFrom-Json
         if ([string]$existing.version -eq [string]$lock.version -and [string]$existing.archive_sha256 -eq ([string]$lock.sha256).ToLowerInvariant()) {
             Write-Host "Verified Nerva v$($lock.version) is already staged at $targetExe"
-            Invoke-OptionalTailcatStage
+            Invoke-OptionalNativeSiblingStages
             exit 0
         }
     } catch {
@@ -106,7 +122,7 @@ try {
 }
 
 # The release workflow historically invokes this Nerva staging hook directly.
-# Stage Tailcat here as an optional sibling so releases containing Secure Transfer
-# cannot silently omit the pinned transport. CI also runs fetch_tailcat.ps1 as an
-# explicit independent gate, where an already-staged transport is a cheap no-op.
-Invoke-OptionalTailcatStage
+# Stage optional sibling native runtimes here so releases containing these domains
+# cannot silently omit their pinned backend. CI also runs the sibling staging
+# scripts independently, where an already verified runtime is a cheap no-op.
+Invoke-OptionalNativeSiblingStages
