@@ -63,6 +63,11 @@ def test_pyinstaller_and_ci_package_and_verify_trippy():
 def test_release_native_staging_cannot_silently_omit_trippy():
     release = (ROOT / ".github" / "workflows" / "release.yml").read_text(encoding="utf-8")
     nerva_stage = (ROOT / "scripts" / "fetch_nerva.ps1").read_text(encoding="utf-8")
+    package = (ROOT / "scripts" / "package_windows_bundle.ps1").read_text(encoding="utf-8")
     assert "fetch_nerva.ps1" in release
+    assert "package_windows_bundle.ps1" in release
     assert "fetch_trippy.ps1" in nerva_stage
     assert "Invoke-OptionalTrippyStage" in nerva_stage
+    assert "third_party\\trippy.lock.json" in package
+    assert "_internal\\third_party\\trippy\\trip.exe" in package
+    assert "check_trippy_contract.ps1" in package
