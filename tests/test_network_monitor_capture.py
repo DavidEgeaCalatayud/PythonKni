@@ -19,9 +19,7 @@ def test_pktmon_path_requires_windows(monkeypatch):
     monkeypatch.setattr(capture.os, "name", "posix")
     assert capture.pktmon_path() is None
     monkeypatch.setattr(capture.os, "name", "nt")
-    monkeypatch.setattr(
-        capture.shutil, "which", lambda name: r"C:\\Windows\\System32\\pktmon.exe"
-    )
+    monkeypatch.setattr(capture.shutil, "which", lambda name: r"C:\\Windows\\System32\\pktmon.exe")
     assert capture.pktmon_path().endswith("pktmon.exe")
 
 
