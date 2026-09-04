@@ -11,6 +11,7 @@ datas = [
     ('assets', 'assets'),
     ('third_party/NOTICE.md', 'third_party'),
     ('third_party/nerva.lock.json', 'third_party'),
+    ('third_party/tailcat.lock.json', 'third_party'),
 ]
 binaries = []
 hiddenimports = []
@@ -22,6 +23,14 @@ if nerva_binary.is_file():
         optional_path = nerva_binary.parent / optional_name
         if optional_path.is_file():
             datas.append((str(optional_path), 'third_party/nerva'))
+
+tailcat_binary = Path('third_party/tailcat/tailcat.exe')
+if tailcat_binary.is_file():
+    binaries.append((str(tailcat_binary), 'third_party/tailcat'))
+    for optional_name in ('source.json', 'LICENSE', 'README.md'):
+        optional_path = tailcat_binary.parent / optional_name
+        if optional_path.is_file():
+            datas.append((str(optional_path), 'third_party/tailcat'))
 
 
 def local_python_modules(root_name):

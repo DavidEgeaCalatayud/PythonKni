@@ -19,6 +19,7 @@ DOMAINS = {
     "network_intelligence": "network_intelligence_tool.py",
     "pdf": "pdf_merge_tool.py",
     "process_manager": "process_manager_tool.py",
+    "secure_transfer": "secure_transfer_tool.py",
     "startup": "startup_manager_tool.py",
     "system_report": "system_report_tool.py",
     "temp_cleaner": "temp_cleaner_tool.py",
