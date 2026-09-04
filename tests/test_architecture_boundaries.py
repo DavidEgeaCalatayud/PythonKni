@@ -22,6 +22,7 @@ DOMAINS = {
     "startup": "startup_manager_tool.py",
     "system_report": "system_report_tool.py",
     "temp_cleaner": "temp_cleaner_tool.py",
+    "web_recon": "web_recon_tool.py",
     "wifi": "wifi_tool.py",
 }
 SERVICE_MODULES = [ROOT / "pythonkni" / domain / "service.py" for domain in DOMAINS]
