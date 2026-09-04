@@ -371,11 +371,16 @@ class PathState:
         destination_ttl = destination.ttl if destination is not None else None
         decorated: list[HopStats] = []
         for item in stats:
-            status = item.status
-            if item.ttl == destination_ttl:
+            is_destination = item.ttl == destination_ttl
+            is_issue_hop = item.ttl == issue_hop_ttl
+            if is_destination and is_issue_hop:
+                status = "Destination · Latency jump"
+            elif is_destination:
                 status = "Destination"
-            if item.ttl == issue_hop_ttl:
+            elif is_issue_hop:
                 status = "Latency jump"
+            else:
+                status = item.status
             decorated.append(replace(item, status=status))
         stats = tuple(decorated)
 
