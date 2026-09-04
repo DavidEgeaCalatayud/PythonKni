@@ -103,7 +103,9 @@ def _stop_pcap(worker: Worker, capture: PktmonCapture):
 
 class Tool(BaseTool):
     name = "Network Traffic Monitor"
-    description = "Observa conexiones y tráfico local en tiempo real con alertas pasivas y PCAP opcional."
+    description = (
+        "Observa conexiones y tráfico local en tiempo real con alertas pasivas y PCAP opcional."
+    )
     category = "Red"
 
     def setup_ui(self) -> None:
