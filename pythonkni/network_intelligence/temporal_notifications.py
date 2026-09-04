@@ -18,6 +18,7 @@ from .notifications import (
 
 if TYPE_CHECKING:
     from pythonkni.network_monitor.models import MonitorEvent
+    from pythonkni.network_path.models import PathEvent
 
 MONITOR_NOTIFICATION_CATEGORIES = frozenset(
     {
@@ -30,12 +31,23 @@ MONITOR_NOTIFICATION_CATEGORIES = frozenset(
         "unusual_destination",
     }
 )
+PATH_NOTIFICATION_CATEGORIES = frozenset(
+    {
+        "route_changed",
+        "latency_spike",
+        "packet_loss",
+        "hop_added",
+        "hop_removed",
+        "destination_unreachable",
+    }
+)
 MONITOR_SOURCE_DETAIL = "Source: Network Traffic Monitor"
+PATH_SOURCE_DETAIL = "Source: Network Path Analyzer"
 _INBOX_LOCK = threading.RLock()
 
 
 def notification_inbox_lock() -> threading.RLock:
-    """Return the process-local lock shared by monitor and snapshot inbox writers."""
+    """Return the process-local lock shared by temporal and snapshot inbox writers."""
     return _INBOX_LOCK
 
 
@@ -43,9 +55,9 @@ def _utc_iso(value: datetime) -> str:
     return value.astimezone(timezone.utc).isoformat().replace("+00:00", "Z")
 
 
-def _occurrence_id(event: MonitorEvent) -> str:
+def _occurrence_id(source: str, event_id: str, timestamp: float) -> str:
     """Return a replay-stable id without suppressing later temporal occurrences."""
-    payload = f"network-monitor-notification|{event.event_id}|{event.timestamp:.6f}"
+    payload = f"{source}|{event_id}|{timestamp:.6f}"
     return hashlib.sha256(payload.encode("utf-8")).hexdigest()
 
 
@@ -68,7 +80,38 @@ def monitor_event_to_notification(
 
     subject_id = event.asset_id or event.remote_ip or event.process_name or event.kind
     return ChangeNotification(
-        event_id=_occurrence_id(event),
+        event_id=_occurrence_id("network-monitor-notification", event.event_id, event.timestamp),
+        scope=scope,
+        detected_at=detected_at,
+        baseline_generated_at=generated_at,
+        current_generated_at=generated_at,
+        category=event.kind,
+        severity=NotificationSeverity(event.severity.value),
+        title=event.title,
+        message=event.description,
+        subject_id=subject_id,
+        details=tuple(details),
+    )
+
+
+def path_event_to_notification(
+    event: PathEvent,
+    *,
+    scope: str = "network-path",
+) -> ChangeNotification:
+    detected_at = datetime.fromtimestamp(event.timestamp, tz=timezone.utc)
+    generated_at = _utc_iso(detected_at)
+    details = [PATH_SOURCE_DETAIL, f"Target: {event.target}"]
+    if event.hop_ttl is not None:
+        details.append(f"Hop TTL: {event.hop_ttl}")
+    if event.hop_ip:
+        details.append(f"Hop IP: {event.hop_ip}")
+
+    subject_id = event.hop_ip or (
+        f"{event.target}#ttl-{event.hop_ttl}" if event.hop_ttl is not None else event.target
+    )
+    return ChangeNotification(
+        event_id=_occurrence_id("network-path-notification", event.event_id, event.timestamp),
         scope=scope,
         detected_at=detected_at,
         baseline_generated_at=generated_at,
@@ -89,6 +132,17 @@ def is_monitor_notification(notification: ChangeNotification) -> bool:
     )
 
 
+def is_path_notification(notification: ChangeNotification) -> bool:
+    return (
+        notification.category in PATH_NOTIFICATION_CATEGORIES
+        and PATH_SOURCE_DETAIL in notification.details
+    )
+
+
+def is_temporal_notification(notification: ChangeNotification) -> bool:
+    return is_monitor_notification(notification) or is_path_notification(notification)
+
+
 def load_monitor_notifications(path: str | Path) -> tuple[ChangeNotification, ...]:
     return tuple(
         notification
@@ -97,28 +151,56 @@ def load_monitor_notifications(path: str | Path) -> tuple[ChangeNotification, ..
     )
 
 
-def publish_monitor_events(
-    path: str | Path,
-    events: Iterable[MonitorEvent],
-    *,
-    scope: str = "network-monitor",
-) -> tuple[tuple[ChangeNotification, ...], int]:
-    """Merge monitor events into the canonical Change Notification inbox.
+def load_path_notifications(path: str | Path) -> tuple[ChangeNotification, ...]:
+    return tuple(
+        notification
+        for notification in load_notification_inbox(path)
+        if is_path_notification(notification)
+    )
 
-    Exact replay of the same monitor occurrence is deduplicated. A later occurrence of
-    the same logical monitor event receives another occurrence id because its timestamp
-    differs, preserving temporal history across monitor sessions.
-    """
-    incoming = tuple(monitor_event_to_notification(event, scope=scope) for event in events)
+
+def load_temporal_notifications(path: str | Path) -> tuple[ChangeNotification, ...]:
+    return tuple(
+        notification
+        for notification in load_notification_inbox(path)
+        if is_temporal_notification(notification)
+    )
+
+
+def _publish_notifications(
+    path: str | Path,
+    incoming: tuple[ChangeNotification, ...],
+) -> tuple[tuple[ChangeNotification, ...], int]:
     if not incoming:
         return (), 0
-
     with _INBOX_LOCK:
         existing = load_notification_inbox(path)
         merged, added = merge_notifications(existing, incoming)
         if added:
             save_notification_inbox(path, merged)
     return merged, added
+
+
+def publish_monitor_events(
+    path: str | Path,
+    events: Iterable[MonitorEvent],
+    *,
+    scope: str = "network-monitor",
+) -> tuple[tuple[ChangeNotification, ...], int]:
+    """Merge passive monitor events into the canonical Change Notification inbox."""
+    incoming = tuple(monitor_event_to_notification(event, scope=scope) for event in events)
+    return _publish_notifications(path, incoming)
+
+
+def publish_path_events(
+    path: str | Path,
+    events: Iterable[PathEvent],
+    *,
+    scope: str = "network-path",
+) -> tuple[tuple[ChangeNotification, ...], int]:
+    """Merge Network Path Analyzer events into the canonical notification inbox."""
+    incoming = tuple(path_event_to_notification(event, scope=scope) for event in events)
+    return _publish_notifications(path, incoming)
 
 
 def mark_notification_ids_read(
