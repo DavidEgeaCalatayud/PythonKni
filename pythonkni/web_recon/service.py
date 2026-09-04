@@ -43,9 +43,7 @@ def normalize_target(value: str) -> ReconTarget:
         raise ValueError("Solo se admiten objetivos HTTP o HTTPS.")
     if parsed.username or parsed.password:
         raise ValueError("No introduzcas credenciales en la URL de reconocimiento.")
-    hostname = (
-        (parsed.hostname or "").rstrip(".").encode("idna").decode("ascii").lower()
-    )
+    hostname = (parsed.hostname or "").rstrip(".").encode("idna").decode("ascii").lower()
     if not hostname or not _HOST_RE.fullmatch(hostname):
         raise ValueError("El hostname del objetivo no es válido.")
     try:
@@ -83,9 +81,7 @@ def build_findings(report: ReconReport) -> tuple[ReconFinding, ...]:
                 "DNS",
                 "DMARC policy is absent or monitoring-only",
                 "A missing DMARC record or p=none does not request quarantine/reject enforcement.",
-                report.dns.dmarc[0]
-                if report.dns.dmarc
-                else "No DMARC record observed",
+                report.dns.dmarc[0] if report.dns.dmarc else "No DMARC record observed",
             )
         )
     if report.dns.dnssec_published is False:
@@ -202,25 +198,17 @@ def run_recon(
     discovered = list(archived)
     ports = ()
     if include_active_discovery and not stop_event.is_set():
-        progress(
-            "crawl", "Crawling same-origin y comprobando rutas comunes acotadas..."
-        )
-        discovered.extend(
-            crawl_same_origin(target, http.body_text, stop_event=stop_event)
-        )
+        progress("crawl", "Crawling same-origin y comprobando rutas comunes acotadas...")
+        discovered.extend(crawl_same_origin(target, http.body_text, stop_event=stop_event))
         discovered.extend(probe_common_paths(target, stop_event=stop_event))
-        progress(
-            "ports", "Comprobando un conjunto reducido de puertos de aplicación..."
-        )
+        progress("ports", "Comprobando un conjunto reducido de puertos de aplicación...")
         ports = scan_common_ports(target.hostname, stop_event=stop_event)
         if include_nerva and ports and not stop_event.is_set():
             progress(
                 "nerva",
                 "Entregando los puertos abiertos a Nerva para fingerprinting de aplicación...",
             )
-            ports = enrich_ports_with_nerva(
-                target.hostname, ports, stop_event=stop_event
-            )
+            ports = enrich_ports_with_nerva(target.hostname, ports, stop_event=stop_event)
 
     dedup_urls = {item.url: item for item in discovered}
     report = ReconReport(

@@ -105,25 +105,19 @@ def test_fetch_target_follows_same_host_redirect_and_stops_external(monkeypatch)
             return first if len(calls) == 1 else second
 
     monkeypatch.setattr(http.requests, "Session", Session)
-    response, final_url, body = http.fetch_target(
-        normalize_target("https://example.com")
-    )
+    response, final_url, body = http.fetch_target(normalize_target("https://example.com"))
     assert response is second
     assert final_url == "https://example.com/home"
     assert body == "ok"
     assert first.closed is True
 
-    external = StreamingResponse(
-        302, {"Location": "https://evil.test/"}, [b"redirect"]
-    )
+    external = StreamingResponse(302, {"Location": "https://evil.test/"}, [b"redirect"])
     monkeypatch.setattr(
         http.requests,
         "Session",
         lambda: SimpleNamespace(get=lambda *args, **kwargs: external),
     )
-    response, final_url, body = http.fetch_target(
-        normalize_target("https://example.com")
-    )
+    response, final_url, body = http.fetch_target(normalize_target("https://example.com"))
     assert response is external
     assert final_url == "https://example.com/"
     assert body == "redirect"

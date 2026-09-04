@@ -72,11 +72,7 @@ def _record_value(item: dict[str, object]) -> tuple[str, int | None]:
     key = item.get("Key")
     if key:
         algorithm = item.get("Algorithm")
-        value = (
-            f"algorithm={algorithm}; key={key}"
-            if algorithm is not None
-            else str(key)
-        )
+        value = f"algorithm={algorithm}; key={key}" if algorithm is not None else str(key)
         return value, pref
     digest = item.get("Digest")
     if digest:
@@ -157,28 +153,18 @@ def collect_dns(
 ) -> DnsSummary:
     records: list[DnsRecord] = []
     for address in addresses:
-        records.append(
-            DnsRecord("AAAA" if ":" in address else "A", hostname, address)
-        )
+        records.append(DnsRecord("AAAA" if ":" in address else "A", hostname, address))
     try:
         for record_type in DNS_QUERY_TYPES:
-            query_name = (
-                (mail_domain or hostname) if record_type == "DNSKEY" else hostname
-            )
+            query_name = (mail_domain or hostname) if record_type == "DNSKEY" else hostname
             records.extend(query_windows_dns(query_name, record_type))
-        txt_values = tuple(
-            item.value for item in records if item.record_type == "TXT"
-        )
-        spf = tuple(
-            value for value in txt_values if value.lower().startswith("v=spf1")
-        )
+        txt_values = tuple(item.value for item in records if item.record_type == "TXT")
+        spf = tuple(value for value in txt_values if value.lower().startswith("v=spf1"))
         email_domain = mail_domain or registrable_domain_candidate(hostname)
         dmarc_records = query_windows_dns(f"_dmarc.{email_domain}", "TXT")
         records.extend(dmarc_records)
         dmarc = tuple(
-            item.value
-            for item in dmarc_records
-            if item.value.lower().startswith("v=dmarc1")
+            item.value for item in dmarc_records if item.value.lower().startswith("v=dmarc1")
         )
         dnssec = any(item.record_type == "DNSKEY" for item in records)
         return DnsSummary(

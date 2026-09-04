@@ -36,16 +36,12 @@ def inspect_tls(hostname: str, port: int) -> TlsSummary:
     expires_in_days = None
     if not_after:
         try:
-            expiry = datetime.fromtimestamp(
-                ssl.cert_time_to_seconds(not_after), tz=timezone.utc
-            )
+            expiry = datetime.fromtimestamp(ssl.cert_time_to_seconds(not_after), tz=timezone.utc)
             expires_in_days = int((expiry - datetime.now(timezone.utc)).total_seconds() // 86400)
         except (ValueError, OverflowError):
             expires_in_days = None
     sans = tuple(
-        str(value)
-        for kind, value in certificate.get("subjectAltName", ())
-        if kind == "DNS"
+        str(value) for kind, value in certificate.get("subjectAltName", ()) if kind == "DNS"
     )
     return TlsSummary(
         available=True,

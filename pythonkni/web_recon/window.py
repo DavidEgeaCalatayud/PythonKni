@@ -42,9 +42,7 @@ def _run(
 
 class Tool(BaseTool):
     name = "Web Recon Auditor"
-    description = (
-        "Audita DNS, TLS, seguridad HTTP y superficie web de un objetivo explícito."
-    )
+    description = "Audita DNS, TLS, seguridad HTTP y superficie web de un objetivo explícito."
     category = "Red"
 
     def setup_ui(self) -> None:
@@ -73,9 +71,7 @@ class Tool(BaseTool):
         self.external_check = QCheckBox("External passive sources (CT / Wayback)")
         self.external_check.setChecked(False)
         options.addWidget(self.external_check)
-        self.active_check = QCheckBox(
-            "Active bounded discovery (crawl / paths / ports)"
-        )
+        self.active_check = QCheckBox("Active bounded discovery (crawl / paths / ports)")
         self.active_check.setChecked(False)
         self.active_check.toggled.connect(self._sync_options)
         options.addWidget(self.active_check)
@@ -103,9 +99,7 @@ class Tool(BaseTool):
         self.tech_table = self._table(["Technology", "Confidence", "Evidence"])
         self.urls_table = self._table(["URL", "Source", "Status"])
         self.ports_table = self._table(["Port", "Service", "Nerva fingerprint"])
-        self.findings_table = self._table(
-            ["Severity", "Category", "Finding", "Evidence"]
-        )
+        self.findings_table = self._table(["Severity", "Category", "Finding", "Evidence"])
         for widget, label in (
             (self.overview, "Overview"),
             (self.dns_table, "DNS"),
@@ -132,9 +126,7 @@ class Tool(BaseTool):
         return table
 
     def _sync_options(self) -> None:
-        self.nerva_check.setEnabled(
-            self.active_check.isChecked() and self.run_button.isEnabled()
-        )
+        self.nerva_check.setEnabled(self.active_check.isChecked() and self.run_button.isEnabled())
 
     def _set_running(self, running: bool) -> None:
         self.run_button.setEnabled(not running)
@@ -224,8 +216,7 @@ class Tool(BaseTool):
                     f"Target: {report.target.url}",
                     f"Host: {report.target.hostname}",
                     f"Addresses: {', '.join(report.addresses) or 'none'}",
-                    f"HTTP: {report.http.status_code or 'unavailable'} "
-                    f"{report.http.final_url}",
+                    f"HTTP: {report.http.status_code or 'unavailable'} {report.http.final_url}",
                     f"TLS: {report.tls.version or report.tls.error or 'not checked'}",
                     f"WHOIS registrar: {report.whois.registrar or 'not available'}",
                     f"SPF: {'yes' if report.dns.spf else 'not observed'}",
@@ -271,9 +262,7 @@ class Tool(BaseTool):
                 [
                     "Days remaining",
                     str(
-                        report.tls.expires_in_days
-                        if report.tls.expires_in_days is not None
-                        else ""
+                        report.tls.expires_in_days if report.tls.expires_in_days is not None else ""
                     ),
                 ],
                 ["SANs", ", ".join(report.tls.sans)],
@@ -289,17 +278,11 @@ class Tool(BaseTool):
         )
         self._rows(
             self.subdomain_table,
-            [
-                [item.hostname, ", ".join(item.addresses), item.source]
-                for item in report.subdomains
-            ],
+            [[item.hostname, ", ".join(item.addresses), item.source] for item in report.subdomains],
         )
         self._rows(
             self.tech_table,
-            [
-                [item.name, item.confidence, item.evidence]
-                for item in report.technologies
-            ],
+            [[item.name, item.confidence, item.evidence] for item in report.technologies],
         )
         self._rows(
             self.urls_table,
@@ -310,10 +293,7 @@ class Tool(BaseTool):
         )
         self._rows(
             self.ports_table,
-            [
-                [str(item.port), item.service, item.fingerprint or "—"]
-                for item in report.ports
-            ],
+            [[str(item.port), item.service, item.fingerprint or "—"] for item in report.ports],
         )
         self._rows(
             self.findings_table,

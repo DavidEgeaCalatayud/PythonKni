@@ -28,9 +28,7 @@ def test_certificate_transparency_failure_returns_empty(monkeypatch):
     monkeypatch.setattr(
         discovery.requests,
         "get",
-        lambda *args, **kwargs: (_ for _ in ()).throw(
-            discovery.requests.RequestException()
-        ),
+        lambda *args, **kwargs: (_ for _ in ()).throw(discovery.requests.RequestException()),
     )
     assert discovery.certificate_transparency_subdomains("example.com") == ()
 
@@ -54,9 +52,7 @@ def test_wayback_parses_deduplicates_and_caps(monkeypatch):
 def test_crawl_same_origin_excludes_external_hosts_and_fragments():
     target = normalize_target("https://example.com")
     html = "<a href='/a#x'>A</a><script src='https://evil.test/x.js'></script>"
-    results = discovery.crawl_same_origin(
-        target, html, stop_event=threading.Event()
-    )
+    results = discovery.crawl_same_origin(target, html, stop_event=threading.Event())
     assert [item.url for item in results] == ["https://example.com/a"]
 
 
@@ -82,10 +78,7 @@ def test_common_path_probe_honours_cancellation(monkeypatch):
     event = threading.Event()
     event.set()
     monkeypatch.setattr(discovery, "_get_small", lambda url: (404, ""))
-    assert (
-        discovery.probe_common_paths(normalize_target("example.com"), stop_event=event)
-        == ()
-    )
+    assert discovery.probe_common_paths(normalize_target("example.com"), stop_event=event) == ()
 
 
 def test_scan_common_ports_reports_only_open_ports(monkeypatch):
@@ -119,9 +112,7 @@ def test_wayback_failure_returns_empty(monkeypatch):
     monkeypatch.setattr(
         discovery.requests,
         "get",
-        lambda *args, **kwargs: (_ for _ in ()).throw(
-            discovery.requests.RequestException()
-        ),
+        lambda *args, **kwargs: (_ for _ in ()).throw(discovery.requests.RequestException()),
     )
     assert discovery.wayback_urls("example.com") == ()
 
@@ -148,9 +139,7 @@ def test_get_small_success_and_failure(monkeypatch):
     monkeypatch.setattr(
         discovery.requests,
         "get",
-        lambda *args, **kwargs: (_ for _ in ()).throw(
-            discovery.requests.RequestException()
-        ),
+        lambda *args, **kwargs: (_ for _ in ()).throw(discovery.requests.RequestException()),
     )
     assert discovery._get_small("https://example.com") == (None, "")
 

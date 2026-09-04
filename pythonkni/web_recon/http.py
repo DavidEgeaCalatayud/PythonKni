@@ -183,22 +183,14 @@ def detect_technologies(summary: HttpSummary) -> tuple[TechnologyEvidence, ...]:
             "WordPress", "HTML references wp-content/wp-includes", "high"
         )
     if re.search(r"<meta[^>]+name=[\"']generator[\"'][^>]+wordpress", body):
-        evidence["WordPress"] = TechnologyEvidence(
-            "WordPress", "Generator meta tag", "high"
-        )
+        evidence["WordPress"] = TechnologyEvidence("WordPress", "Generator meta tag", "high")
     cookie_names = {item.name.casefold() for item in summary.cookies}
     if "phpsessid" in cookie_names:
         evidence["PHP"] = TechnologyEvidence("PHP", "PHPSESSID cookie", "medium")
     if "jsessionid" in cookie_names:
-        evidence["Java/Jakarta"] = TechnologyEvidence(
-            "Java/Jakarta", "JSESSIONID cookie", "medium"
-        )
+        evidence["Java/Jakarta"] = TechnologyEvidence("Java/Jakarta", "JSESSIONID cookie", "medium")
     if "asp.net_sessionid" in cookie_names:
-        evidence["ASP.NET"] = TechnologyEvidence(
-            "ASP.NET", "ASP.NET_SessionId cookie", "medium"
-        )
+        evidence["ASP.NET"] = TechnologyEvidence("ASP.NET", "ASP.NET_SessionId cookie", "medium")
     if "laravel_session" in cookie_names:
-        evidence["Laravel"] = TechnologyEvidence(
-            "Laravel", "laravel_session cookie", "medium"
-        )
+        evidence["Laravel"] = TechnologyEvidence("Laravel", "laravel_session cookie", "medium")
     return tuple(sorted(evidence.values(), key=lambda item: item.name.casefold()))

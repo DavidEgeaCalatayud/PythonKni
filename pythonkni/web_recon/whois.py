@@ -59,9 +59,7 @@ def inspect_whois(domain: str) -> WhoisSummary:
 
     nameservers = tuple(
         dict.fromkeys(
-            value.rstrip(".")
-            for key, value in pairs
-            if key in {"name server", "nserver"}
+            value.rstrip(".") for key, value in pairs if key in {"name server", "nserver"}
         )
     )
     statuses = tuple(
@@ -70,7 +68,9 @@ def inspect_whois(domain: str) -> WhoisSummary:
     return WhoisSummary(
         registrar=_first(pairs, "registrar", "registrar name", "sponsoring registrar"),
         created=_first(pairs, "creation date", "created", "registered on"),
-        expires=_first(pairs, "registry expiry date", "expiration date", "expiry date", "paid-till"),
+        expires=_first(
+            pairs, "registry expiry date", "expiration date", "expiry date", "paid-till"
+        ),
         nameservers=nameservers,
         statuses=statuses,
         referral_server=referral,

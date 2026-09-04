@@ -127,12 +127,8 @@ def test_run_recon_orchestrates_optional_sources_active_scan_and_nerva(monkeypat
         lambda domain: (SubdomainResult(f"api.{domain}"),),
     )
     monkeypatch.setattr(service, "wayback_urls", lambda host: ())
-    monkeypatch.setattr(
-        service, "crawl_same_origin", lambda target, body, stop_event=None: ()
-    )
-    monkeypatch.setattr(
-        service, "probe_common_paths", lambda target, stop_event=None: ()
-    )
+    monkeypatch.setattr(service, "crawl_same_origin", lambda target, body, stop_event=None: ())
+    monkeypatch.setattr(service, "probe_common_paths", lambda target, stop_event=None: ())
     monkeypatch.setattr(
         service,
         "scan_common_ports",

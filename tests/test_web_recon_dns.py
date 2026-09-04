@@ -54,6 +54,24 @@ def test_query_windows_dns_parses_powershell_json(monkeypatch):
     assert txt[1].value == "v=spf1 -all"
 
 
+def test_query_windows_dns_parses_dnskey_fields(monkeypatch):
+    monkeypatch.setattr(dns.platform, "system", lambda: "Windows")
+    monkeypatch.setattr(dns, "_powershell_executable", lambda: "powershell.exe")
+    payload = '{"Name":"example.com","Key":"AQID","Algorithm":13}'
+    monkeypatch.setattr(
+        dns.subprocess,
+        "run",
+        lambda *args, **kwargs: SimpleNamespace(returncode=0, stdout=payload),
+    )
+
+    records = dns.query_windows_dns("example.com", "DNSKEY")
+
+    assert len(records) == 1
+    assert records[0].record_type == "DNSKEY"
+    assert records[0].name == "example.com"
+    assert records[0].value == "algorithm=13; key=AQID"
+
+
 def test_query_windows_dns_handles_command_and_json_failure(monkeypatch):
     monkeypatch.setattr(dns.platform, "system", lambda: "Windows")
     monkeypatch.setattr(dns, "_powershell_executable", lambda: "powershell.exe")
@@ -82,9 +100,7 @@ def test_collect_dns_extracts_spf_dmarc_policy_and_dnssec(monkeypatch):
         return ()
 
     monkeypatch.setattr(dns, "query_windows_dns", query)
-    result = dns.collect_dns(
-        "www.example.com", ("1.2.3.4",), mail_domain="example.com"
-    )
+    result = dns.collect_dns("www.example.com", ("1.2.3.4",), mail_domain="example.com")
     assert result.spf == ("v=spf1 -all",)
     assert result.dmarc_policy == "quarantine"
     assert result.dnssec_published is True

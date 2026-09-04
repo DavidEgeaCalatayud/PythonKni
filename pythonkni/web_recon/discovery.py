@@ -132,9 +132,7 @@ def certificate_transparency_subdomains(hostname: str) -> tuple[SubdomainResult,
     results: list[SubdomainResult] = []
     for name in sorted(names)[:MAX_CT_SUBDOMAINS]:
         try:
-            addresses = tuple(
-                sorted({item[4][0] for item in socket.getaddrinfo(name, None)})
-            )
+            addresses = tuple(sorted({item[4][0] for item in socket.getaddrinfo(name, None)}))
         except OSError:
             addresses = ()
         results.append(SubdomainResult(name, addresses))
@@ -257,8 +255,7 @@ def probe_common_paths(
         soft_404 = (
             phantom_status is not None
             and status == phantom_status
-            and abs(len(body) - len(phantom_body))
-            <= max(32, int(len(phantom_body) * 0.15))
+            and abs(len(body) - len(phantom_body)) <= max(32, int(len(phantom_body) * 0.15))
         )
         if soft_404:
             continue
