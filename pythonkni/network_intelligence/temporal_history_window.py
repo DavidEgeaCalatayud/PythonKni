@@ -23,7 +23,8 @@ from pythonkni.infrastructure.paths import (
 from tools.ui_feedback import show_error
 
 from .automatic_snapshot import AutomaticSnapshotResult
-from .history_center_window import HistoryCenterDialog, Tool as HistoryCenterTool
+from .history_center_window import HistoryCenterDialog
+from .history_center_window import Tool as HistoryCenterTool
 from .notification_window import ChangeNotificationDialog
 from .notifications import load_notification_inbox
 from .retention import RetentionPolicy
