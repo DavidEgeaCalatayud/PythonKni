@@ -7,19 +7,13 @@ ROOT = Path(__file__).resolve().parents[1]
 
 
 def test_tailcat_lock_is_pinned_to_verified_windows_release():
-    lock = json.loads(
-        (ROOT / "third_party" / "tailcat.lock.json").read_text(encoding="utf-8")
-    )
+    lock = json.loads((ROOT / "third_party" / "tailcat.lock.json").read_text(encoding="utf-8"))
     assert lock["version"] == "0.5.0"
     assert lock["tag"] == "v0.5.0"
     assert lock["platform"] == "windows_amd64"
     assert lock["license"] == "BSD-3-Clause"
-    assert lock["url"].startswith(
-        "https://github.com/tailscale/tailcat/releases/download/v0.5.0/"
-    )
-    assert lock["sha256"] == (
-        "47c2a22eff596dc184642779b8ba9988ca554b0f177ee1188bc4913253b18430"
-    )
+    assert lock["url"].startswith("https://github.com/tailscale/tailcat/releases/download/v0.5.0/")
+    assert lock["sha256"] == ("47c2a22eff596dc184642779b8ba9988ca554b0f177ee1188bc4913253b18430")
 
 
 def test_tailcat_fetch_script_enforces_official_source_hash_and_runtime_contract():
@@ -33,9 +27,7 @@ def test_tailcat_fetch_script_enforces_official_source_hash_and_runtime_contract
 
 
 def test_tailcat_contract_smoke_covers_used_cli_surface():
-    script = (ROOT / "scripts" / "check_tailcat_contract.ps1").read_text(
-        encoding="utf-8"
-    )
+    script = (ROOT / "scripts" / "check_tailcat_contract.ps1").read_text(encoding="utf-8")
     assert "tailcat recv" in script
     assert "tailcat cp" in script
     assert "tailcat serve" in script
