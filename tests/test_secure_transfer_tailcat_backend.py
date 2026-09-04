@@ -401,7 +401,9 @@ def test_resolve_tailcat_executable_uses_path(tmp_path, monkeypatch):
     executable.write_bytes(b"x")
     monkeypatch.delenv("PYTHONKNI_TAILCAT_PATH", raising=False)
     monkeypatch.setattr(backend, "PROJECT_ROOT", tmp_path / "missing-root")
-    monkeypatch.setattr(backend.shutil, "which", lambda name: str(executable) if name == "tailcat" else None)
+    monkeypatch.setattr(
+        backend.shutil, "which", lambda name: str(executable) if name == "tailcat" else None
+    )
     assert backend.resolve_tailcat_executable() == executable.resolve()
 
 

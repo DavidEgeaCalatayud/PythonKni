@@ -63,7 +63,9 @@ def test_copy_token_validates_and_uses_clipboard(tool, monkeypatch):
 
 def test_start_receive_creates_managed_worker_and_stop_cancels(tool, monkeypatch, tmp_path):
     started = []
-    monkeypatch.setattr(tool, "start_managed_worker", lambda worker, cancel=None: started.append(worker))
+    monkeypatch.setattr(
+        tool, "start_managed_worker", lambda worker, cancel=None: started.append(worker)
+    )
     tool.receive_destination.setText(str(tmp_path))
     tool.start_receive_files()
     assert tool.worker is started[0]
@@ -89,7 +91,9 @@ def test_start_validation_paths_show_warning(tool, monkeypatch):
 
 def test_start_send_text_and_tunnel_create_operations(tool, monkeypatch):
     started = []
-    monkeypatch.setattr(tool, "start_managed_worker", lambda worker, cancel=None: started.append(worker))
+    monkeypatch.setattr(
+        tool, "start_managed_worker", lambda worker, cancel=None: started.append(worker)
+    )
     tool.send_text_token.setText(TOKEN)
     tool.outgoing_text.setPlainText("hello")
     tool.start_send_text()
@@ -111,7 +115,9 @@ def test_start_send_text_and_tunnel_create_operations(tool, monkeypatch):
 
 def test_start_send_path_uses_selected_path(tool, monkeypatch, tmp_path):
     started = []
-    monkeypatch.setattr(tool, "start_managed_worker", lambda worker, cancel=None: started.append(worker))
+    monkeypatch.setattr(
+        tool, "start_managed_worker", lambda worker, cancel=None: started.append(worker)
+    )
     path = tmp_path / "x.txt"
     path.write_text("x")
     tool.selected_path = path

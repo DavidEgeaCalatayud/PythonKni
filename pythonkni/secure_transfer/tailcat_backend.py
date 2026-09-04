@@ -355,7 +355,9 @@ class TailcatBackend:
             try:
                 decoded = json.loads(_decode(line))
             except json.JSONDecodeError as error:
-                raise TailcatExecutionError("Tailcat devolvió un anuncio JSON no válido.") from error
+                raise TailcatExecutionError(
+                    "Tailcat devolvió un anuncio JSON no válido."
+                ) from error
             if not isinstance(decoded, Mapping):
                 raise TailcatExecutionError("Tailcat devolvió un anuncio de escucha inesperado.")
             return _extract_token(decoded)
@@ -479,7 +481,9 @@ class TailcatBackend:
         payload = text.encode("utf-8")
         if len(payload) > MAX_TEXT_BYTES:
             raise ValueError(f"El texto no puede superar {MAX_TEXT_BYTES // 1024} KiB.")
-        process = self._spawn(build_send_text_command(self.executable, token), stdin=subprocess.PIPE)
+        process = self._spawn(
+            build_send_text_command(self.executable, token), stdin=subprocess.PIPE
+        )
         stdout = b""
         stderr = b""
         try:
@@ -507,7 +511,9 @@ class TailcatBackend:
         stop_event: threading.Event,
         on_ready: Callable[[str], None] | None = None,
     ) -> None:
-        process = self._spawn(build_serve_port_command(self.executable, port), stdin=subprocess.DEVNULL)
+        process = self._spawn(
+            build_serve_port_command(self.executable, port), stdin=subprocess.DEVNULL
+        )
         token = self._server_ready_token(process, stop_event=stop_event)
         if stop_event.is_set():
             return
@@ -547,7 +553,9 @@ class TailcatBackend:
             time.sleep(0.05)
         if process.poll() is not None:
             stderr = process.stderr.read() if process.stderr is not None else b""
-            raise TailcatExecutionError(f"El forward Tailcat no pudo arrancar: {_diagnostic(stderr)}")
+            raise TailcatExecutionError(
+                f"El forward Tailcat no pudo arrancar: {_diagnostic(stderr)}"
+            )
         if on_ready is not None:
             on_ready()
         returncode = _wait_interruptibly(process, stop_event=stop_event)

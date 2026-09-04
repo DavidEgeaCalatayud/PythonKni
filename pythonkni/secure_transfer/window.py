@@ -43,7 +43,9 @@ def _run_operation(worker: Worker, operation: Callable[..., TransferResult]) -> 
 
 class Tool(BaseTool):
     name = "Secure Transfer"
-    description = "Transfiere archivos, carpetas, texto y puertos mediante Tailcat cifrado con WireGuard."
+    description = (
+        "Transfiere archivos, carpetas, texto y puertos mediante Tailcat cifrado con WireGuard."
+    )
     category = "Red"
 
     def setup_ui(self) -> None:
@@ -128,7 +130,9 @@ class Tool(BaseTool):
         choose_folder.clicked.connect(self.choose_send_folder)
         source_row.addWidget(choose_folder)
         send_layout.addRow("Source:", source_row)
-        scp_note = QLabel("File/folder sending uses Tailcat cp and therefore requires Windows OpenSSH scp.exe.")
+        scp_note = QLabel(
+            "File/folder sending uses Tailcat cp and therefore requires Windows OpenSSH scp.exe."
+        )
         scp_note.setWordWrap(True)
         send_layout.addRow("", scp_note)
         self.send_path_button = QPushButton("Send")
