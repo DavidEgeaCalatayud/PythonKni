@@ -1,6 +1,6 @@
 # Release readiness
 
-This document records PythonKni's Windows release-engineering contract after the verified `v0.1.0` release, the first-class installer milestone, pinned Nerva integration and Service Intelligence v2.
+This document records PythonKni's Windows release-engineering contract after the verified `v0.1.0` release, the first-class installer milestone, pinned Nerva integration, Web Recon, Secure Transfer/Tailcat, Service Intelligence v2 and the passive Network Traffic Monitor integration.
 
 ## Released baseline
 
@@ -12,35 +12,40 @@ This document records PythonKni's Windows release-engineering contract after the
 
 `v0.1.0` is published as the first public release. Its tag remains an immutable reference to the exact released source revision. The release contains the validated portable Windows ZIP/checksum plus the CycloneDX SBOM, OUI provenance metadata and both dependency locks.
 
-Installer generation and Nerva packaging were added **after** `v0.1.0`, so the historical `v0.1.0` release intentionally remains unchanged. Future releases built from current source add the versioned setup executable/checksum and embed the verified Nerva engine in the application bundle.
+Installer generation and the later native Nerva/Tailcat packaging contracts were added **after** `v0.1.0`, so the historical `v0.1.0` release intentionally remains unchanged. Future releases built from current source add the versioned setup executable/checksum and embed the verified native components supported by that exact source revision.
 
-## Current validated baseline
+## Current candidate contract
 
-The Service Intelligence v2 branch has reached the following Windows / **CPython 3.13.15** source-validation baseline before final distribution acceptance:
+Current Windows / **CPython 3.13.15** candidates are accepted by enforced gates rather than by a copied test-count snapshot. The exact candidate commit must pass:
 
-- **1,175/1,175 tests** passing;
-- **92.9%** repository branch coverage;
-- **93.5%** aggregate `service.py` coverage;
-- **93.4%** `pythonkni/network/window.py` coverage;
-- **98.8%** `pythonkni/network/fingerprinting.py` coverage;
-- **96.0%** scheduled fingerprint-policy coverage;
+- the full behavior-driven pytest suite;
+- **>=92.5%** repository branch coverage;
+- **>=93.0%** aggregate `service.py` coverage;
+- all stronger repository/service/window/refactored-code ratchets encoded in CI;
 - exact SHA-256-locked runtime/development dependency graphs;
-- `pip check` plus strict runtime/development `pip-audit` with no known vulnerabilities;
+- `pip check` plus strict runtime/development `pip-audit`;
 - CycloneDX runtime SBOM generation;
-- offline validation of the **40,046-assignment** bundled IEEE MA-L registry and provenance metadata;
+- offline validation of the bundled IEEE MA-L registry and provenance metadata;
 - Network Intelligence benchmark smoke;
-- Network Intelligence structural typing ratchet at **728/785 annotation slots (92.74%)**, **283 fully annotated / 326 tracked callables**, with the explicit-`Any` ceiling unchanged at 39;
-- all repository/service/window/refactored-code coverage ratchets preserved.
+- the Network Intelligence structural typing ratchet;
+- Ruff check and format validation;
+- pinned Nerva staging and capability verification;
+- pinned Tailcat staging and real CLI contract verification when Secure Transfer support is present;
+- PyInstaller packaging;
+- packaged Nerva/Tailcat verification for source that includes those native components;
+- frozen application smoke;
+- ZIP/checksum generation;
+- Inno Setup generation;
+- installed-application lifecycle smoke; and
+- validated artifact upload.
 
-Final release acceptance additionally requires the exact candidate commit to pass Ruff check/format, pinned Nerva staging, PyInstaller packaging, packaged Nerva capabilities validation, frozen application smoke, ZIP/checksum generation, Inno Setup generation, installed-app lifecycle smoke and artifact upload. A source-test pass is not sufficient on its own.
-
-Grouped CI coverage ratchets fail immediately on native-command errors, preventing an individual floor failure from being masked by a later successful PowerShell command.
+A source-test pass is not sufficient on its own. Grouped CI coverage ratchets fail immediately on native-command errors, preventing an individual floor failure from being masked by a later successful PowerShell command.
 
 A release must repeat the Release workflow against the exact immutable release commit; a previous CI artifact is supporting evidence, not a substitute for the release run.
 
 ## Functional milestone completed
 
-The Network Intelligence platform includes persistent inventory/identity reconciliation, classification confidence, relationships/topology/physical evidence, contextual Security Score, deterministic snapshot reporting, offline snapshot comparison, Security Score History, opt-in scheduled checks, automatic snapshots, local change notifications, History Center/trends/configurable retention and a reproducible build-time IEEE OUI registry updater.
+The current platform includes persistent Network Intelligence inventory/identity reconciliation, classification confidence, relationships/topology/physical evidence, contextual Security Score, deterministic snapshot reporting, offline snapshot comparison, Security Score History, opt-in scheduled checks, automatic snapshots, local change notifications, History Center/trends/configurable retention and a reproducible build-time IEEE OUI registry updater.
 
 Service Intelligence v2 extends the pinned Nerva integration with intentionally separated capabilities:
 
@@ -55,7 +60,30 @@ Service Intelligence v2 extends the pinned Nerva integration with intentionally 
 
 Network Intelligence also persists a configurable fingerprint policy: Disabled, Manual only, Automatic after discovery, or Only assets with known changes. Automatic policies run between successful discovery persistence and snapshot publication, but are deliberately constrained to known TCP ports with maximum 32 assets, 16 ports per asset, 8 Nerva workers, 2 host connections and a 1500 ms probe timeout. Scheduled execution never enables `--misconfigs`, UDP or SCTP.
 
-The quality/toolchain milestone also includes the CPython 3.13.15 runtime contract, incremental Network Intelligence structural typing ratchet, first-class per-user Windows installer pipeline and reproducible Nerva staging/packaging contract.
+Web Recon adds a first-party explicit-target HTTP/HTTPS/DNS reconnaissance domain. It starts from one URL or hostname, does not accept CIDR/range scope and keeps DNS/TLS/HTTP/discovery behavior behind bounded first-party components instead of turning a web audit into internet-wide discovery.
+
+Secure Transfer adds a replaceable Tailcat-backed transport boundary for text/file/folder transfer, temporary secure tunnels and localhost-only port forwarding. Tailcat is pinned and verified at build time; PythonKni does not implement its unstable wire format, does not modify routing/DNS, does not save transport keys and does not expose PythonKni-created `0.0.0.0` forwards. File/folder send requires the Windows OpenSSH `scp.exe` capability. See [`secure-transfer.md`](secure-transfer.md).
+
+Network Traffic Monitor adds passive local Windows temporal telemetry while deliberately remaining separate from Network Intelligence persistence:
+
+- exact interface RX/TX rates are derived from interface counters;
+- TCP/UDP socket ownership is attributed to PID/process where Windows exposes it;
+- process rows are socket activity, not fabricated per-process byte counters;
+- reverse DNS is bounded and RIPEstat ASN/prefix enrichment is opt-in;
+- deterministic temporal observations are published into the canonical Network Intelligence notification/history pipeline;
+- known-asset joins are read-only and cannot synthesize assets or rewrite classification/`RiskLevel`;
+- packet capture is a separate explicit local `pktmon` action with ETL -> PCAPNG conversion;
+- no packet injection, credential/default-password attempts, exploitation, payload decryption or internet-wide discovery are introduced.
+
+See [`network-traffic-monitor.md`](network-traffic-monitor.md) and [`network-monitor-intelligence-integration.md`](network-monitor-intelligence-integration.md).
+
+The quality/toolchain milestone also includes the CPython 3.13.15 runtime contract, incremental Network Intelligence structural typing ratchet, first-class per-user Windows installer pipeline and reproducible native-component staging/packaging contracts.
+
+## Network Traffic Monitor integration gate
+
+A Network Traffic Monitor candidate is not complete merely because its focused tests pass. The final integration candidate must prove that the monitor coexists with the **current** application tree, including Web Recon, Secure Transfer, Nerva/Tailcat packaging and the installer path.
+
+Before merge, the candidate must therefore pass the entire CI contract described above on the reconciled PR head. After merge, the resulting `main` commit must pass the repository CI again. The issue is considered complete only after the merge commit is green, the closing issue is resolved and the general README/architecture/usage/changelog/release-readiness documentation describes the capability and its limits.
 
 ## Release workflow contract
 
@@ -83,7 +111,7 @@ The recovery branch path is also deliberately constrained:
 - the workflow then checks out that **exact tagged commit in detached HEAD state** and verifies its `project.version` before installing, testing, building or publishing anything;
 - recovery therefore repairs publication without moving the immutable tag or silently rebuilding a different source revision.
 
-Historical recovery has compatibility rules for both later distribution milestones. If an immutable old tag predates installer or Nerva support, recovery republishes only the assets and runtime contents supported by that tagged source. It never injects current installer code or a current Nerva binary into old immutable source. New direct/bootstrap releases require the corresponding support files to be present.
+Historical recovery has compatibility rules for later distribution milestones. If an immutable old tag predates installer, Nerva or Tailcat support, recovery republishes only the assets and runtime contents supported by that tagged source. It never injects current installer/native-component code or binaries into old immutable source. New direct/bootstrap releases require the corresponding support files to be present.
 
 After resolving and checking out the release source, the same workflow must:
 
@@ -93,8 +121,8 @@ After resolving and checking out the release source, the same workflow must:
 4. run the full test suite and coverage ratchets;
 5. enforce the Network Intelligence structural typing ratchet;
 6. run Ruff check/format;
-7. for Nerva-enabled source, stage the exact pinned engine only after SHA-256/license validation;
-8. build with PyInstaller, verify the packaged Nerva engine when enabled and run the frozen smoke test;
+7. stage/verify the exact pinned native Nerva/Tailcat components supported by that source;
+8. build with PyInstaller, verify packaged native components and run the frozen smoke test;
 9. package the versioned Windows ZIP + SHA-256 checksum;
 10. for installer-enabled source, build the version-bound Inno Setup installer and run the installed-app lifecycle smoke;
 11. upload retained workflow artifacts; and
@@ -106,7 +134,7 @@ The release is complete only after the Release workflow conclusion is `success`,
 
 ## Expected release assets
 
-For current installer/Nerva-enabled source, future releases publish:
+For current installer/native-component-enabled source, future releases publish:
 
 ```text
 PythonKni-vX.Y.Z-windows-x64.zip
@@ -119,7 +147,7 @@ requirements.txt
 requirements-dev.txt
 ```
 
-Nerva is embedded inside the validated Windows application bundle rather than published as an independent PythonKni release asset. Retained workflow evidence includes `coverage.xml`, benchmark JSON and the exact `third_party/nerva.lock.json` provenance pin. The historical `v0.1.0` release predates both installer and Nerva support and therefore correctly retains its original six assets only.
+Nerva and Tailcat are embedded inside the validated Windows application bundle rather than published as independent PythonKni release assets. Retained workflow evidence includes `coverage.xml`, benchmark JSON and the exact native lock/provenance files supported by that source. The historical `v0.1.0` release predates installer/Nerva/Tailcat support and therefore correctly retains only the assets produced by that historical source.
 
 ## Nerva distribution and capability contract
 
@@ -137,6 +165,18 @@ The application does not assume every Nerva capability is portable across operat
 
 See [`network-service-fingerprinting.md`](network-service-fingerprinting.md).
 
+## Tailcat distribution and capability contract
+
+`third_party/tailcat.lock.json` pins Tailcat **v0.5.0** for Windows amd64 and the official release archive SHA-256:
+
+```text
+47c2a22eff596dc184642779b8ba9988ca554b0f177ee1188bc4913253b18430
+```
+
+`scripts/fetch_tailcat.ps1` stages only that locked release, verifies the official archive digest, records/verifies the staged executable digest and runs `scripts/check_tailcat_contract.ps1` against the real CLI before the transport is accepted. The contract smoke verifies the expected version and the embedded upstream command surface required by PythonKni.
+
+Secure Transfer also checks the supported Tailcat runtime version before operations. This exact pin is intentional because Tailcat does not promise CLI/API/wire-format stability. See [`secure-transfer.md`](secure-transfer.md).
+
 ## Installer contract
 
 The installer is built with Inno Setup as a **per-user** package with `PrivilegesRequired=lowest`. Its default program directory is `%LOCALAPPDATA%\Programs\PythonKni`, it creates a Start Menu entry and uses the standard Inno Setup uninstaller.
@@ -153,6 +193,9 @@ These do not block the current technical distribution model, but remain explicit
 
 - Windows is the only packaged/validated platform;
 - SCTP service fingerprinting is not available in that Windows package because Nerva v1.69.4 exposes SCTP only on Linux;
+- Tailcat is an upstream experimental transport with no stability promise for its CLI/API/wire format; public DERP relays are fallback infrastructure with rate limits/no PythonKni SLA;
+- Secure Transfer file/folder sending depends on Windows OpenSSH `scp.exe` being available;
+- Network Traffic Monitor visibility depends on Windows permissions, socket lifetime, adapter counters and OS telemetry; lack of an observation is not proof that traffic did not exist;
 - the executable and installer are not yet Authenticode/code signed, so Windows SmartScreen/reputation warnings remain possible;
 - Python 3.14+, free-threaded CPython and non-Windows packaging are not claimed;
 - optional OCR workflows still depend on local Tesseract/Poppler;
@@ -163,4 +206,4 @@ These do not block the current technical distribution model, but remain explicit
 1. add representative screenshots/demo media;
 2. define certificate ownership, identity and secret handling for Authenticode signing;
 3. sign the executable/installer once that policy is established;
-4. keep dependency/OUI/runtime/typing/installer/Nerva/Service Intelligence gates non-regressive while product features evolve.
+4. keep dependency/OUI/runtime/typing/installer/Nerva/Tailcat/Web Recon/Network Monitor gates non-regressive while product features evolve.
