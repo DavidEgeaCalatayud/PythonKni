@@ -2,6 +2,18 @@ $ErrorActionPreference = "Stop"
 Set-StrictMode -Version Latest
 
 $repositoryRoot = Split-Path -Parent $PSScriptRoot
+$tailcatStageScript = Join-Path $PSScriptRoot "fetch_tailcat.ps1"
+
+function Invoke-OptionalTailcatStage {
+    if (Test-Path -LiteralPath $tailcatStageScript -PathType Leaf) {
+        Write-Host "Staging optional pinned Tailcat transport for the shared runtime bundle..."
+        & $tailcatStageScript
+        if ($LASTEXITCODE -ne 0) {
+            throw "Tailcat staging failed with exit code $LASTEXITCODE."
+        }
+    }
+}
+
 $lockPath = Join-Path $repositoryRoot "third_party\nerva.lock.json"
 if (-not (Test-Path -LiteralPath $lockPath -PathType Leaf)) {
     throw "Nerva lock metadata not found: $lockPath"
@@ -34,6 +46,7 @@ if ((Test-Path -LiteralPath $targetExe -PathType Leaf) -and (Test-Path -LiteralP
         $existing = Get-Content -LiteralPath $sourceMetadata -Raw | ConvertFrom-Json
         if ([string]$existing.version -eq [string]$lock.version -and [string]$existing.archive_sha256 -eq ([string]$lock.sha256).ToLowerInvariant()) {
             Write-Host "Verified Nerva v$($lock.version) is already staged at $targetExe"
+            Invoke-OptionalTailcatStage
             exit 0
         }
     } catch {
@@ -91,3 +104,9 @@ try {
         Remove-Item -LiteralPath $tempRoot -Recurse -Force -ErrorAction SilentlyContinue
     }
 }
+
+# The release workflow historically invokes this Nerva staging hook directly.
+# Stage Tailcat here as an optional sibling so releases containing Secure Transfer
+# cannot silently omit the pinned transport. CI also runs fetch_tailcat.ps1 as an
+# explicit independent gate, where an already-staged transport is a cheap no-op.
+Invoke-OptionalTailcatStage
