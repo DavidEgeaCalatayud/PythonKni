@@ -12,6 +12,7 @@ datas = [
     ('third_party/NOTICE.md', 'third_party'),
     ('third_party/nerva.lock.json', 'third_party'),
     ('third_party/tailcat.lock.json', 'third_party'),
+    ('third_party/trippy.lock.json', 'third_party'),
 ]
 binaries = []
 hiddenimports = []
@@ -31,6 +32,14 @@ if tailcat_binary.is_file():
         optional_path = tailcat_binary.parent / optional_name
         if optional_path.is_file():
             datas.append((str(optional_path), 'third_party/tailcat'))
+
+trippy_binary = Path('third_party/trippy/trip.exe')
+if trippy_binary.is_file():
+    binaries.append((str(trippy_binary), 'third_party/trippy'))
+    for optional_name in ('source.json', 'LICENSE', 'LICENSE.txt', 'README.md'):
+        optional_path = trippy_binary.parent / optional_name
+        if optional_path.is_file():
+            datas.append((str(optional_path), 'third_party/trippy'))
 
 
 def local_python_modules(root_name):
