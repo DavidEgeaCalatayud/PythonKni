@@ -1,6 +1,6 @@
 # Release readiness
 
-This document records PythonKni's Windows release-engineering contract after the verified `v0.1.0` release, the first-class installer milestone, pinned Nerva integration, Web Recon, Secure Transfer/Tailcat, Service Intelligence v2 and the passive Network Traffic Monitor integration.
+This document records PythonKni's Windows release-engineering contract after the verified `v0.1.0` release, the first-class installer milestone, pinned Nerva integration, Web Recon, Secure Transfer/Tailcat, Service Intelligence v2, the passive Network Traffic Monitor integration and the Trippy-backed Network Path Analyzer.
 
 ## Released baseline
 
@@ -12,7 +12,7 @@ This document records PythonKni's Windows release-engineering contract after the
 
 `v0.1.0` is published as the first public release. Its tag remains an immutable reference to the exact released source revision. The release contains the validated portable Windows ZIP/checksum plus the CycloneDX SBOM, OUI provenance metadata and both dependency locks.
 
-Installer generation and the later native Nerva/Tailcat packaging contracts were added **after** `v0.1.0`, so the historical `v0.1.0` release intentionally remains unchanged. Future releases built from current source add the versioned setup executable/checksum and embed the verified native components supported by that exact source revision.
+Installer generation and the later native Nerva/Tailcat/Trippy packaging contracts were added **after** `v0.1.0`, so the historical `v0.1.0` release intentionally remains unchanged. Future releases built from current source add the versioned setup executable/checksum and embed the verified native components supported by that exact source revision.
 
 ## Current candidate contract
 
@@ -31,10 +31,11 @@ Current Windows / **CPython 3.13.15** candidates are accepted by enforced gates 
 - Ruff check and format validation;
 - pinned Nerva staging and capability verification;
 - pinned Tailcat staging and real CLI contract verification when Secure Transfer support is present;
+- pinned Trippy staging, executable-hash revalidation and consumed-CLI contract verification when Network Path Analyzer support is present;
 - PyInstaller packaging;
-- packaged Nerva/Tailcat verification for source that includes those native components;
+- packaged Nerva/Tailcat/Trippy verification for source that includes those native components;
 - frozen application smoke;
-- ZIP/checksum generation;
+- ZIP/checksum generation, including common native-runtime contract verification;
 - Inno Setup generation;
 - installed-application lifecycle smoke; and
 - validated artifact upload.
@@ -77,13 +78,28 @@ Network Traffic Monitor adds passive local Windows temporal telemetry while deli
 
 See [`network-traffic-monitor.md`](network-traffic-monitor.md) and [`network-monitor-intelligence-integration.md`](network-monitor-intelligence-integration.md).
 
+Network Path Analyzer adds explicit-target path diagnostics through a pinned Trippy backend while keeping PythonKni's analysis semantics first-party:
+
+- one hostname/IP target only; CIDR/range/list/URL inputs are rejected;
+- ICMP, UDP and TCP path tracing with bounded interval and max TTL;
+- IPv4/IPv6-aware execution through the system resolver;
+- rolling per-hop response/RTT/jitter statistics and destination RTT history;
+- conservative stable-route comparison with repeated confirmation before route-change events;
+- destination-only `packet_loss` semantics so an intermediate router that rate-limits diagnostic replies is not mislabeled as forwarding loss;
+- repeated destination misses before `destination_unreachable`;
+- rolling-baseline `latency_spike` detection plus a separately explainable first sustained RTT-step indicator;
+- canonical temporal publication for `route_changed`, `latency_spike`, `packet_loss`, `hop_added`, `hop_removed` and `destination_unreachable`;
+- no synthetic Network Intelligence asset creation or silent risk/classification rewrite.
+
+The Windows implementation reports Trippy's Administrator/raw-socket requirement explicitly. See [`network-path-analyzer.md`](network-path-analyzer.md).
+
 The quality/toolchain milestone also includes the CPython 3.13.15 runtime contract, incremental Network Intelligence structural typing ratchet, first-class per-user Windows installer pipeline and reproducible native-component staging/packaging contracts.
 
-## Network Traffic Monitor integration gate
+## Network temporal integration gate
 
-A Network Traffic Monitor candidate is not complete merely because its focused tests pass. The final integration candidate must prove that the monitor coexists with the **current** application tree, including Web Recon, Secure Transfer, Nerva/Tailcat packaging and the installer path.
+A temporal network candidate is not complete merely because its focused tests pass. Network Traffic Monitor and Network Path Analyzer must coexist with the **current** application tree, including Web Recon, Secure Transfer and the Nerva/Tailcat/Trippy packaging and installer paths.
 
-Before merge, the candidate must therefore pass the entire CI contract described above on the reconciled PR head. After merge, the resulting `main` commit must pass the repository CI again. The issue is considered complete only after the merge commit is green, the closing issue is resolved and the general README/architecture/usage/changelog/release-readiness documentation describes the capability and its limits.
+Before merge, the candidate must therefore pass the entire CI contract described above on the reconciled PR head. Path Analyzer additionally must prove transient silent intermediate hops do not create false destination-loss/route-removal events and that Trippy's exact consumed CLI surface still matches the pinned backend. After merge, the resulting `main` commit must pass repository CI again.
 
 ## Release workflow contract
 
@@ -111,7 +127,7 @@ The recovery branch path is also deliberately constrained:
 - the workflow then checks out that **exact tagged commit in detached HEAD state** and verifies its `project.version` before installing, testing, building or publishing anything;
 - recovery therefore repairs publication without moving the immutable tag or silently rebuilding a different source revision.
 
-Historical recovery has compatibility rules for later distribution milestones. If an immutable old tag predates installer, Nerva or Tailcat support, recovery republishes only the assets and runtime contents supported by that tagged source. It never injects current installer/native-component code or binaries into old immutable source. New direct/bootstrap releases require the corresponding support files to be present.
+Historical recovery has compatibility rules for later distribution milestones. If an immutable old tag predates installer, Nerva, Tailcat or Trippy support, recovery republishes only the assets and runtime contents supported by that tagged source. It never injects current installer/native-component code or binaries into old immutable source. New direct/bootstrap releases require the corresponding support files to be present.
 
 After resolving and checking out the release source, the same workflow must:
 
@@ -121,9 +137,9 @@ After resolving and checking out the release source, the same workflow must:
 4. run the full test suite and coverage ratchets;
 5. enforce the Network Intelligence structural typing ratchet;
 6. run Ruff check/format;
-7. stage/verify the exact pinned native Nerva/Tailcat components supported by that source;
+7. stage/verify the exact pinned native Nerva/Tailcat/Trippy components supported by that source;
 8. build with PyInstaller, verify packaged native components and run the frozen smoke test;
-9. package the versioned Windows ZIP + SHA-256 checksum;
+9. package the versioned Windows ZIP + SHA-256 checksum, refusing a declared native runtime that is missing or fails its packaged contract;
 10. for installer-enabled source, build the version-bound Inno Setup installer and run the installed-app lifecycle smoke;
 11. upload retained workflow artifacts; and
 12. publish/update the GitHub Release with the validated files.
@@ -147,7 +163,7 @@ requirements.txt
 requirements-dev.txt
 ```
 
-Nerva and Tailcat are embedded inside the validated Windows application bundle rather than published as independent PythonKni release assets. Retained workflow evidence includes `coverage.xml`, benchmark JSON and the exact native lock/provenance files supported by that source. The historical `v0.1.0` release predates installer/Nerva/Tailcat support and therefore correctly retains only the assets produced by that historical source.
+Nerva, Tailcat and Trippy are embedded inside the validated Windows application bundle rather than published as independent PythonKni release assets. Retained workflow evidence includes `coverage.xml`, benchmark JSON and the exact native lock/provenance files supported by that source. The historical `v0.1.0` release predates installer/Nerva/Tailcat/Trippy support and therefore correctly retains only the assets produced by that historical source.
 
 ## Nerva distribution and capability contract
 
@@ -177,6 +193,20 @@ See [`network-service-fingerprinting.md`](network-service-fingerprinting.md).
 
 Secure Transfer also checks the supported Tailcat runtime version before operations. This exact pin is intentional because Tailcat does not promise CLI/API/wire-format stability. See [`secure-transfer.md`](secure-transfer.md).
 
+## Trippy distribution and capability contract
+
+`third_party/trippy.lock.json` pins Trippy **0.13.0** for `x86_64-pc-windows-msvc` and the official release archive SHA-256:
+
+```text
+74a184434d96eec6c7f8e4b467147c40fa8841fa3722a3ddf51267208fcbbbe6
+```
+
+`scripts/fetch_trippy.ps1` downloads only the official `fujiapple852/trippy` GitHub Release archive, verifies the archive digest before extraction, requires `trip.exe` plus the upstream license and records the extracted executable SHA-256 in staged provenance metadata. Reuse of an already-staged backend requires both the executable digest and `scripts/check_trippy_contract.ps1` to pass again.
+
+The CLI contract verifies exact version `0.13.0` and every option PythonKni consumes for deterministic reporting: JSON mode/report cycles, ICMP/UDP/TCP protocol choice, address family, system DNS method, max TTL, target port, multipath strategy and round-duration controls. PythonKni never feeds arbitrary user-supplied Trippy arguments and does not parse/embed the TUI.
+
+PyInstaller packages the verified runtime and the common Windows bundle packager re-runs the packaged contract before ZIP creation. See [`network-path-analyzer.md`](network-path-analyzer.md).
+
 ## Installer contract
 
 The installer is built with Inno Setup as a **per-user** package with `PrivilegesRequired=lowest`. Its default program directory is `%LOCALAPPDATA%\Programs\PythonKni`, it creates a Start Menu entry and uses the standard Inno Setup uninstaller.
@@ -196,6 +226,7 @@ These do not block the current technical distribution model, but remain explicit
 - Tailcat is an upstream experimental transport with no stability promise for its CLI/API/wire format; public DERP relays are fallback infrastructure with rate limits/no PythonKni SLA;
 - Secure Transfer file/folder sending depends on Windows OpenSSH `scp.exe` being available;
 - Network Traffic Monitor visibility depends on Windows permissions, socket lifetime, adapter counters and OS telemetry; lack of an observation is not proof that traffic did not exist;
+- Network Path Analyzer requires Administrator privileges on Windows for Trippy's raw-socket tracing modes; an intermediate hop that does not answer diagnostic probes is not evidence by itself of forwarding loss, and a destination may filter one chosen trace protocol while remaining otherwise reachable;
 - the executable and installer are not yet Authenticode/code signed, so Windows SmartScreen/reputation warnings remain possible;
 - Python 3.14+, free-threaded CPython and non-Windows packaging are not claimed;
 - optional OCR workflows still depend on local Tesseract/Poppler;
@@ -206,4 +237,4 @@ These do not block the current technical distribution model, but remain explicit
 1. add representative screenshots/demo media;
 2. define certificate ownership, identity and secret handling for Authenticode signing;
 3. sign the executable/installer once that policy is established;
-4. keep dependency/OUI/runtime/typing/installer/Nerva/Tailcat/Web Recon/Network Monitor gates non-regressive while product features evolve.
+4. keep dependency/OUI/runtime/typing/installer/Nerva/Tailcat/Trippy/Web Recon/Network Monitor/Network Path gates non-regressive while product features evolve.
