@@ -115,6 +115,10 @@ jobs:
         shell: powershell
         run: .\scripts\fetch_nerva.ps1
 
+      - name: Stage pinned Tailcat transport
+        shell: powershell
+        run: .\scripts\fetch_tailcat.ps1
+
       - name: Build Windows bundle
         run: pyinstaller --noconfirm --clean PythonKni.spec
 
@@ -128,6 +132,18 @@ jobs:
           & $nerva --capabilities | Out-Null
           if ($LASTEXITCODE -ne 0) {
             throw "Packaged Nerva capability smoke failed with exit code $LASTEXITCODE"
+          }
+
+      - name: Verify packaged Tailcat transport
+        shell: powershell
+        run: |
+          $tailcat = Join-Path $PWD "dist\PythonKni\_internal\third_party\tailcat\tailcat.exe"
+          if (-not (Test-Path -LiteralPath $tailcat -PathType Leaf)) {
+            throw "PyInstaller did not package the verified Tailcat transport at $tailcat"
+          }
+          $version = (& $tailcat version 2>&1 | Out-String).Trim()
+          if ($LASTEXITCODE -ne 0 -or $version -notmatch '0\.5\.0') {
+            throw "Packaged Tailcat version smoke failed: $version"
           }
 
       - name: Smoke test packaged application
@@ -169,6 +185,7 @@ jobs:
             dependency-sbom.cdx.json
             assets/network_oui_prefixes.meta.json
             third_party/nerva.lock.json
+            third_party/tailcat.lock.json
             requirements.txt
             requirements-dev.txt
           if-no-files-found: error

@@ -1,0 +1,11 @@
+{
+  "name": "Tailcat",
+  "source": "https://github.com/tailscale/tailcat",
+  "license": "BSD-3-Clause",
+  "version": "0.5.0",
+  "tag": "v0.5.0",
+  "platform": "windows_amd64",
+  "archive": "tailcat_0.5.0_windows_amd64.zip",
+  "url": "https://github.com/tailscale/tailcat/releases/download/v0.5.0/tailcat_0.5.0_windows_amd64.zip",
+  "sha256": "47c2a22eff596dc184642779b8ba9988ca554b0f177ee1188bc4913253b18430"
+}
