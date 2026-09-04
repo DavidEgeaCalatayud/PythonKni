@@ -30,9 +30,11 @@ Responsibilities:
 
 ## Domain layout
 
-Conventional first-party domains follow the same structure under `pythonkni/` (Archive, Config, Converter, Disk Analyzer, Duplicate, Event Viewer, Network, PDF, Process Manager, Startup, System Report, Temp Cleaner and WiFi). Camera Auditor also keeps its models/service/window separation.
+Conventional first-party domains follow the same structure under `pythonkni/` (Archive, Camera Auditor, Config, Converter, Disk Analyzer, Duplicate, Event Viewer, Network, **Network Monitor**, PDF, Process Manager, **Secure Transfer**, Startup, System Report, Temp Cleaner, **Web Recon** and WiFi).
 
 Network Intelligence is intentionally broader because it composes persistence, classification, topology, history, scheduling, notifications, reporting and specialized Qt views. Its pure modules stay separate from presentation composition rather than being forced into one oversized service/window pair.
+
+The architecture-boundary test declares every conventional domain centrally. This means adding Web Recon, Secure Transfer or Network Monitor cannot silently bypass the same models/service/window/tool-adapter contract used by the older tools.
 
 ## Core and infrastructure
 
@@ -49,7 +51,7 @@ pythonkni/
 
 - `core/tasks.py` defines cooperative cancellation primitives.
 - `infrastructure/archives.py` owns archive path validation, extraction limits, staging/publication and ZIP/7Z safety rules.
-- `infrastructure/paths.py` owns application runtime/data locations.
+- `infrastructure/paths.py` owns application runtime/data locations, including bounded Network Monitor history paths.
 
 Legacy modules such as `tools.app_paths` and `tools.zip_7zip_utils` remain compatibility facades where required, but first-party services depend on framework-independent infrastructure directly.
 
@@ -127,24 +129,71 @@ history + comparison + notifications + retention
 
 History/comparison/notification analysis does not silently trigger a network scan. Scheduler execution is opt-in and in-process while the Network Intelligence window is open; it is not a Windows service/daemon.
 
+### Network Traffic Monitor integration boundary
+
+Network Traffic Monitor is a separate first-party domain rather than a packet-capture implementation hidden inside Network Intelligence:
+
+```text
+pythonkni/network_monitor/
+├─ models.py
+├─ service.py
+├─ intelligence.py
+├─ capture.py
+├─ integration.py
+└─ window.py
+          │
+          ├─ read-only known-asset join
+          │
+          └─ canonical temporal events
+                    ↓
+pythonkni/network_intelligence/temporal_notifications.py
+                    ↓
+network_intelligence_notifications.json
+                    ↓
+History Center / temporal_history_window.py
+```
+
+`service.py`, `models.py`, `intelligence.py`, `capture.py` and `integration.py` remain outside the Qt presentation boundary. The monitor reads exact interface counters and OS socket telemetry, then derives bounded deterministic observations. It does not claim per-process byte counters when Windows only exposes socket ownership.
+
+The Network Intelligence join is deliberately **read-only**. Monitor observations can refer to a known persisted asset but cannot create synthetic assets, rewrite classification or mutate persisted `RiskLevel`. Temporal publication reuses the canonical notification store and replay-safe occurrence identifiers, so exact replay deduplicates while a later recurrence remains a new observation.
+
+Windows packet capture is a separate explicit capability boundary owned by `capture.py` and backed by `pktmon`; it is not enabled by normal passive monitoring. No monitor path performs packet injection, credential/default-password attempts, exploitation, payload decryption or internet-wide discovery. RIPEstat ASN/prefix enrichment is opt-in, bounded and the only external metadata lookup in this domain.
+
+See [`network-traffic-monitor.md`](network-traffic-monitor.md) and [`network-monitor-intelligence-integration.md`](network-monitor-intelligence-integration.md).
+
+### Web Recon boundary
+
+`pythonkni/web_recon/` starts from one explicit HTTP/HTTPS URL or DNS hostname. It deliberately does not accept CIDR/range scope. DNS, TLS, HTTP and bounded discovery/enrichment components stay behind the first-party service boundary, with active behavior constrained to the explicit target model rather than general internet-wide discovery.
+
+See [`web-recon-auditor.md`](web-recon-auditor.md).
+
 ### Offline OUI architecture
 
 Runtime vendor resolution reads only `assets/network_oui_prefixes.csv`. The build/maintenance command `scripts/update_oui_registry.py` can consume the official IEEE Registration Authority MA-L CSV, normalize it deterministically and publish the CSV plus `network_oui_prefixes.meta.json`. CI/release validate the checked-in registry offline and retain the provenance metadata with artifacts. The current snapshot contains 40,046 unique OUI-24 assignments.
 
 ### Incremental typing architecture
 
-`scripts/check_network_intelligence_typing.py` parses first-party Network Intelligence modules with `ast` and enforces structural annotation non-regression. The protected package baseline is:
+`scripts/check_network_intelligence_typing.py` parses first-party Network Intelligence modules with `ast` and enforces structural annotation non-regression. The enforced threshold is versioned in the script/CI rather than copied here as a volatile snapshot. Fifteen strict modules must remain completely structurally annotated with no explicit `Any` under the current policy.
+
+This gate does not infer types or prove semantic correctness and is explicitly not a replacement for `mypy` or `pyright`. See [`network-intelligence-quality-gates.md`](network-intelligence-quality-gates.md).
+
+## Secure Transfer / Tailcat boundary
+
+Secure Transfer keeps Tailcat behind `pythonkni/secure_transfer/tailcat_backend.py`; no other PythonKni layer parses or reimplements Tailcat's unstable ConnBlob/CBOR/wire format.
 
 ```text
-tracked callables                  >= 303
-fully annotated callables         >= 263   (current: 264)
-annotation slots                  >= 721
-annotated slots                   >= 668
-annotation coverage               >= 92.64% (current: 92.65%)
-explicit Any                      <= 39
+secure_transfer/window.py
+          ↓
+secure_transfer/service.py
+          ↓
+secure_transfer/tailcat_backend.py
+          ↓
+pinned tailcat.exe
 ```
 
-Fifteen strict modules must remain 100% structurally annotated and contain no explicit `Any`. This gate does not infer types or prove semantic correctness and is explicitly not a replacement for `mypy` or `pyright`. See [`network-intelligence-quality-gates.md`](network-intelligence-quality-gates.md).
+The supported Windows Tailcat executable is build-time staged from `third_party/tailcat.lock.json`, verified before packaging and rechecked through its real CLI contract. PythonKni-managed operations use ephemeral keys, subprocesses run without a shell, port forwarding binds only to `127.0.0.1`, directory receive is opt-in and file/folder send depends on the Windows OpenSSH `scp.exe` capability.
+
+The domain does not modify the routing table/DNS, persist Tailcat keys, enable exit-node/auth-free-SSH/read-write-share behavior or expose PythonKni-created `0.0.0.0` forwards. See [`secure-transfer.md`](secure-transfer.md).
 
 ## Dependency and supply-chain architecture
 
@@ -159,6 +208,8 @@ requirements-dev.in  ──pip-tools──► requirements-dev.txt
 The canonical environment is Windows / **CPython 3.13.15** using the normal GIL-enabled interpreter. `pyproject.toml` supports the Python 3.13 series (`>=3.13,<3.14`) and Ruff targets `py313`. Python 3.14+ and free-threaded builds are not currently claimed.
 
 The lock contract requires exact pins, approved SHA-256 hashes, all direct policy requirements, compatible overlap between runtime/dev graphs and `pip --require-hashes` installation. CI additionally runs `pip check`, strict runtime/development `pip-audit` and CycloneDX SBOM generation. GitHub Actions are pinned to immutable commit SHAs.
+
+Native optional engines/transports use independent reproducible locks. Nerva is pinned and staged for service intelligence; Tailcat is pinned and staged for Secure Transfer. Both are verified before PyInstaller packaging, and their staged/packaged contracts are exercised by CI rather than being downloaded dynamically by normal application runtime.
 
 ## CI and release path
 
@@ -175,9 +226,9 @@ runtime/dev pip-audit + CycloneDX SBOM
           ↓
 compileall + bundled IEEE OUI validation
           ↓
-1,060 pytest tests + branch coverage
+full pytest suite + branch coverage
           ↓
-repository/service/priority coverage ratchets
+repository/service/priority/refactored-code coverage ratchets
           ↓
 Network Intelligence benchmark smoke
           ↓
@@ -185,52 +236,38 @@ Network Intelligence typing ratchet
           ↓
 Ruff check + format
           ↓
+pinned Nerva + Tailcat staging/contract verification
+          ↓
 PyInstaller build
+          ↓
+packaged Nerva + Tailcat verification
           ↓
 frozen PythonKni.exe --smoke-test
           ↓
-ZIP + SHA-256 + coverage.xml + benchmark + SBOM + OUI metadata + locks
+ZIP + installer
+          ↓
+installed PythonKni.exe --smoke-test
+          ↓
+validated artifact upload
 ```
 
-Release validation mirrors the same quality gates before publishing a tag-driven GitHub Release. CI and Release use the same coverage and Network Intelligence typing floors so distribution cannot bypass a regression rejected on normal pushes.
+Release validation mirrors the same quality gates before publishing a tag-driven GitHub Release. CI and Release use the same coverage and Network Intelligence typing floors so distribution cannot bypass a regression rejected on normal candidate validation.
 
 ## Architecture enforcement
 
 Architecture/runtime regressions verify, among other rules, that models/services preserve their dependency boundary, shared infrastructure stays framework-independent, Process Manager presentation does not own `psutil` termination, loader-facing modules remain adapters, windows preserve the `BaseTool` contract, and CI/release/OUI maintenance/project metadata/Ruff stay aligned on Python 3.13.
 
-Other focused suites protect archive extraction safety, Temp Cleaner path identity, startup rollback, duplicate revalidation/manifests, process PID identity, CSV injection, worker lifecycle, dependency locks, runtime contract, Network Intelligence history/notification/retention semantics and structured feedback behavior.
+The domain matrix explicitly includes Network Monitor, Web Recon and Secure Transfer alongside the older first-party domains. Other focused suites protect archive extraction safety, Temp Cleaner path identity, startup rollback, duplicate revalidation/manifests, process PID identity, CSV injection, worker lifecycle, dependency/native-supply-chain locks, runtime contract, Network Intelligence history/notification/retention semantics, Network Monitor temporal integration and structured feedback behavior.
 
 ## Coverage model
 
-Coverage is a non-regression guardrail, not a target to game.
-
-Historical progression:
+Coverage is a non-regression guardrail, not a target to game. Historical progression is retained in the changelog and CI history, while this architecture contract records the currently enforced floors instead of a volatile test-count snapshot:
 
 ```text
-Initial measured baseline
-289 tests
-58.85% repository branch coverage
-64.7% aggregated services
-
-Service-hardening baseline
-578 tests
-86.4% repository branch coverage
-93.2% aggregated services
-
-Presentation-hardened baseline
-686 tests
-92.9% repository branch coverage
-93.2% aggregated services
-
-Current pre-release quality-gate baseline
-1,060 tests
-92.8% repository branch coverage
-93.5% aggregated services
-Network Intelligence typing coverage 92.65%
+repository branch coverage       >= 92.5%
+aggregate service.py coverage    >= 93.0%
 ```
 
-Current service measurements remain protected by the established individual ratchets; repository-wide branch coverage must stay >=92.5%, aggregate `service.py` coverage >=93.0%, and the process/config/infrastructure aggregate >=88.5%. Priority window/service floors remain encoded directly in CI/release.
+Additional service/window/refactored-code floors remain encoded directly in CI/release. Coverage expansion remains behavior-driven: tests should protect failure, cancellation, persistence, safety or orchestration contracts rather than merely increase a percentage.
 
-Coverage expansion remains behavior-driven: tests should protect failure, cancellation, persistence, safety or orchestration contracts rather than merely increase a percentage.
-
-See [`release-readiness.md`](release-readiness.md) for the first-release gate summary.
+See [`release-readiness.md`](release-readiness.md) for the release gate summary.
