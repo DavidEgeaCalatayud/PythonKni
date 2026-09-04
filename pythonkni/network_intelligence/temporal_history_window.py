@@ -19,10 +19,16 @@ from pythonkni.infrastructure.paths import (
     NETWORK_INTELLIGENCE_NOTIFICATIONS_FILE,
     NETWORK_INTELLIGENCE_RETENTION_FILE,
 )
+from tools.ui_feedback import show_error
 
 from .history_center_window import HistoryCenterDialog, Tool as HistoryCenterTool
+from .notification_window import ChangeNotificationDialog
 from .notifications import load_notification_inbox
-from .temporal_notifications import load_monitor_notifications
+from .temporal_notifications import (
+    load_monitor_notifications,
+    mark_notification_ids_read,
+    notification_inbox_lock,
+)
 
 NOTIFICATION_REFRESH_MS = 2000
 
@@ -126,6 +132,33 @@ class Tool(HistoryCenterTool):
             return
         self.notifications = latest
         self._sync_notification_controls()
+
+    def _open_notifications(self) -> None:
+        self._refresh_temporal_notifications()
+        if not self.notifications:
+            return
+
+        presented = self.notifications
+        dialog = ChangeNotificationDialog(presented, self)
+        dialog.exec_()
+        try:
+            self.notifications = mark_notification_ids_read(
+                NETWORK_INTELLIGENCE_NOTIFICATIONS_FILE,
+                (item.event_id for item in presented),
+            )
+        except Exception as error:
+            show_error(
+                self,
+                self.name,
+                "No se pudieron marcar como leídos los cambios de Network Intelligence.",
+                error=error,
+            )
+            return
+        self._sync_notification_controls()
+
+    def _automatic_snapshot_published(self, **kwargs) -> str:
+        with notification_inbox_lock():
+            return super()._automatic_snapshot_published(**kwargs)
 
     def _open_history_center(self) -> None:
         if self.worker is not None and self.worker.isRunning():
