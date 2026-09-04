@@ -13,10 +13,24 @@ DNS_QUERY_TYPES = ("MX", "NS", "TXT", "CNAME", "DNSKEY")
 MAX_DNS_RECORDS = 200
 POWERSHELL_TIMEOUT_SECONDS = 8.0
 
-COMMON_MULTIPART_SUFFIXES = frozenset({
-    "co.uk", "org.uk", "ac.uk", "com.au", "net.au", "org.au", "co.jp",
-    "com.br", "com.mx", "com.ar", "com.tr", "com.cn", "co.in", "com.es",
-})
+COMMON_MULTIPART_SUFFIXES = frozenset(
+    {
+        "co.uk",
+        "org.uk",
+        "ac.uk",
+        "com.au",
+        "net.au",
+        "org.au",
+        "co.jp",
+        "com.br",
+        "com.mx",
+        "com.ar",
+        "com.tr",
+        "com.cn",
+        "co.in",
+        "com.es",
+    }
+)
 
 
 def registrable_domain_candidate(hostname: str) -> str:
@@ -55,6 +69,18 @@ def _record_value(item: dict[str, object]) -> tuple[str, int | None]:
         value = item.get(key)
         if value:
             return str(value).rstrip("."), pref
+    key = item.get("Key")
+    if key:
+        algorithm = item.get("Algorithm")
+        value = (
+            f"algorithm={algorithm}; key={key}"
+            if algorithm is not None
+            else str(key)
+        )
+        return value, pref
+    digest = item.get("Digest")
+    if digest:
+        return str(digest), pref
     strings = item.get("Strings")
     if isinstance(strings, list):
         return "".join(str(part) for part in strings), pref
@@ -73,7 +99,8 @@ def query_windows_dns(hostname: str, record_type: str) -> tuple[DnsRecord, ...]:
     # hostname is normalized/validated before this module is called; record type is allow-listed.
     script = (
         f"Resolve-DnsName -Name '{hostname}' -Type {normalized} -ErrorAction Stop | "
-        "Select-Object Name,Type,IPAddress,NameExchange,NameHost,Strings,Preference | "
+        "Select-Object Name,Type,IPAddress,NameExchange,NameHost,Strings,Preference,"
+        "Flags,Protocol,Algorithm,Key,KeyTag,Digest,DigestType | "
         "ConvertTo-Json -Compress"
     )
     completed = subprocess.run(
@@ -122,7 +149,12 @@ def _dmarc_policy(records: Iterable[str]) -> str:
     return ""
 
 
-def collect_dns(hostname: str, addresses: tuple[str, ...], *, mail_domain: str | None = None) -> DnsSummary:
+def collect_dns(
+    hostname: str,
+    addresses: tuple[str, ...],
+    *,
+    mail_domain: str | None = None,
+) -> DnsSummary:
     records: list[DnsRecord] = []
     for address in addresses:
         records.append(
@@ -130,11 +162,16 @@ def collect_dns(hostname: str, addresses: tuple[str, ...], *, mail_domain: str |
         )
     try:
         for record_type in DNS_QUERY_TYPES:
-            records.extend(query_windows_dns(hostname, record_type))
+            query_name = (
+                (mail_domain or hostname) if record_type == "DNSKEY" else hostname
+            )
+            records.extend(query_windows_dns(query_name, record_type))
         txt_values = tuple(
             item.value for item in records if item.record_type == "TXT"
         )
-        spf = tuple(value for value in txt_values if value.lower().startswith("v=spf1"))
+        spf = tuple(
+            value for value in txt_values if value.lower().startswith("v=spf1")
+        )
         email_domain = mail_domain or registrable_domain_candidate(hostname)
         dmarc_records = query_windows_dns(f"_dmarc.{email_domain}", "TXT")
         records.extend(dmarc_records)
