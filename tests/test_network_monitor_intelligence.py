@@ -118,8 +118,7 @@ def test_dns_enrichment_is_cached_and_bounded():
         return f"host-{ip}"
 
     items = tuple(
-        connection(pid=index, remote_ip=f"8.8.8.{index}", remote_port=443)
-        for index in range(1, 7)
+        connection(pid=index, remote_ip=f"8.8.8.{index}", remote_port=443) for index in range(1, 7)
     )
     state = intelligence.MonitorState(traffic_spike_bps=99999999)
     update = state.observe(snapshot(*items), resolver=resolver)
@@ -188,8 +187,7 @@ def test_asn_enrichment_is_opt_in_public_only_cached_and_bounded():
         return AsnInfo((64500 + len(calls),), f"{ip}/32")
 
     items = tuple(
-        connection(pid=index, remote_ip=f"8.8.4.{index}", remote_port=443)
-        for index in range(1, 5)
+        connection(pid=index, remote_ip=f"8.8.4.{index}", remote_port=443) for index in range(1, 5)
     ) + (
         connection(
             pid=20,
