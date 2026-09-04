@@ -34,7 +34,19 @@ def test_trippy_fetch_script_enforces_official_source_hash_and_contract():
 
 def test_trippy_contract_smoke_covers_used_cli_surface():
     script = (ROOT / "scripts" / "check_trippy_contract.ps1").read_text(encoding="utf-8")
-    for value in ("--version", "--mode", "--protocol", "--report-cycles", "--max-ttl"):
+    for value in (
+        "--version",
+        "--mode",
+        "--protocol",
+        "--report-cycles",
+        "--addr-family",
+        "--dns-resolve-method",
+        "--max-ttl",
+        "--target-port",
+        "--multipath-strategy",
+        "--min-round-duration",
+        "--max-round-duration",
+    ):
         assert value in script
     for protocol in ("icmp", "udp", "tcp"):
         assert protocol in script
