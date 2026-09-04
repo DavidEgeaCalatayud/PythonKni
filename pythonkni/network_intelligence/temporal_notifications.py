@@ -3,6 +3,7 @@ from __future__ import annotations
 import hashlib
 import threading
 from collections.abc import Iterable
+from dataclasses import replace
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import TYPE_CHECKING
@@ -31,6 +32,11 @@ MONITOR_NOTIFICATION_CATEGORIES = frozenset(
 )
 MONITOR_SOURCE_DETAIL = "Source: Network Traffic Monitor"
 _INBOX_LOCK = threading.RLock()
+
+
+def notification_inbox_lock() -> threading.RLock:
+    """Return the process-local lock shared by monitor and snapshot inbox writers."""
+    return _INBOX_LOCK
 
 
 def _utc_iso(value: datetime) -> str:
@@ -113,3 +119,20 @@ def publish_monitor_events(
         if added:
             save_notification_inbox(path, merged)
     return merged, added
+
+
+def mark_notification_ids_read(
+    path: str | Path,
+    event_ids: Iterable[str],
+) -> tuple[ChangeNotification, ...]:
+    """Mark only notifications actually presented to the user as read."""
+    ids = frozenset(event_ids)
+    with _INBOX_LOCK:
+        current = load_notification_inbox(path)
+        updated = tuple(
+            replace(item, read=True) if item.event_id in ids and not item.read else item
+            for item in current
+        )
+        if updated != current:
+            save_notification_inbox(path, updated)
+    return updated
