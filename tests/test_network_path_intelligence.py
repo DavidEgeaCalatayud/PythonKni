@@ -45,7 +45,7 @@ def kinds(update):
 
 
 def test_first_reached_route_is_baseline_without_change_event():
-    update = PathState().observe(snapshot(1.0))
+    update = PathState().observe(snapshot(1.0, rtts=(1.0, 10.0, 18.0)))
     assert "route_changed" not in kinds(update)
     assert update.snapshot.reached_destination is True
     assert update.history[-1].hop_count == 3
@@ -151,7 +151,7 @@ def test_latency_spike_uses_recent_destination_baseline_and_marks_issue_hop():
     event = next(item for item in spike.events if item.kind == "latency_spike")
     assert event.hop_ttl == 3
     assert spike.issue_hop_ttl == 3
-    assert spike.hops[-1].status == "Latency jump"
+    assert spike.hops[-1].status == "Destination · Latency jump"
 
 
 def test_hop_stats_accumulate_min_max_average_and_jitter():
