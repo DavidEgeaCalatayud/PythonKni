@@ -3,8 +3,12 @@ Set-StrictMode -Version Latest
 
 $repositoryRoot = Split-Path -Parent $PSScriptRoot
 $lockPath = Join-Path $repositoryRoot "third_party\tailcat.lock.json"
+$contractScript = Join-Path $PSScriptRoot "check_tailcat_contract.ps1"
 if (-not (Test-Path -LiteralPath $lockPath -PathType Leaf)) {
     throw "Tailcat lock metadata not found: $lockPath"
+}
+if (-not (Test-Path -LiteralPath $contractScript -PathType Leaf)) {
+    throw "Tailcat CLI contract smoke script not found: $contractScript"
 }
 
 $lock = Get-Content -LiteralPath $lockPath -Raw | ConvertFrom-Json
@@ -35,12 +39,23 @@ $sourceMetadata = Join-Path $targetDir "source.json"
 if ((Test-Path -LiteralPath $targetExe -PathType Leaf) -and (Test-Path -LiteralPath $targetLicense -PathType Leaf) -and (Test-Path -LiteralPath $sourceMetadata -PathType Leaf)) {
     try {
         $existing = Get-Content -LiteralPath $sourceMetadata -Raw | ConvertFrom-Json
-        if ([string]$existing.version -eq [string]$lock.version -and [string]$existing.archive_sha256 -eq ([string]$lock.sha256).ToLowerInvariant()) {
-            Write-Host "Verified Tailcat v$($lock.version) is already staged at $targetExe"
-            exit 0
+        $hasBinaryHash = $existing.PSObject.Properties.Name.Contains("binary_sha256")
+        if (
+            [string]$existing.version -eq [string]$lock.version -and
+            [string]$existing.archive_sha256 -eq ([string]$lock.sha256).ToLowerInvariant() -and
+            $hasBinaryHash -and
+            [string]$existing.binary_sha256 -match '^[0-9a-fA-F]{64}$'
+        ) {
+            $actualBinaryHash = (Get-FileHash -LiteralPath $targetExe -Algorithm SHA256).Hash.ToLowerInvariant()
+            if ($actualBinaryHash -eq ([string]$existing.binary_sha256).ToLowerInvariant()) {
+                & $contractScript -Executable $targetExe -ExpectedVersion ([string]$lock.version)
+                Write-Host "Verified Tailcat v$($lock.version) is already staged at $targetExe"
+                exit 0
+            }
+            Write-Host "Existing Tailcat binary hash does not match staging metadata; refreshing."
         }
     } catch {
-        Write-Host "Existing Tailcat staging metadata is invalid; refreshing the staged transport."
+        Write-Host "Existing Tailcat staging verification failed; refreshing the staged transport: $($_.Exception.Message)"
     }
 }
 
@@ -78,6 +93,7 @@ try {
     Copy-Item -LiteralPath $transport.FullName -Destination $targetExe
     Copy-Item -LiteralPath $licenseFile.FullName -Destination $targetLicense
 
+    $binaryHash = (Get-FileHash -LiteralPath $targetExe -Algorithm SHA256).Hash.ToLowerInvariant()
     [ordered]@{
         name = [string]$lock.name
         version = [string]$lock.version
@@ -86,13 +102,10 @@ try {
         license = [string]$lock.license
         archive = [string]$lock.archive
         archive_sha256 = $expectedHash
+        binary_sha256 = $binaryHash
     } | ConvertTo-Json | Set-Content -LiteralPath $sourceMetadata -Encoding UTF8
 
-    $versionOutput = (& $targetExe version 2>&1 | Out-String).Trim()
-    if ($LASTEXITCODE -ne 0 -or $versionOutput -notmatch '0\.5\.0') {
-        throw "Staged Tailcat version smoke failed: $versionOutput"
-    }
-
+    & $contractScript -Executable $targetExe -ExpectedVersion ([string]$lock.version)
     Write-Host "Staged verified Tailcat v$($lock.version) at $targetExe"
 } finally {
     if (Test-Path -LiteralPath $tempRoot) {
