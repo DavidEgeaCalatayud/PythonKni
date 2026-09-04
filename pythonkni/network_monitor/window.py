@@ -10,9 +10,9 @@ from PyQt5.QtWidgets import (
     QHeaderView,
     QLabel,
     QPushButton,
-    QTabWidget,
     QTableWidget,
     QTableWidgetItem,
+    QTabWidget,
     QVBoxLayout,
     QWidget,
 )
