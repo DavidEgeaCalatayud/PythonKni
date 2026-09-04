@@ -12,6 +12,7 @@ from PyQt5.QtWidgets import (
     QTableWidget,
     QTableWidgetItem,
     QVBoxLayout,
+    QWidget,
 )
 
 from pythonkni.infrastructure.paths import (
@@ -21,9 +22,11 @@ from pythonkni.infrastructure.paths import (
 )
 from tools.ui_feedback import show_error
 
+from .automatic_snapshot import AutomaticSnapshotResult
 from .history_center_window import HistoryCenterDialog, Tool as HistoryCenterTool
 from .notification_window import ChangeNotificationDialog
 from .notifications import load_notification_inbox
+from .retention import RetentionPolicy
 from .temporal_notifications import (
     load_monitor_notifications,
     mark_notification_ids_read,
@@ -40,8 +43,8 @@ class TemporalHistoryCenterDialog(HistoryCenterDialog):
         self,
         directory: Path,
         policy_path: Path,
-        policy,
-        parent=None,
+        policy: RetentionPolicy,
+        parent: QWidget | None = None,
         *,
         notification_path: Path = NETWORK_INTELLIGENCE_NOTIFICATIONS_FILE,
     ) -> None:
@@ -156,9 +159,19 @@ class Tool(HistoryCenterTool):
             return
         self._sync_notification_controls()
 
-    def _automatic_snapshot_published(self, **kwargs) -> str:
+    def _automatic_snapshot_published(
+        self,
+        *,
+        previous_snapshot: Path | None,
+        snapshot: AutomaticSnapshotResult,
+        generated_at: datetime,
+    ) -> str:
         with notification_inbox_lock():
-            return super()._automatic_snapshot_published(**kwargs)
+            return super()._automatic_snapshot_published(
+                previous_snapshot=previous_snapshot,
+                snapshot=snapshot,
+                generated_at=generated_at,
+            )
 
     def _open_history_center(self) -> None:
         if self.worker is not None and self.worker.isRunning():
