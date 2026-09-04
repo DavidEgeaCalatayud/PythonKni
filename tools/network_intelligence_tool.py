@@ -1,7 +1,7 @@
 import sys
 
-from pythonkni.network_intelligence import history_center_window as _history_center
 from pythonkni.network_intelligence import service as _service
+from pythonkni.network_intelligence import temporal_history_window as _history_center
 from pythonkni.network_intelligence import window as _window
 
 _window.Tool = _history_center.Tool

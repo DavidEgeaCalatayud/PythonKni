@@ -43,7 +43,8 @@ Some features require software outside the Python lock:
 
 - **Tesseract OCR** for OCR-based PDF text extraction.
 - **Poppler** for PDF/image workflows that depend on `pdf2image`.
-- Standard Windows utilities such as `netsh`, `ping`, `arp` and Windows registry/event-log facilities for corresponding system tools.
+- **Windows OpenSSH Client (`scp.exe`)** when Secure Transfer sends files or folders through the pinned Tailcat transport.
+- Standard Windows utilities such as `netsh`, `ping`, `arp`, `pktmon` and Windows registry/event-log facilities for corresponding system tools.
 
 These executables are not covered by Python package hashes or the generated Python SBOM. Features that depend on operating-system resources can also be limited by the current user's permissions.
 
@@ -69,11 +70,17 @@ Duplicate discovery is staged through file size, quick edge hashing, SHA-256 and
 
 ## Network Explorer
 
-Use the detected local network or enter an authorized IPv4 CIDR, run host discovery, inspect reverse-DNS/ARP evidence and optionally scan an explicit TCP range on a selected target. Network Explorer remains a diagnostic tool rather than a vulnerability scanner; use it only with explicit authorization.
+Use the detected local network or enter an authorized IPv4 CIDR, run host discovery, inspect reverse-DNS/ARP evidence and optionally scan an explicit TCP range on a selected target. Network Explorer remains a diagnostic tool rather than an unrestricted vulnerability scanner; use it only with explicit authorization.
 
 ## Camera Exposure Auditor
 
 Camera Exposure Auditor accepts only bounded authorized local IPv4 scope, supports local ONVIF discovery plus HTTP/HTTPS/RTSP exposure evidence, and can export findings. It does **not** attempt usernames/passwords/default credentials or retrieve streams/images. Network Explorer can hand off one exact `/32` host only when the persisted Network Intelligence identity supports a Camera match.
+
+## Web Recon Auditor
+
+Web Recon Auditor starts from one explicit HTTP/HTTPS URL or DNS hostname and audits DNS, TLS, HTTP security posture and bounded web-surface evidence. It does not accept CIDR/range input and does not turn one web target into internet-wide discovery. Active checks remain explicit and bounded, while external discovery/enrichment is kept separate from the target's local HTTP/TLS evidence.
+
+See [`web-recon-auditor.md`](web-recon-auditor.md) for its target, redirect, discovery and safety boundaries.
 
 ## Network Intelligence
 
@@ -89,6 +96,36 @@ Current historical/automation workflows include:
 - configurable count/age retention restricted to validated scheduler-owned snapshots, always protecting the newest two valid snapshots per scope.
 
 Scheduling changes when the existing authorized workflow runs; it does not broaden what can be scanned and does not install a Windows service/daemon. See [`network-intelligence.md`](network-intelligence.md), [`network-scheduled-monitoring.md`](network-scheduled-monitoring.md), [`network-change-notifications.md`](network-change-notifications.md) and [`network-history-center.md`](network-history-center.md).
+
+## Network Traffic Monitor
+
+Network Traffic Monitor provides passive, local Windows network observability without fabricating packet-level information that the operating system has not supplied.
+
+- Select a local adapter and inspect exact interface RX/TX rates from Windows counters.
+- Inspect current TCP/UDP socket activity with PID/process attribution where Windows exposes it.
+- Review per-process and per-host aggregation, LAN/public endpoint classification and conservative common-protocol inference.
+- Reverse DNS is bounded; public ASN/prefix enrichment through RIPEstat is **opt-in** and is the monitor's only external metadata lookup.
+- The **Connections / Processes / Hosts / History / Alerts** views separate live observations from persisted temporal history.
+- Process rows describe observed socket activity; they are **not** fabricated per-process byte counters.
+- Deterministic events such as new external connections, remote hosts, listening ports, process network activity, traffic spikes, known-asset connections and unusual destinations are published into the canonical Network Intelligence notification/history pipeline.
+- Network Intelligence joins are read-only: monitor observations do not create synthetic assets, silently change device classifications or rewrite persisted `RiskLevel`.
+- Packet capture is a separate explicit local action using Windows `pktmon`, with ETL -> PCAPNG conversion when the platform supports it.
+
+The monitor performs no packet injection, credential/default-password attempts, exploitation, payload decryption or internet-wide discovery. See [`network-traffic-monitor.md`](network-traffic-monitor.md) and [`network-monitor-intelligence-integration.md`](network-monitor-intelligence-integration.md).
+
+## Secure Transfer
+
+Secure Transfer isolates the experimental Tailcat transport behind PythonKni's own service/backend boundary. The validated transport is pinned to the supported Tailcat release and uses ephemeral keys for PythonKni-managed operations.
+
+- Send text directly through the supported transport flow.
+- Send files or folders when Windows OpenSSH Client (`scp.exe`) is available.
+- Expose an explicit local service through a temporary secure tunnel.
+- Forward a remote Tailcat service to a **127.0.0.1-only** local bind.
+- Receive directories only when the user explicitly enables that mode.
+
+PythonKni does not implement or decode Tailcat's unstable wire format, does not modify the Windows routing table/DNS, does not save Tailcat keys, does not enable exit-node/auth-free-SSH/read-write-share behavior and does not create `0.0.0.0` forwarding binds. Tailcat's public DERP relays are an availability fallback, not a PythonKni-operated service or SLA, and the upstream project remains experimental for mutually untrusted parties.
+
+See [`secure-transfer.md`](secure-transfer.md) for the exact transport, trust and packaging contract.
 
 ## Process Manager
 
@@ -140,19 +177,22 @@ Direct Python dependency changes require updating the relevant `.in` policy, reg
 
 Network Intelligence OUI maintenance is separate from runtime lookup. `scripts/update_oui_registry.py` can fetch/parse the official IEEE MA-L source during explicit maintenance, while `validate` checks the committed CSV + provenance metadata offline. Normal application use never submits MAC addresses to IEEE.
 
+Pinned native transports/engines are also build-time concerns. Nerva and Tailcat are staged only through their checked-in lock/verification scripts; the application does not silently self-update those binaries at runtime.
+
 ## Troubleshooting
 
 - **Tool missing from menu:** run `python -m pytest tests/test_tool_contract.py tests/test_architecture_boundaries.py` and inspect loader logs.
 - **OCR returns no text:** verify Tesseract/Poppler availability and relevant language data.
+- **Secure Transfer file/folder send is unavailable:** verify Windows OpenSSH Client and `scp.exe` are present on `PATH`.
 - **Windows action gets access denied:** elevation may be required on an authorized system; do not use it to bypass policy.
-- **Network scan misses a device:** ICMP, reverse DNS, ARP visibility and firewall policy can all affect observation; absence is not proof a host/service does not exist.
+- **Network scan/monitor misses a device or flow:** ICMP, reverse DNS, ARP visibility, socket lifetime, permissions and firewall policy can affect observation; absence is not proof a host/service/flow does not exist.
 - **Hash-locked install fails:** do not bypass `--require-hashes`; regenerate locks only as part of an intentional dependency change.
 
 ---
 
 ## Development validation
 
-The current behavior-driven suite contains **1,060 tests**, with **92.8% repository-wide branch coverage** and **93.5% aggregate service coverage** on Windows / CPython 3.13.15.
+The canonical Windows CI validates the **entire** behavior-driven suite on the candidate commit; documentation intentionally records enforced floors instead of a test-count snapshot that becomes stale as new domains land.
 
 The normal CI-equivalent validation path is:
 
@@ -170,8 +210,13 @@ python -m scripts.benchmark_network_intelligence
 python -m scripts.check_network_intelligence_typing
 python -m ruff check .
 python -m ruff format --check .
+.\scripts\fetch_nerva.ps1
+.\scripts\fetch_tailcat.ps1
 pyinstaller --noconfirm --clean PythonKni.spec
 .\dist\PythonKni\PythonKni.exe --smoke-test
+.\scripts\package_windows_bundle.ps1 -OutputPrefix "PythonKni-windows-x64"
+.\scripts\build_windows_installer.ps1 -OutputPrefix "PythonKni-windows-x64-setup"
+.\scripts\smoke_test_windows_installer.ps1 -InstallerPath ".\dist\PythonKni-windows-x64-setup.exe"
 ```
 
-CI and Release additionally enforce the individual service/window coverage floors encoded in the workflows. Network Intelligence typing currently protects >=92.64% structural annotation coverage, >=668 annotated slots, >=263 fully annotated callables, >=303 tracked callables and <=39 explicit `Any` annotations, with 15 strict modules required to stay complete/no-`Any`.
+CI and Release additionally enforce the individual service/window/refactored-code coverage floors encoded in the workflows, validate the pinned Nerva/Tailcat distribution contracts and verify the real packaged application. Network Intelligence keeps its structural typing ratchet, while repository-wide branch coverage must remain **>=92.5%** and aggregate `service.py` coverage **>=93.0%**.
