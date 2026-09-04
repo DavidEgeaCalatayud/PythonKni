@@ -226,9 +226,7 @@ def test_run_monitor_emits_update_and_persists_history(monkeypatch):
     events = []
     snap = MonitorSnapshot(1.0, "Ethernet", TrafficSample(), ())
     monkeypatch.setattr(window, "PERSIST_HISTORY_EVERY_SAMPLES", 1)
-    monkeypatch.setattr(
-        window, "load_known_assets", lambda path: (_ for _ in ()).throw(OSError())
-    )
+    monkeypatch.setattr(window, "load_known_assets", lambda path: (_ for _ in ()).throw(OSError()))
     monkeypatch.setattr(window, "collect_snapshot", lambda *args, **kwargs: (snap, object()))
     monkeypatch.setattr(window, "append_events_jsonl", lambda path, values: events.append(values))
     monkeypatch.setattr(window, "append_history_jsonl", lambda path, point: history.append(point))
