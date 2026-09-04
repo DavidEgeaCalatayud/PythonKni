@@ -30,11 +30,11 @@ Responsibilities:
 
 ## Domain layout
 
-Conventional first-party domains follow the same structure under `pythonkni/` (Archive, Camera Auditor, Config, Converter, Disk Analyzer, Duplicate, Event Viewer, Network, **Network Monitor**, PDF, Process Manager, **Secure Transfer**, Startup, System Report, Temp Cleaner, **Web Recon** and WiFi).
+Conventional first-party domains follow the same structure under `pythonkni/` (Archive, Camera Auditor, Config, Converter, Disk Analyzer, Duplicate, Event Viewer, Network, **Network Monitor**, **Network Path**, PDF, Process Manager, **Secure Transfer**, Startup, System Report, Temp Cleaner, **Web Recon** and WiFi).
 
 Network Intelligence is intentionally broader because it composes persistence, classification, topology, history, scheduling, notifications, reporting and specialized Qt views. Its pure modules stay separate from presentation composition rather than being forced into one oversized service/window pair.
 
-The architecture-boundary test declares every conventional domain centrally. This means adding Web Recon, Secure Transfer or Network Monitor cannot silently bypass the same models/service/window/tool-adapter contract used by the older tools.
+The architecture-boundary test declares every conventional domain centrally. This means adding Web Recon, Secure Transfer, Network Monitor or Network Path Analyzer cannot silently bypass the same models/service/window/tool-adapter contract used by the older tools.
 
 ## Core and infrastructure
 
@@ -51,7 +51,7 @@ pythonkni/
 
 - `core/tasks.py` defines cooperative cancellation primitives.
 - `infrastructure/archives.py` owns archive path validation, extraction limits, staging/publication and ZIP/7Z safety rules.
-- `infrastructure/paths.py` owns application runtime/data locations, including bounded Network Monitor history paths.
+- `infrastructure/paths.py` owns application runtime/data locations, including bounded Network Monitor and Network Path Analyzer history paths.
 
 Legacy modules such as `tools.app_paths` and `tools.zip_7zip_utils` remain compatibility facades where required, but first-party services depend on framework-independent infrastructure directly.
 
@@ -161,6 +161,37 @@ Windows packet capture is a separate explicit capability boundary owned by `capt
 
 See [`network-traffic-monitor.md`](network-traffic-monitor.md) and [`network-monitor-intelligence-integration.md`](network-monitor-intelligence-integration.md).
 
+### Network Path Analyzer / Trippy boundary
+
+Network Path Analyzer is a separate first-party diagnostics domain. PythonKni owns target validation, rolling statistics, route-change semantics, temporal events and Qt presentation; Trippy is isolated behind `pythonkni/network_path/backend.py` as a replaceable native probe backend.
+
+```text
+explicit hostname/IP + ICMP/UDP/TCP options
+                  ↓
+network_path/service.py
+                  ↓
+network_path/backend.py
+                  ↓
+pinned Trippy JSON report
+                  ↓
+network_path/intelligence.py
+        ┌─────────┴─────────┐
+        ↓                   ↓
+bounded path history     PathEvent
+                            ↓
+              temporal_notifications.py
+                            ↓
+            Change Notifications / History Center
+```
+
+Only one explicit target is accepted; CIDR/range/list inputs are rejected. Probe cadence and TTL are bounded. Trippy's TUI and application architecture are not embedded. The backend is pinned to the supported Windows release and all CLI options consumed by PythonKni are checked during staging/packaging.
+
+The path-analysis layer deliberately distinguishes **intermediate diagnostic response loss** from **end-to-end destination loss**. A router may rate-limit or ignore TTL-expired/ICMP responses while forwarding normally, so one silent intermediate hop cannot by itself produce `packet_loss` or `hop_removed`. Route changes require repeated confirmation, destination unreachability requires repeated destination misses and latency spikes require both absolute and relative deviation from a rolling baseline.
+
+Path events (`route_changed`, `latency_spike`, `packet_loss`, `hop_added`, `hop_removed`, `destination_unreachable`) publish into the same canonical notification inbox as Network Traffic Monitor. They are tagged with source `Network Path Analyzer` and scope `network-path`; exact replay deduplicates while later occurrences remain temporal evidence. The domain does not create synthetic Network Intelligence assets or rewrite risk/classification.
+
+On Windows, Trippy path tracing requires Administrator privileges for raw-socket probe modes. The UI reports this explicitly rather than silently substituting another measurement model. See [`network-path-analyzer.md`](network-path-analyzer.md).
+
 ### Web Recon boundary
 
 `pythonkni/web_recon/` starts from one explicit HTTP/HTTPS URL or DNS hostname. It deliberately does not accept CIDR/range scope. DNS, TLS, HTTP and bounded discovery/enrichment components stay behind the first-party service boundary, with active behavior constrained to the explicit target model rather than general internet-wide discovery.
@@ -209,7 +240,7 @@ The canonical environment is Windows / **CPython 3.13.15** using the normal GIL-
 
 The lock contract requires exact pins, approved SHA-256 hashes, all direct policy requirements, compatible overlap between runtime/dev graphs and `pip --require-hashes` installation. CI additionally runs `pip check`, strict runtime/development `pip-audit` and CycloneDX SBOM generation. GitHub Actions are pinned to immutable commit SHAs.
 
-Native optional engines/transports use independent reproducible locks. Nerva is pinned and staged for service intelligence; Tailcat is pinned and staged for Secure Transfer. Both are verified before PyInstaller packaging, and their staged/packaged contracts are exercised by CI rather than being downloaded dynamically by normal application runtime.
+Native optional engines/transports use independent reproducible locks. Nerva is pinned for service intelligence, Tailcat for Secure Transfer and Trippy for Network Path Analyzer. Their official archives are SHA-256 verified before extraction, staged binaries are contract-checked before reuse and the packaged native runtimes are revalidated before a Windows ZIP/release bundle can be produced. None is downloaded dynamically by normal application runtime.
 
 ## CI and release path
 
@@ -236,11 +267,11 @@ Network Intelligence typing ratchet
           ↓
 Ruff check + format
           ↓
-pinned Nerva + Tailcat staging/contract verification
+pinned Nerva + Tailcat + Trippy staging/contract verification
           ↓
 PyInstaller build
           ↓
-packaged Nerva + Tailcat verification
+packaged Nerva + Tailcat + Trippy verification
           ↓
 frozen PythonKni.exe --smoke-test
           ↓
@@ -251,13 +282,13 @@ installed PythonKni.exe --smoke-test
 validated artifact upload
 ```
 
-Release validation mirrors the same quality gates before publishing a tag-driven GitHub Release. CI and Release use the same coverage and Network Intelligence typing floors so distribution cannot bypass a regression rejected on normal candidate validation.
+Release validation mirrors the same quality gates before publishing a tag-driven GitHub Release. CI and Release use the same coverage and Network Intelligence typing floors so distribution cannot bypass a regression rejected on normal candidate validation. The common bundle packager also refuses to package a source tree that declares a native lock but is missing or fails the corresponding packaged runtime contract.
 
 ## Architecture enforcement
 
 Architecture/runtime regressions verify, among other rules, that models/services preserve their dependency boundary, shared infrastructure stays framework-independent, Process Manager presentation does not own `psutil` termination, loader-facing modules remain adapters, windows preserve the `BaseTool` contract, and CI/release/OUI maintenance/project metadata/Ruff stay aligned on Python 3.13.
 
-The domain matrix explicitly includes Network Monitor, Web Recon and Secure Transfer alongside the older first-party domains. Other focused suites protect archive extraction safety, Temp Cleaner path identity, startup rollback, duplicate revalidation/manifests, process PID identity, CSV injection, worker lifecycle, dependency/native-supply-chain locks, runtime contract, Network Intelligence history/notification/retention semantics, Network Monitor temporal integration and structured feedback behavior.
+The domain matrix explicitly includes Network Monitor, Network Path, Web Recon and Secure Transfer alongside the older first-party domains. Other focused suites protect archive extraction safety, Temp Cleaner path identity, startup rollback, duplicate revalidation/manifests, process PID identity, CSV injection, worker lifecycle, dependency/native-supply-chain locks, runtime contract, Network Intelligence history/notification/retention semantics, Network Monitor/Network Path temporal integration and structured feedback behavior.
 
 ## Coverage model
 
