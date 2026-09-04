@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import ipaddress
 import json
-import os
 import socket
 import time
 from pathlib import Path
@@ -307,9 +306,9 @@ def _append_jsonl_bounded(path: Path, records: tuple[dict[str, object], ...]) ->
     if not records:
         return
     path.parent.mkdir(parents=True, exist_ok=True)
-    with path.open("a", encoding="utf-8") as handle:
+    with path.open("a", encoding="utf-8", newline="\n") as handle:
         for record in records:
-            handle.write(json.dumps(record, ensure_ascii=False, sort_keys=True) + os.linesep)
+            handle.write(json.dumps(record, ensure_ascii=False, sort_keys=True) + "\n")
     try:
         oversized = path.stat().st_size > JSONL_TRIM_BYTES
     except OSError:
@@ -319,7 +318,8 @@ def _append_jsonl_bounded(path: Path, records: tuple[dict[str, object], ...]) ->
     try:
         lines = path.read_text(encoding="utf-8").splitlines()[-JSONL_MAX_RECORDS:]
         temporary = path.with_suffix(path.suffix + ".tmp")
-        temporary.write_text(os.linesep.join(lines) + os.linesep, encoding="utf-8")
+        with temporary.open("w", encoding="utf-8", newline="\n") as handle:
+            handle.write("\n".join(lines) + "\n")
         temporary.replace(path)
     except OSError:
         return
