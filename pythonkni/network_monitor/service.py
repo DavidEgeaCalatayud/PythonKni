@@ -215,8 +215,10 @@ def read_traffic_counters(
     timestamp: float | None = None,
 ) -> TrafficCounters:
     adapters = list_adapters() if adapters is None else adapters
-    selected = adapters if adapter_name == ALL_ADAPTERS else tuple(
-        adapter for adapter in adapters if adapter.name == adapter_name
+    selected = (
+        adapters
+        if adapter_name == ALL_ADAPTERS
+        else tuple(adapter for adapter in adapters if adapter.name == adapter_name)
     )
     return TrafficCounters(
         timestamp=time.monotonic() if timestamp is None else timestamp,
