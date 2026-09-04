@@ -201,7 +201,9 @@ class MonitorState:
 
         for connection in snapshot.connections:
             if connection.is_listener:
-                listener_key = f"{connection.transport}|{connection.local_port}|{connection.pid or 0}"
+                listener_key = (
+                    f"{connection.transport}|{connection.local_port}|{connection.pid or 0}"
+                )
                 if listener_key not in self.seen_listeners:
                     self.seen_listeners.add(listener_key)
                     events.append(
@@ -271,9 +273,7 @@ class MonitorState:
                         )
                     )
                 if connection.remote_port and connection.remote_port not in COMMON_EGRESS_PORTS:
-                    unusual_key = (
-                        f"{connection.process_name}|{remote_ip}|{connection.remote_port}"
-                    )
+                    unusual_key = f"{connection.process_name}|{remote_ip}|{connection.remote_port}"
                     if unusual_key not in self.seen_unusual_destinations:
                         self.seen_unusual_destinations.add(unusual_key)
                         events.append(
