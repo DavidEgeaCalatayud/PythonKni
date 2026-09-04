@@ -5,7 +5,9 @@ from pythonkni.network_intelligence.temporal_notifications import (
     MONITOR_SOURCE_DETAIL,
     is_monitor_notification,
     load_monitor_notifications,
+    mark_notification_ids_read,
     monitor_event_to_notification,
+    notification_inbox_lock,
     publish_monitor_events,
 )
 from pythonkni.network_monitor.models import EventSeverity, MonitorEvent
@@ -68,6 +70,25 @@ def test_publish_monitor_events_uses_canonical_inbox_and_deduplicates(tmp_path):
     assert len(loaded) == 2
     assert monitor_items == loaded
     assert all(is_monitor_notification(item) for item in loaded)
+
+
+def test_mark_read_updates_only_presented_ids(tmp_path):
+    inbox = tmp_path / "notifications.json"
+    publish_monitor_events(inbox, (event(timestamp=1000.0), event(timestamp=1001.0)))
+    before = load_notification_inbox(inbox)
+    presented_id = before[-1].event_id
+
+    updated = mark_notification_ids_read(inbox, (presented_id,))
+    by_id = {item.event_id: item for item in updated}
+    assert by_id[presented_id].read is True
+    assert sum(item.read for item in updated) == 1
+
+
+def test_notification_inbox_lock_is_reentrant():
+    lock = notification_inbox_lock()
+    with lock:
+        with lock:
+            assert notification_inbox_lock() is lock
 
 
 def test_empty_publish_is_a_noop(tmp_path):
