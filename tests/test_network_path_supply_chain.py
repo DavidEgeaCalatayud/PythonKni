@@ -60,6 +60,8 @@ def test_trippy_contract_smoke_covers_used_cli_surface():
     for protocol in ("icmp", "udp", "tcp"):
         assert protocol in script
     assert "ExpectedVersion" in script
+    assert "$LASTEXITCODE:" not in script
+    assert "${LASTEXITCODE}:" in script
 
 
 def test_third_party_notice_records_trippy_license_and_isolation():
