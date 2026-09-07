@@ -16,18 +16,29 @@ def test_trippy_lock_is_pinned_to_verified_windows_release():
         "https://github.com/fujiapple852/trippy/releases/download/0.13.0/"
     )
     assert lock["archive"] == "trippy-0.13.0-x86_64-pc-windows-msvc.zip"
-    assert lock["sha256"] == ("74a184434d96eec6c7f8e4b467147c40fa8841fa3722a3ddf51267208fcbbbe6")
+    assert lock["sha256"] == "74a184434d96eec6c7f8e4b467147c40fa8841fa3722a3ddf51267208fcbbbe6"
+    assert lock["license_url"] == (
+        "https://raw.githubusercontent.com/fujiapple852/trippy/0.13.0/LICENSE"
+    )
+    assert lock["license_sha256"] == (
+        "62c7a1e35f56406896d7aa7ca52d0cc0d272ac022b5d2796e7d6905db8a3636a"
+    )
 
 
 def test_trippy_fetch_script_enforces_official_source_hash_and_contract():
     script = (ROOT / "scripts" / "fetch_trippy.ps1").read_text(encoding="utf-8")
     assert "Get-FileHash" in script
     assert "fujiapple852/trippy/releases/download" in script
+    assert "raw.githubusercontent.com/fujiapple852/trippy" in script
     assert "trip.exe" in script
     assert "0.13.0" in script
     assert "binary_sha256" in script
+    assert "license_sha256" in script
     assert "check_trippy_contract.ps1" in script
     assert "archive SHA-256 mismatch" in script
+    assert "license SHA-256 mismatch" in script
+    assert "exact pinned upstream tag" in script
+    assert "does not contain a distributable LICENSE" not in script
 
 
 def test_trippy_contract_smoke_covers_used_cli_surface():
@@ -57,6 +68,7 @@ def test_third_party_notice_records_trippy_license_and_isolation():
     assert "Apache License 2.0" in notice
     assert "not committed" in notice
     assert "command-line JSON reporting contract" in notice
+    assert "exact upstream tag" in notice
 
 
 def test_pyinstaller_and_ci_package_and_verify_trippy():

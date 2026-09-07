@@ -24,7 +24,7 @@ Secure Transfer currently pins Tailcat v0.5.0 because upstream does not guarante
 
 PythonKni can bundle **Trippy**, Copyright Trippy contributors, licensed under the Apache License 2.0.
 
-The Trippy executable is **not committed to this repository**. Build and release automation obtains only the official Windows x86_64 MSVC archive pinned in `trippy.lock.json`, verifies its SHA-256 digest before extraction, revalidates the staged executable digest and CLI contract, and packages the verified `trip.exe` together with its upstream license/source metadata.
+The Trippy executable is **not committed to this repository**. Build and release automation obtains only the official Windows x86_64 MSVC archive pinned in `trippy.lock.json`, verifies its SHA-256 digest before extraction, revalidates the staged executable digest and CLI contract, and packages the verified `trip.exe` together with its upstream license/source metadata. The binary release archive does not contain the license file, so PythonKni obtains `LICENSE` separately from the exact pinned upstream tag and verifies its independently pinned SHA-256 digest before staging it beside the binary.
 
 Upstream project: https://github.com/fujiapple852/trippy
 

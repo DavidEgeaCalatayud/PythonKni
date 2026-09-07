@@ -12,7 +12,7 @@ if (-not (Test-Path -LiteralPath $contractScript -PathType Leaf)) {
 }
 
 $lock = Get-Content -LiteralPath $lockPath -Raw | ConvertFrom-Json
-foreach ($property in @("version", "tag", "archive", "url", "sha256", "license")) {
+foreach ($property in @("version", "tag", "archive", "url", "sha256", "license", "license_url", "license_sha256")) {
     if (-not $lock.PSObject.Properties.Name.Contains($property) -or [string]::IsNullOrWhiteSpace([string]$lock.$property)) {
         throw "Trippy lock metadata is missing '$property'."
     }
@@ -30,6 +30,13 @@ if ([string]$lock.url -notmatch '^https://github\.com/fujiapple852/trippy/releas
 if ([string]$lock.sha256 -notmatch '^[0-9a-fA-F]{64}$') {
     throw "Trippy SHA-256 in lock metadata is invalid."
 }
+$expectedLicenseUrl = "https://raw.githubusercontent.com/fujiapple852/trippy/$($lock.tag)/LICENSE"
+if ([string]$lock.license_url -ne $expectedLicenseUrl) {
+    throw "Trippy license URL must point to LICENSE from the exact pinned upstream tag."
+}
+if ([string]$lock.license_sha256 -notmatch '^[0-9a-fA-F]{64}$') {
+    throw "Trippy license SHA-256 in lock metadata is invalid."
+}
 
 $targetDir = Join-Path $repositoryRoot "third_party\trippy"
 $targetExe = Join-Path $targetDir "trip.exe"
@@ -40,19 +47,26 @@ if ((Test-Path -LiteralPath $targetExe -PathType Leaf) -and (Test-Path -LiteralP
     try {
         $existing = Get-Content -LiteralPath $sourceMetadata -Raw | ConvertFrom-Json
         $hasBinaryHash = $existing.PSObject.Properties.Name.Contains("binary_sha256")
+        $hasLicenseHash = $existing.PSObject.Properties.Name.Contains("license_sha256")
         if (
             [string]$existing.version -eq [string]$lock.version -and
             [string]$existing.archive_sha256 -eq ([string]$lock.sha256).ToLowerInvariant() -and
             $hasBinaryHash -and
-            [string]$existing.binary_sha256 -match '^[0-9a-fA-F]{64}$'
+            [string]$existing.binary_sha256 -match '^[0-9a-fA-F]{64}$' -and
+            $hasLicenseHash -and
+            [string]$existing.license_sha256 -eq ([string]$lock.license_sha256).ToLowerInvariant()
         ) {
             $actualBinaryHash = (Get-FileHash -LiteralPath $targetExe -Algorithm SHA256).Hash.ToLowerInvariant()
-            if ($actualBinaryHash -eq ([string]$existing.binary_sha256).ToLowerInvariant()) {
+            $actualLicenseHash = (Get-FileHash -LiteralPath $targetLicense -Algorithm SHA256).Hash.ToLowerInvariant()
+            if (
+                $actualBinaryHash -eq ([string]$existing.binary_sha256).ToLowerInvariant() -and
+                $actualLicenseHash -eq ([string]$lock.license_sha256).ToLowerInvariant()
+            ) {
                 & $contractScript -Executable $targetExe -ExpectedVersion ([string]$lock.version)
                 Write-Host "Verified Trippy v$($lock.version) is already staged at $targetExe"
                 exit 0
             }
-            Write-Host "Existing Trippy binary hash does not match staging metadata; refreshing."
+            Write-Host "Existing Trippy binary or license hash does not match staging metadata; refreshing."
         }
     } catch {
         Write-Host "Existing Trippy staging verification failed; refreshing the staged backend: $($_.Exception.Message)"
@@ -61,6 +75,7 @@ if ((Test-Path -LiteralPath $targetExe -PathType Leaf) -and (Test-Path -LiteralP
 
 $tempRoot = Join-Path ([System.IO.Path]::GetTempPath()) ("pythonkni-trippy-" + [guid]::NewGuid().ToString("N"))
 $archivePath = Join-Path $tempRoot ([string]$lock.archive)
+$licensePath = Join-Path $tempRoot "LICENSE"
 $extractDir = Join-Path $tempRoot "extract"
 
 New-Item -ItemType Directory -Path $tempRoot -Force | Out-Null
@@ -79,11 +94,13 @@ try {
     if ($null -eq $backend) {
         throw "The verified Trippy archive does not contain trip.exe."
     }
-    $licenseFile = Get-ChildItem -LiteralPath $extractDir -Recurse -File | Where-Object {
-        $_.Name -match '^LICENSE(?:\..+)?$'
-    } | Select-Object -First 1
-    if ($null -eq $licenseFile) {
-        throw "The verified Trippy archive does not contain a distributable LICENSE file."
+
+    Write-Host "Downloading Trippy LICENSE from pinned upstream tag $($lock.tag)..."
+    Invoke-WebRequest -Uri ([string]$lock.license_url) -OutFile $licensePath -UseBasicParsing
+    $actualLicenseHash = (Get-FileHash -LiteralPath $licensePath -Algorithm SHA256).Hash.ToLowerInvariant()
+    $expectedLicenseHash = ([string]$lock.license_sha256).ToLowerInvariant()
+    if ($actualLicenseHash -ne $expectedLicenseHash) {
+        throw "Trippy license SHA-256 mismatch. Expected $expectedLicenseHash but received $actualLicenseHash."
     }
 
     if (Test-Path -LiteralPath $targetDir) {
@@ -91,7 +108,7 @@ try {
     }
     New-Item -ItemType Directory -Path $targetDir -Force | Out-Null
     Copy-Item -LiteralPath $backend.FullName -Destination $targetExe
-    Copy-Item -LiteralPath $licenseFile.FullName -Destination $targetLicense
+    Copy-Item -LiteralPath $licensePath -Destination $targetLicense
 
     $binaryHash = (Get-FileHash -LiteralPath $targetExe -Algorithm SHA256).Hash.ToLowerInvariant()
     [ordered]@{
@@ -103,6 +120,8 @@ try {
         archive = [string]$lock.archive
         archive_sha256 = $expectedHash
         binary_sha256 = $binaryHash
+        license_url = [string]$lock.license_url
+        license_sha256 = $expectedLicenseHash
     } | ConvertTo-Json | Set-Content -LiteralPath $sourceMetadata -Encoding UTF8
 
     & $contractScript -Executable $targetExe -ExpectedVersion ([string]$lock.version)
