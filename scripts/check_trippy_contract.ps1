@@ -15,7 +15,7 @@ if (-not (Test-Path -LiteralPath $Executable -PathType Leaf)) {
 
 $versionOutput = (& $Executable --version 2>&1 | Out-String).Trim()
 if ($LASTEXITCODE -ne 0) {
-    throw "Trippy --version failed with exit code $LASTEXITCODE: $versionOutput"
+    throw "Trippy --version failed with exit code ${LASTEXITCODE}: $versionOutput"
 }
 if ($versionOutput -notmatch [regex]::Escape($ExpectedVersion)) {
     throw "Trippy version contract mismatch. Expected $ExpectedVersion, received: $versionOutput"
