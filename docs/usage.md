@@ -46,7 +46,7 @@ Some features require software outside the Python lock:
 - **Windows OpenSSH Client (`scp.exe`)** when Secure Transfer sends files or folders through the pinned Tailcat transport.
 - Standard Windows utilities such as `netsh`, `ping`, `arp`, `pktmon` and Windows registry/event-log facilities for corresponding system tools.
 
-These executables are not covered by Python package hashes or the generated Python SBOM. Features that depend on operating-system resources can also be limited by the current user's permissions.
+These executables are not covered by Python package hashes or the generated Python SBOM. Features that depend on operating-system resources can also be limited by the current user's permissions. Nerva, Tailcat and Trippy are separate pinned native components staged and verified by PythonKni's build/release pipeline rather than ordinary system dependencies.
 
 ---
 
@@ -113,6 +113,27 @@ Network Traffic Monitor provides passive, local Windows network observability wi
 
 The monitor performs no packet injection, credential/default-password attempts, exploitation, payload decryption or internet-wide discovery. See [`network-traffic-monitor.md`](network-traffic-monitor.md) and [`network-monitor-intelligence-integration.md`](network-monitor-intelligence-integration.md).
 
+## Network Path Analyzer
+
+Network Path Analyzer answers a different question from Network Explorer and Network Traffic Monitor: **where along the current route does latency or path degradation begin?**
+
+- Enter one explicit hostname or IP; CIDRs, ranges, lists and URLs are rejected.
+- Select **ICMP**, **UDP** or **TCP** tracing plus Auto/IPv4/IPv6 address family.
+- Configure a bounded interval and max TTL; UDP defaults to port 33434 and TCP to 443 unless explicitly changed.
+- Inspect per-hop responding host/IP sets, sent/received observations, response loss, last/average/min/max RTT and jitter.
+- Review a destination RTT timeline plus bounded History and Alerts views.
+- Stable route changes can emit `route_changed`, `hop_added` and `hop_removed` only after repeated confirmation.
+- Sustained destination degradation can emit `latency_spike`, `packet_loss` and `destination_unreachable`.
+- Discrete path events are published to the same canonical Change Notification / History Center pipeline used by other temporal network tools, with source `Network Path Analyzer`.
+
+A key interpretation rule is deliberate: **a missing reply from an intermediate router is not proof that it is dropping forwarded traffic**. Routers commonly rate-limit or ignore TTL-expired diagnostic responses. PythonKni therefore calculates `packet_loss` from destination observations and does not emit `hop_removed` from a single transient silent hop.
+
+The first plausible accumulated RTT step is highlighted when evidence supports it, but that is diagnostic evidence rather than proof that the router at that TTL is itself faulty; return-path asymmetry and ICMP scheduling can influence hop RTTs.
+
+The probe backend is the exact pinned **Trippy 0.13.0** Windows runtime, isolated behind PythonKni's own backend adapter. PythonKni does not embed Trippy's TUI and does not download it at application runtime. On Windows, Trippy tracing requires **Administrator privileges** for its raw-socket probe modes; if PythonKni is not elevated, the analyzer reports that explicitly instead of silently substituting a different measurement.
+
+See [`network-path-analyzer.md`](network-path-analyzer.md) for route-diff semantics, thresholds, supply-chain verification and limitations.
+
 ## Secure Transfer
 
 Secure Transfer isolates the experimental Tailcat transport behind PythonKni's own service/backend boundary. The validated transport is pinned to the supported Tailcat release and uses ephemeral keys for PythonKni-managed operations.
@@ -177,13 +198,15 @@ Direct Python dependency changes require updating the relevant `.in` policy, reg
 
 Network Intelligence OUI maintenance is separate from runtime lookup. `scripts/update_oui_registry.py` can fetch/parse the official IEEE MA-L source during explicit maintenance, while `validate` checks the committed CSV + provenance metadata offline. Normal application use never submits MAC addresses to IEEE.
 
-Pinned native transports/engines are also build-time concerns. Nerva and Tailcat are staged only through their checked-in lock/verification scripts; the application does not silently self-update those binaries at runtime.
+Pinned native transports/engines are also build-time concerns. Nerva, Tailcat and Trippy are staged only through their checked-in lock/verification scripts; the application does not silently self-update those binaries at runtime.
 
 ## Troubleshooting
 
 - **Tool missing from menu:** run `python -m pytest tests/test_tool_contract.py tests/test_architecture_boundaries.py` and inspect loader logs.
 - **OCR returns no text:** verify Tesseract/Poppler availability and relevant language data.
 - **Secure Transfer file/folder send is unavailable:** verify Windows OpenSSH Client and `scp.exe` are present on `PATH`.
+- **Network Path Analyzer says Administrator privileges are required:** close PythonKni and reopen it with **Run as administrator** only when you are authorized to probe the target/network. This requirement comes from Trippy's Windows raw-socket tracing model.
+- **A middle hop shows 100% response loss but later hops/destination answer:** do not interpret that as forwarding loss by itself; intermediate routers can rate-limit diagnostic replies. Use destination loss and subsequent-hop behavior.
 - **Windows action gets access denied:** elevation may be required on an authorized system; do not use it to bypass policy.
 - **Network scan/monitor misses a device or flow:** ICMP, reverse DNS, ARP visibility, socket lifetime, permissions and firewall policy can affect observation; absence is not proof a host/service/flow does not exist.
 - **Hash-locked install fails:** do not bypass `--require-hashes`; regenerate locks only as part of an intentional dependency change.
@@ -212,6 +235,7 @@ python -m ruff check .
 python -m ruff format --check .
 .\scripts\fetch_nerva.ps1
 .\scripts\fetch_tailcat.ps1
+.\scripts\fetch_trippy.ps1
 pyinstaller --noconfirm --clean PythonKni.spec
 .\dist\PythonKni\PythonKni.exe --smoke-test
 .\scripts\package_windows_bundle.ps1 -OutputPrefix "PythonKni-windows-x64"
@@ -219,4 +243,4 @@ pyinstaller --noconfirm --clean PythonKni.spec
 .\scripts\smoke_test_windows_installer.ps1 -InstallerPath ".\dist\PythonKni-windows-x64-setup.exe"
 ```
 
-CI and Release additionally enforce the individual service/window/refactored-code coverage floors encoded in the workflows, validate the pinned Nerva/Tailcat distribution contracts and verify the real packaged application. Network Intelligence keeps its structural typing ratchet, while repository-wide branch coverage must remain **>=92.5%** and aggregate `service.py` coverage **>=93.0%**.
+CI and Release additionally enforce the individual service/window/refactored-code coverage floors encoded in the workflows, validate the pinned Nerva/Tailcat/Trippy distribution contracts and verify the real packaged application. Network Intelligence keeps its structural typing ratchet, while repository-wide branch coverage must remain **>=92.5%** and aggregate `service.py` coverage **>=93.0%**.
