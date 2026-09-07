@@ -324,7 +324,9 @@ class TrippyBackend:
         executable = self.executable
         with tempfile.TemporaryDirectory(prefix="pythonkni-trippy-") as temp_dir:
             config_path = Path(temp_dir) / "trippy.toml"
-            config_path.write_text("# PythonKni deterministic Trippy configuration\n", encoding="utf-8")
+            config_path.write_text(
+                "# PythonKni deterministic Trippy configuration\n", encoding="utf-8"
+            )
             command = build_trace_command(executable, request, config_file=config_path)
             process = self._popen_factory(
                 command,

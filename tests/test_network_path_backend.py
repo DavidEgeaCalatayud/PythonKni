@@ -38,7 +38,10 @@ def report(*, target="8.8.8.8", reached=True):
         {
             "ttl": 2,
             "hosts": (
-                [{"ip": target, "hostname": "dns.google."}, {"ip": target, "hostname": "dns.google."}]
+                [
+                    {"ip": target, "hostname": "dns.google."},
+                    {"ip": target, "hostname": "dns.google."},
+                ]
                 if reached
                 else []
             ),
@@ -66,9 +69,7 @@ def test_effective_ports_and_trace_command_are_protocol_specific(tmp_path):
     assert "--target-port" not in icmp
     assert "--dns-resolve-method" in icmp and "system" in icmp
 
-    udp = backend.build_trace_command(
-        executable, request(TraceProtocol.UDP), config_file=config
-    )
+    udp = backend.build_trace_command(executable, request(TraceProtocol.UDP), config_file=config)
     assert udp[udp.index("--target-port") + 1] == "33434"
     assert udp[udp.index("--multipath-strategy") + 1] == "dublin"
 
@@ -136,7 +137,9 @@ def test_resolve_trippy_executable_precedence(tmp_path, monkeypatch):
     monkeypatch.setattr(backend, "PROJECT_ROOT", tmp_path / "missing")
     path_trip = tmp_path / "trip.exe"
     path_trip.write_bytes(b"x")
-    monkeypatch.setattr(backend.shutil, "which", lambda name: str(path_trip) if name == "trip" else None)
+    monkeypatch.setattr(
+        backend.shutil, "which", lambda name: str(path_trip) if name == "trip" else None
+    )
     assert backend.resolve_trippy_executable() == path_trip.resolve()
 
     path_trip.unlink()
@@ -159,7 +162,9 @@ def test_windows_is_elevated_is_platform_aware(monkeypatch):
 
     monkeypatch.setattr(backend.sys, "platform", "win32")
     fake_shell = SimpleNamespace(IsUserAnAdmin=lambda: 1)
-    monkeypatch.setattr(backend.ctypes, "windll", SimpleNamespace(shell32=fake_shell), raising=False)
+    monkeypatch.setattr(
+        backend.ctypes, "windll", SimpleNamespace(shell32=fake_shell), raising=False
+    )
     assert backend.windows_is_elevated() is True
 
     fake_shell.IsUserAnAdmin = lambda: 0
@@ -275,9 +280,7 @@ def test_trace_once_cancels_active_process(tmp_path, monkeypatch):
     monkeypatch.setattr(backend.sys, "platform", "linux")
     process = FakeProcess(b"")
     process.returncode = None
-    instance = backend.TrippyBackend(
-        executable, popen_factory=lambda *_args, **_kwargs: process
-    )
+    instance = backend.TrippyBackend(executable, popen_factory=lambda *_args, **_kwargs: process)
     with pytest.raises(backend.TraceCancelled):
         instance.trace_once(request(), stop_event=SimpleNamespace(is_set=lambda: True))
     assert process.terminated is True

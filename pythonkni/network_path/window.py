@@ -162,7 +162,13 @@ class Tool(BaseTool):
         options_row = QHBoxLayout()
         options_row.addWidget(QLabel("Interval:"))
         self.interval_combo = QComboBox()
-        for label, seconds in (("0.5 s", 0.5), ("1 s", 1.0), ("2.5 s", 2.5), ("5 s", 5.0), ("10 s", 10.0)):
+        for label, seconds in (
+            ("0.5 s", 0.5),
+            ("1 s", 1.0),
+            ("2.5 s", 2.5),
+            ("5 s", 5.0),
+            ("10 s", 10.0),
+        ):
             self.interval_combo.addItem(label, seconds)
         self.interval_combo.setCurrentIndex(1)
         options_row.addWidget(self.interval_combo)

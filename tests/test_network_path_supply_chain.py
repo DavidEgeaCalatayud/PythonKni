@@ -16,9 +16,7 @@ def test_trippy_lock_is_pinned_to_verified_windows_release():
         "https://github.com/fujiapple852/trippy/releases/download/0.13.0/"
     )
     assert lock["archive"] == "trippy-0.13.0-x86_64-pc-windows-msvc.zip"
-    assert lock["sha256"] == (
-        "74a184434d96eec6c7f8e4b467147c40fa8841fa3722a3ddf51267208fcbbbe6"
-    )
+    assert lock["sha256"] == ("74a184434d96eec6c7f8e4b467147c40fa8841fa3722a3ddf51267208fcbbbe6")
 
 
 def test_trippy_fetch_script_enforces_official_source_hash_and_contract():

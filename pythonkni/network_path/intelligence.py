@@ -102,9 +102,10 @@ def _host_signature(probe: HopProbe) -> tuple[str, ...]:
 
 
 def _route_text(route: tuple[tuple[int, tuple[str, ...]], ...]) -> str:
-    return " → ".join(
-        f"{ttl}:{'/'.join(hosts)}" for ttl, hosts in route if hosts
-    ) or "sin saltos respondientes"
+    return (
+        " → ".join(f"{ttl}:{'/'.join(hosts)}" for ttl, hosts in route if hosts)
+        or "sin saltos respondientes"
+    )
 
 
 class PathState:
@@ -289,9 +290,7 @@ class PathState:
                 )
 
         loss = (
-            (self._destination_sent - self._destination_received)
-            / self._destination_sent
-            * 100.0
+            (self._destination_sent - self._destination_received) / self._destination_sent * 100.0
         )
         if self._destination_sent >= MIN_LOSS_SAMPLES:
             if loss >= LOSS_WARNING_PCT and not self._loss_active:
@@ -388,9 +387,7 @@ class PathState:
         events.extend(self._destination_events(snapshot, issue_hop_ttl=issue_hop_ttl))
 
         destination_loss = (
-            (self._destination_sent - self._destination_received)
-            / self._destination_sent
-            * 100.0
+            (self._destination_sent - self._destination_received) / self._destination_sent * 100.0
             if self._destination_sent
             else 0.0
         )

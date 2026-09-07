@@ -25,7 +25,9 @@ def validate_target(value: str) -> str:
     if any(character.isspace() for character in target):
         raise ValueError("El destino debe ser un único hostname o IP, sin espacios.")
     if "/" in target or "\\" in target or "," in target or ";" in target:
-        raise ValueError("Network Path Analyzer acepta un único hostname o IP, no rangos ni listas.")
+        raise ValueError(
+            "Network Path Analyzer acepta un único hostname o IP, no rangos ni listas."
+        )
     if "://" in target:
         raise ValueError("Introduce solo el hostname o IP, sin esquema URL.")
 

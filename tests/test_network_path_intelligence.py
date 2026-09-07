@@ -55,12 +55,8 @@ def test_first_reached_route_is_baseline_without_change_event():
 def test_route_change_requires_confirmation():
     state = PathState()
     state.observe(snapshot(1.0))
-    first = state.observe(
-        snapshot(2.0, route=("192.168.1.1", "10.0.0.99", "8.8.8.8"))
-    )
-    second = state.observe(
-        snapshot(3.0, route=("192.168.1.1", "10.0.0.99", "8.8.8.8"))
-    )
+    first = state.observe(snapshot(2.0, route=("192.168.1.1", "10.0.0.99", "8.8.8.8")))
+    second = state.observe(snapshot(3.0, route=("192.168.1.1", "10.0.0.99", "8.8.8.8")))
     assert "route_changed" not in kinds(first)
     assert "route_changed" in kinds(second)
     event = next(item for item in second.events if item.kind == "route_changed")
