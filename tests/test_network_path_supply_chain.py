@@ -68,7 +68,7 @@ def test_third_party_notice_records_trippy_license_and_isolation():
     assert "Apache License 2.0" in notice
     assert "not committed" in notice
     assert "command-line JSON reporting contract" in notice
-    assert "exact upstream tag" in notice
+    assert "pinned upstream tag" in notice
 
 
 def test_pyinstaller_and_ci_package_and_verify_trippy():
