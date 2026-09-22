@@ -119,6 +119,10 @@ jobs:
         shell: powershell
         run: .\scripts\fetch_tailcat.ps1
 
+      - name: Stage pinned Trippy path backend
+        shell: powershell
+        run: .\scripts\fetch_trippy.ps1
+
       - name: Build Windows bundle
         run: pyinstaller --noconfirm --clean PythonKni.spec
 
@@ -145,6 +149,15 @@ jobs:
           if ($LASTEXITCODE -ne 0 -or $version -notmatch '0\.5\.0') {
             throw "Packaged Tailcat version smoke failed: $version"
           }
+
+      - name: Verify packaged Trippy path backend
+        shell: powershell
+        run: |
+          $trippy = Join-Path $PWD "dist\PythonKni\_internal\third_party\trippy\trip.exe"
+          if (-not (Test-Path -LiteralPath $trippy -PathType Leaf)) {
+            throw "PyInstaller did not package the verified Trippy backend at $trippy"
+          }
+          .\scripts\check_trippy_contract.ps1 -Executable $trippy -ExpectedVersion "0.13.0"
 
       - name: Smoke test packaged application
         shell: powershell
@@ -186,6 +199,7 @@ jobs:
             assets/network_oui_prefixes.meta.json
             third_party/nerva.lock.json
             third_party/tailcat.lock.json
+            third_party/trippy.lock.json
             requirements.txt
             requirements-dev.txt
           if-no-files-found: error

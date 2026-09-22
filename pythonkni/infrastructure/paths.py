@@ -25,6 +25,7 @@ NETWORK_INTELLIGENCE_REPORTS_DIR = DATA_DIR / "network_intelligence_reports"
 NETWORK_INTELLIGENCE_AUTOMATIC_SNAPSHOTS_DIR = NETWORK_INTELLIGENCE_REPORTS_DIR / "scheduled"
 NETWORK_MONITOR_DIR = DATA_DIR / "network_monitor"
 NETWORK_MONITOR_CAPTURES_DIR = NETWORK_MONITOR_DIR / "captures"
+NETWORK_PATH_DIR = DATA_DIR / "network_path"
 
 CONFIG_FILE = CONFIG_DIR / "config.json"
 SCAN_HISTORY_FILE = DATA_DIR / "scan_history.txt"
@@ -34,6 +35,8 @@ NETWORK_INTELLIGENCE_NOTIFICATIONS_FILE = DATA_DIR / "network_intelligence_notif
 NETWORK_INTELLIGENCE_RETENTION_FILE = DATA_DIR / "network_intelligence_retention.json"
 NETWORK_MONITOR_EVENTS_FILE = NETWORK_MONITOR_DIR / "events.jsonl"
 NETWORK_MONITOR_HISTORY_FILE = NETWORK_MONITOR_DIR / "history.jsonl"
+NETWORK_PATH_EVENTS_FILE = NETWORK_PATH_DIR / "events.jsonl"
+NETWORK_PATH_HISTORY_FILE = NETWORK_PATH_DIR / "history.jsonl"
 
 
 def ensure_app_dirs() -> None:
@@ -46,5 +49,6 @@ def ensure_app_dirs() -> None:
         NETWORK_INTELLIGENCE_AUTOMATIC_SNAPSHOTS_DIR,
         NETWORK_MONITOR_DIR,
         NETWORK_MONITOR_CAPTURES_DIR,
+        NETWORK_PATH_DIR,
     ):
         path.mkdir(parents=True, exist_ok=True)

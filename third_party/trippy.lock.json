@@ -1,0 +1,13 @@
+{
+  "name": "Trippy",
+  "source": "https://github.com/fujiapple852/trippy",
+  "license": "Apache-2.0",
+  "version": "0.13.0",
+  "tag": "0.13.0",
+  "platform": "x86_64-pc-windows-msvc",
+  "archive": "trippy-0.13.0-x86_64-pc-windows-msvc.zip",
+  "url": "https://github.com/fujiapple852/trippy/releases/download/0.13.0/trippy-0.13.0-x86_64-pc-windows-msvc.zip",
+  "sha256": "74a184434d96eec6c7f8e4b467147c40fa8841fa3722a3ddf51267208fcbbbe6",
+  "license_url": "https://raw.githubusercontent.com/fujiapple852/trippy/0.13.0/LICENSE",
+  "license_sha256": "62c7a1e35f56406896d7aa7ca52d0cc0d272ac022b5d2796e7d6905db8a3636a"
+}

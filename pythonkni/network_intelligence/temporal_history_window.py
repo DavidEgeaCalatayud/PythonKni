@@ -26,10 +26,12 @@ from .automatic_snapshot import AutomaticSnapshotResult
 from .history_center_window import HistoryCenterDialog
 from .history_center_window import Tool as HistoryCenterTool
 from .notification_window import ChangeNotificationDialog
-from .notifications import load_notification_inbox
+from .notifications import ChangeNotification, load_notification_inbox
 from .retention import RetentionPolicy
 from .temporal_notifications import (
-    load_monitor_notifications,
+    MONITOR_SOURCE_DETAIL,
+    PATH_SOURCE_DETAIL,
+    load_temporal_notifications,
     mark_notification_ids_read,
     notification_inbox_lock,
 )
@@ -37,8 +39,15 @@ from .temporal_notifications import (
 NOTIFICATION_REFRESH_MS = 2000
 
 
+def _source_label(notification: ChangeNotification) -> str:
+    for detail in notification.details:
+        if detail.startswith("Source: "):
+            return detail.removeprefix("Source: ")
+    return "Temporal telemetry"
+
+
 class TemporalHistoryCenterDialog(HistoryCenterDialog):
-    """History Center extended with passive Network Traffic Monitor events."""
+    """History Center extended with first-party temporal network observations."""
 
     def __init__(
         self,
@@ -58,16 +67,16 @@ class TemporalHistoryCenterDialog(HistoryCenterDialog):
         self.temporal_status.setWordWrap(True)
         temporal_layout.addWidget(self.temporal_status)
 
-        self.temporal_table = QTableWidget(0, 6)
+        self.temporal_table = QTableWidget(0, 7)
         self.temporal_table.setHorizontalHeaderLabels(
-            ["Detected", "Severity", "Event", "Subject", "Scope", "Message"]
+            ["Detected", "Source", "Severity", "Event", "Subject", "Scope", "Message"]
         )
         self.temporal_table.setSelectionBehavior(QAbstractItemView.SelectRows)
         self.temporal_table.setSelectionMode(QAbstractItemView.SingleSelection)
         self.temporal_table.setEditTriggers(QAbstractItemView.NoEditTriggers)
         self.temporal_table.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeToContents)
         self.temporal_table.horizontalHeader().setStretchLastSection(True)
-        self.temporal_table.setMaximumHeight(210)
+        self.temporal_table.setMaximumHeight(230)
         temporal_layout.addWidget(self.temporal_table)
 
         layout = self.layout()
@@ -82,7 +91,7 @@ class TemporalHistoryCenterDialog(HistoryCenterDialog):
 
     def _refresh_temporal_events(self) -> None:
         try:
-            notifications = load_monitor_notifications(self.notification_path)
+            notifications = load_temporal_notifications(self.notification_path)
         except Exception as error:
             self.temporal_table.setRowCount(0)
             self.temporal_status.setText(f"Telemetría temporal no disponible: {error}")
@@ -96,16 +105,20 @@ class TemporalHistoryCenterDialog(HistoryCenterDialog):
             item for item in notifications if since is None or item.detected_at >= since
         )
         unread = sum(not item.read for item in filtered)
+        monitor_count = sum(MONITOR_SOURCE_DETAIL in item.details for item in filtered)
+        path_count = sum(PATH_SOURCE_DETAIL in item.details for item in filtered)
         self.temporal_status.setText(
-            f"{len(filtered)} evento(s) del Network Traffic Monitor · {unread} sin leer. "
-            "El filtro temporal del History Center también se aplica a esta telemetría; "
-            "el scope mostrado es el origen del monitor, no un snapshot sintético."
+            f"{len(filtered)} evento(s) temporal(es) · {unread} sin leer · "
+            f"Traffic Monitor {monitor_count} · Path Analyzer {path_count}. "
+            "El filtro temporal del History Center también se aplica aquí; estos scopes son "
+            "orígenes de observación y no snapshots sintéticos."
         )
 
         self.temporal_table.setRowCount(len(filtered))
         for row, item in enumerate(filtered):
             values = (
                 item.detected_at.astimezone().strftime("%d/%m/%Y %H:%M:%S"),
+                _source_label(item),
                 item.severity.value,
                 item.category,
                 item.subject_id or "—",

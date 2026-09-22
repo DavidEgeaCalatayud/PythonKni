@@ -12,7 +12,7 @@
 ![Lint](https://img.shields.io/badge/lint-Ruff%20F%20%2B%20I-purple)
 ![License](https://img.shields.io/badge/license-MIT-lightgrey)
 
-PythonKni is a **local-first Windows desktop utility suite** built with Python and PyQt5. It combines file/PDF/archive operations, duplicate detection, network diagnostics and Network Intelligence, passive network traffic observability, explicit-target web reconnaissance, secure peer-to-peer transfer, process inspection, startup management, Windows event analysis, system reporting, WiFi diagnostics and safe temporary-file cleanup in one application.
+PythonKni is a **local-first Windows desktop utility suite** built with Python and PyQt5. It combines file/PDF/archive operations, duplicate detection, network discovery and Network Intelligence, passive network traffic observability, hop-by-hop path/latency diagnostics, explicit-target web reconnaissance, secure peer-to-peer transfer, process inspection, startup management, Windows event analysis, system reporting, WiFi diagnostics and safe temporary-file cleanup in one application.
 
 The repository is maintained as an application rather than a collection of scripts. First-party domains follow enforced dependency boundaries, long-running work is moved away from the GUI thread, destructive operations have explicit safeguards, dependencies are reproducibly locked and audited, pinned native components are verified before packaging, and every candidate is validated through the real Windows packaging/installer path.
 
@@ -33,6 +33,7 @@ The repository is maintained as an application rather than a collection of scrip
 | **Web Recon Auditor** | Audit DNS, TLS, HTTP security posture and bounded web-surface evidence for one explicit URL/hostname without CIDR or internet-wide discovery |
 | **Network Intelligence** | Persist assets/relationships and service evidence, apply bounded finding-aware Security Score rules, compare/history snapshots, schedule checks, optionally fingerprint known TCP services before snapshots, detect meaningful changes and manage retention |
 | **Network Traffic Monitor** | Observe local adapter RX/TX rates and TCP/UDP socket/process/host activity, generate temporal alerts/history, optionally enrich public destinations, and explicitly capture with Windows `pktmon` |
+| **Network Path Analyzer** | Trace one explicit target through ICMP/UDP/TCP, aggregate per-hop RTT/loss/jitter, identify stable route changes/latency jumps and publish path events to History Center through a pinned Trippy backend |
 | **Secure Transfer** | Send text/files/folders and create temporary secure tunnels/localhost-only port forwards through an isolated, pinned Tailcat transport |
 | **Process Manager** | Inspect processes, filter resource use, safely terminate selected processes and query optional VirusTotal reports |
 | **Temporary Cleaner** | Preview and clean explicitly authorized temporary/cache targets without following symlinks/reparse points |
@@ -82,7 +83,7 @@ pythonkni/<domain>/models.py
 services ─────► pythonkni/core + pythonkni/infrastructure
 ```
 
-`tests/test_architecture_boundaries.py` makes these rules executable. Models and infrastructure cannot depend on Qt/tool presentation code, services cannot import windows, and OS mutations remain in the owning service instead of leaking into widgets. Network Monitor, Web Recon and Secure Transfer are included in the same domain matrix as the established first-party tools.
+`tests/test_architecture_boundaries.py` makes these rules executable. Models and infrastructure cannot depend on Qt/tool presentation code, services cannot import windows, and OS mutations remain in the owning service instead of leaking into widgets. Network Monitor, Network Path, Web Recon and Secure Transfer are included in the same domain matrix as the established first-party tools.
 
 Network Intelligence is a larger composed domain under `pythonkni/network_intelligence/`; persistence, scoring, fingerprints, scheduling, history and notification logic remain separated from Qt composition and are covered by domain-specific regressions and an incremental structural typing ratchet.
 
@@ -138,9 +139,10 @@ The canonical resolver/build environment is Windows with **CPython 3.13.15** usi
 Native optional components are also reproducible rather than runtime-downloaded:
 
 - `third_party/nerva.lock.json` pins **Nerva v1.69.4** for Windows amd64 and verifies the upstream archive/license before staging;
-- `third_party/tailcat.lock.json` pins **Tailcat v0.5.0** for Windows amd64; staging verifies the official archive SHA-256, records/revalidates the executable digest and runs a real CLI contract smoke before Secure Transfer accepts it.
+- `third_party/tailcat.lock.json` pins **Tailcat v0.5.0** for Windows amd64; staging verifies the official archive SHA-256, records/revalidates the executable digest and runs a real CLI contract smoke before Secure Transfer accepts it;
+- `third_party/trippy.lock.json` pins **Trippy v0.13.0** for Windows x86_64 MSVC; staging verifies the official archive SHA-256, the extracted executable digest and every CLI option consumed by Network Path Analyzer before packaging.
 
-GitHub Actions are pinned by immutable commit SHA and Dependabot checks Python dependencies and Actions weekly. See [`docs/python-runtime.md`](docs/python-runtime.md), [`docs/network-service-fingerprinting.md`](docs/network-service-fingerprinting.md) and [`docs/secure-transfer.md`](docs/secure-transfer.md).
+GitHub Actions are pinned by immutable commit SHA and Dependabot checks Python dependencies and Actions weekly. See [`docs/python-runtime.md`](docs/python-runtime.md), [`docs/network-service-fingerprinting.md`](docs/network-service-fingerprinting.md), [`docs/secure-transfer.md`](docs/secure-transfer.md) and [`docs/network-path-analyzer.md`](docs/network-path-analyzer.md).
 
 ### Service Intelligence v2
 
@@ -195,6 +197,29 @@ Packet capture remains a separate explicit action backed by Windows `pktmon`, wi
 
 See [`docs/network-traffic-monitor.md`](docs/network-traffic-monitor.md) and [`docs/network-monitor-intelligence-integration.md`](docs/network-monitor-intelligence-integration.md).
 
+### Network Path Analyzer
+
+Network Path Analyzer is the hop-by-hop diagnostic layer that sits naturally after discovery, intelligence and passive traffic observation:
+
+```text
+Network Explorer        -> what exists?
+Network Intelligence    -> what do we know/history?
+Network Traffic Monitor -> what connections are happening?
+Network Path Analyzer   -> where does path latency/degradation begin?
+```
+
+PythonKni accepts one explicit hostname/IP and uses an isolated, pinned **Trippy 0.13.0** backend for ICMP/UDP/TCP path probes. The Trippy TUI is not embedded. The first-party `network_path` domain owns validation, rolling statistics, route comparison, temporal-event semantics, persistence and Qt presentation.
+
+The Path view exposes responding host/IP sets, response loss, last/average/min/max RTT, jitter and status per TTL plus a destination RTT timeline. Route changes require repeated confirmation. `destination_unreachable` requires repeated destination misses. `latency_spike` requires both an absolute and relative deviation from a rolling destination baseline.
+
+Most importantly, PythonKni does **not** interpret one intermediate router failing to return TTL-expired/ICMP diagnostic traffic as end-to-end packet loss. `packet_loss` is based on destination observations, while transient silent middle hops are retained against the confirmed route for comparison. This avoids a common traceroute/MTR false-positive pattern caused by router rate limiting.
+
+Path events (`route_changed`, `latency_spike`, `packet_loss`, `hop_added`, `hop_removed`, `destination_unreachable`) publish into the same canonical Change Notification inbox and History Center used by Network Traffic Monitor, tagged with source `Network Path Analyzer` and without creating synthetic Network Intelligence assets.
+
+On Windows, Trippy's tracing modes require Administrator privileges for raw sockets. PythonKni reports that requirement explicitly instead of silently changing measurement semantics.
+
+See [`docs/network-path-analyzer.md`](docs/network-path-analyzer.md).
+
 ### Web Recon Auditor
 
 Web Recon starts from one explicit HTTP/HTTPS URL or DNS hostname. It does not accept CIDR/range input. DNS, TLS, HTTP security posture and bounded discovery/enrichment remain behind first-party components and do not turn a single target into internet-wide discovery.
@@ -221,7 +246,7 @@ See [`docs/network-intelligence-quality-gates.md`](docs/network-intelligence-qua
 
 A source-test pass is not considered sufficient. CI stages and verifies the exact pinned native components supported by the source, builds the actual PyInstaller Windows bundle and verifies the packaged application before distribution.
 
-The validated bundle is packaged as ZIP/checksum, compiled into a per-user Inno Setup installer and exercised through a second real lifecycle smoke: silent install, execution of the **installed** EXE, silent uninstall and cleanup verification. See [`docs/release-readiness.md`](docs/release-readiness.md) and [`docs/windows-installer.md`](docs/windows-installer.md).
+The validated bundle is packaged as ZIP/checksum, compiled into a per-user Inno Setup installer and exercised through a second real lifecycle smoke: silent install, execution of the **installed** EXE, silent uninstall and cleanup verification. The common ZIP packager also refuses a source that declares Nerva/Tailcat/Trippy but is missing the corresponding valid packaged runtime. See [`docs/release-readiness.md`](docs/release-readiness.md) and [`docs/windows-installer.md`](docs/windows-installer.md).
 
 ---
 
@@ -243,6 +268,7 @@ PythonKni/
 │  ├─ network-service-fingerprinting.md
 │  ├─ network-traffic-monitor.md
 │  ├─ network-monitor-intelligence-integration.md
+│  ├─ network-path-analyzer.md
 │  ├─ web-recon-auditor.md
 │  ├─ secure-transfer.md
 │  ├─ network-scheduled-monitoring.md
@@ -265,6 +291,7 @@ PythonKni/
 │  ├─ network/
 │  ├─ network_intelligence/
 │  ├─ network_monitor/
+│  ├─ network_path/
 │  ├─ web_recon/
 │  └─ secure_transfer/
 ├─ scripts/
@@ -273,15 +300,18 @@ PythonKni/
 │  ├─ check_dependency_locks.py
 │  ├─ check_network_intelligence_typing.py
 │  ├─ check_tailcat_contract.ps1
+│  ├─ check_trippy_contract.ps1
 │  ├─ fetch_nerva.ps1
 │  ├─ fetch_tailcat.ps1
+│  ├─ fetch_trippy.ps1
 │  ├─ package_windows_bundle.ps1
 │  ├─ smoke_test_windows_installer.ps1
 │  └─ update_oui_registry.py
 ├─ third_party/
 │  ├─ NOTICE.md
 │  ├─ nerva.lock.json
-│  └─ tailcat.lock.json
+│  ├─ tailcat.lock.json
+│  └─ trippy.lock.json
 ├─ tests/
 ├─ tools/                       # adapters + shared Qt/runtime helpers
 ├─ main.py
@@ -322,7 +352,7 @@ For development/CI tooling:
 python -m pip install --require-hashes -r requirements-dev.txt
 ```
 
-Optional OCR/document workflows can additionally require Tesseract OCR and Poppler. Secure Transfer file/folder sending additionally requires Windows OpenSSH Client (`scp.exe`). These executables are outside the Python dependency lock and Python SBOM.
+Optional OCR/document workflows can additionally require Tesseract OCR and Poppler. Secure Transfer file/folder sending additionally requires Windows OpenSSH Client (`scp.exe`). Network Path Analyzer's Trippy backend is staged by the build rather than installed through pip; on Windows its tracing modes require running PythonKni with Administrator privileges. These executables/native capabilities are outside the Python dependency lock and Python SBOM.
 
 ---
 
@@ -334,7 +364,7 @@ Runtime data is stored outside the source tree under:
 %LOCALAPPDATA%\PythonKni\
 ```
 
-PythonKni does not require an application account or backend service. Optional VirusTotal process analysis reads `VIRUSTOTAL_API_KEY`, hashes the selected executable locally and queries by SHA-256; it does not upload the executable itself, although the hash is disclosed to the provider. Network Traffic Monitor ASN/prefix enrichment is opt-in and discloses public-destination lookup data to RIPEstat when enabled. Web Recon can contact the explicitly selected target and its documented optional enrichment sources. Secure Transfer uses the upstream Tailcat data plane/DERP behavior described in its dedicated trust documentation.
+PythonKni does not require an application account or backend service. Optional VirusTotal process analysis reads `VIRUSTOTAL_API_KEY`, hashes the selected executable locally and queries by SHA-256; it does not upload the executable itself, although the hash is disclosed to the provider. Network Traffic Monitor ASN/prefix enrichment is opt-in and discloses public-destination lookup data to RIPEstat when enabled. Web Recon can contact the explicitly selected target and its documented optional enrichment sources. Secure Transfer uses the upstream Tailcat data plane/DERP behavior described in its dedicated trust documentation. Network Path Analyzer sends only the explicitly requested ICMP/UDP/TCP diagnostic probes toward the chosen target/path and forces Trippy DNS resolution through the system resolver; it does not enable Trippy ASN lookups.
 
 Never commit or publicly share real API keys, WiFi credentials, private logs, scan histories, transfer tokens or diagnostic reports. See [`docs/security.md`](docs/security.md).
 
@@ -370,6 +400,7 @@ python -m ruff check .
 python -m ruff format --check .
 .\scripts\fetch_nerva.ps1
 .\scripts\fetch_tailcat.ps1
+.\scripts\fetch_trippy.ps1
 pyinstaller --noconfirm --clean PythonKni.spec
 dist\PythonKni\PythonKni.exe --smoke-test
 .\scripts\package_windows_bundle.ps1 -OutputPrefix "PythonKni-windows-x64"
@@ -388,6 +419,7 @@ Local Windows build:
 ```powershell
 .\scripts\fetch_nerva.ps1
 .\scripts\fetch_tailcat.ps1
+.\scripts\fetch_trippy.ps1
 pyinstaller --noconfirm --clean PythonKni.spec
 dist\PythonKni\PythonKni.exe --smoke-test
 .\scripts\package_windows_bundle.ps1 -OutputPrefix "PythonKni-windows-x64"
@@ -397,7 +429,7 @@ dist\PythonKni\PythonKni.exe --smoke-test
 
 Tags matching exact `vX.Y.Z` trigger `.github/workflows/release.yml`. Release validation repeats dependency integrity/audit gates, OUI validation, tests, coverage and Network Intelligence typing ratchets, lint/format, pinned native-component staging/verification, PyInstaller build and frozen smoke testing. Installer-enabled release source additionally builds and smoke-tests the version-bound Inno Setup installer before publication.
 
-`v0.1.0` is the first published public release and intentionally retains its original immutable source/assets. Installer, Nerva and Tailcat packaging were added afterward; historical recovery never injects current installer/native binaries into old immutable tags. See [`docs/release-readiness.md`](docs/release-readiness.md), [`docs/network-service-fingerprinting.md`](docs/network-service-fingerprinting.md), [`docs/secure-transfer.md`](docs/secure-transfer.md) and [`docs/windows-installer.md`](docs/windows-installer.md).
+`v0.1.0` is the first published public release and intentionally retains its original immutable source/assets. Installer, Nerva, Tailcat and Trippy packaging were added afterward; historical recovery never injects current installer/native binaries into old immutable tags. See [`docs/release-readiness.md`](docs/release-readiness.md), [`docs/network-service-fingerprinting.md`](docs/network-service-fingerprinting.md), [`docs/secure-transfer.md`](docs/secure-transfer.md), [`docs/network-path-analyzer.md`](docs/network-path-analyzer.md) and [`docs/windows-installer.md`](docs/windows-installer.md).
 
 Windows Authenticode signing is not yet implemented and remains a separate release-engineering milestone.
 
@@ -435,6 +467,7 @@ For a conventional first-party domain, keep the adapter thin and put business/OS
 - DOCX -> PDF conversion is intentionally simplified and cannot reproduce every Microsoft Word layout feature.
 - Network/system capabilities depend on Windows permissions, topology, firewall policy and available OS utilities.
 - Network Traffic Monitor visibility depends on Windows counters/socket telemetry and socket lifetime; absence of an observation is not proof that traffic did not exist.
+- Network Path Analyzer requires Administrator privileges on Windows for Trippy raw-socket tracing; intermediate diagnostic response loss is not automatically forwarding loss, and a target can filter one probe protocol while remaining otherwise reachable.
 - Nerva SCTP fingerprinting is unavailable in the validated Windows package because Nerva v1.69.4 restricts SCTP to Linux.
 - UDP probing is intentionally bounded and preserves `open|filtered` uncertainty when there is no conclusive response.
 - Misconfiguration checks are explicit only and are never part of normal or scheduled fingerprinting.
@@ -452,7 +485,7 @@ For a conventional first-party domain, keep the adapter thin and put business/OS
 
 - [x] Publish and verify the first tagged GitHub Release (`v0.1.0`) from a fully green `main` commit.
 - [x] Add per-user Windows installer generation and installed-app smoke validation.
-- [x] Add reproducible Nerva and Tailcat native-component staging/packaging verification.
+- [x] Add reproducible Nerva, Tailcat and Trippy native-component staging/packaging verification.
 - [ ] Add screenshots/demo media for the main application and representative tools.
 - [ ] Add Windows Authenticode signing after certificate/identity and secret-handling policy is defined.
 
@@ -470,6 +503,7 @@ For a conventional first-party domain, keep the adapter thin and put business/OS
 - [x] Add Web Recon Auditor for explicit-target web reconnaissance.
 - [x] Add Secure Transfer with isolated pinned Tailcat transport.
 - [x] Add passive Network Traffic Monitor with temporal Network Intelligence integration and explicit Windows capture.
+- [x] Add Trippy-backed Network Path Analyzer with conservative hop/path diagnostics and History Center integration.
 - [ ] Build a **PC Health / System Intelligence dashboard** that composes existing services instead of duplicating their domain logic.
 - [ ] Add a unified operation/history and recovery center for reversible maintenance actions.
 - [ ] Add further defensive device-role context only when backed by explicit persisted evidence.
@@ -485,6 +519,7 @@ For a conventional first-party domain, keep the adapter thin and put business/OS
 - [`docs/network-service-fingerprinting.md`](docs/network-service-fingerprinting.md) — pinned Nerva trust model, TCP/UDP/SCTP/misconfiguration modes and scheduled fingerprint contract
 - [`docs/network-traffic-monitor.md`](docs/network-traffic-monitor.md) — passive traffic telemetry, capture and operational limits
 - [`docs/network-monitor-intelligence-integration.md`](docs/network-monitor-intelligence-integration.md) — temporal publication/read-only Network Intelligence integration
+- [`docs/network-path-analyzer.md`](docs/network-path-analyzer.md) — pinned Trippy backend, hop/path semantics, route changes and temporal integration
 - [`docs/web-recon-auditor.md`](docs/web-recon-auditor.md) — explicit-target web reconnaissance and scope limits
 - [`docs/secure-transfer.md`](docs/secure-transfer.md) — Tailcat transport pin, trust model and secure-transfer behavior
 - [`docs/network-scheduled-monitoring.md`](docs/network-scheduled-monitoring.md) — in-app scheduling and automatic snapshot semantics
