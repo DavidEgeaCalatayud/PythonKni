@@ -17,15 +17,15 @@
       ]
     }
   ],
-  "entry_count": 40046,
+  "entry_count": 40283,
   "generator": "scripts/update_oui_registry.py",
   "registry": "IEEE MA-L / OUI-24",
-  "registry_sha256": "68a002284f369879697acc139e4ae5cdf8ced097961571df826ae5940ff6cddb",
-  "retrieved_at": "2026-09-02T08:46:55Z",
+  "registry_sha256": "4fd4fb5ea017554e8bfa226cac2d4d7d36bac3bae6c9df086fd89bde64e2a8a1",
+  "retrieved_at": "2026-10-01T11:01:30Z",
   "schema_version": 1,
-  "source_etag": "\"6a97d7ce-3a671e\"",
-  "source_last_modified": "Wed, 02 Sep 2026 08:01:18 GMT",
+  "source_etag": "\"6abe2f63-3ac585\"",
+  "source_last_modified": "Thu, 01 Oct 2026 10:01:07 GMT",
   "source_name": "IEEE Registration Authority MA-L Public Listing",
-  "source_sha256": "66ddb3dd80d595876a711c987a72adaa175c2e3178b194bbf9b1918074571714",
+  "source_sha256": "387471290f8cbcecbad1ac76e6ee442e543f855394690caf3b787ca9b16a24c8",
   "source_url": "https://standards-oui.ieee.org/oui/oui.csv"
 }
