@@ -870,9 +870,9 @@ pymupdf==1.28.2 \
     --hash=sha256:fd481ed48bef56305c41fb7e05a055c03345c899c7b101dad086258b438f8168 \
     --hash=sha256:ffe91a24edc75c80da2a4b62f50fc0f54632d34fc8fe4cbc48e5c7ff07cf8fb4
     # via -r requirements.in
-pypdf==6.19.0 \
-    --hash=sha256:7e5d6e730e7dae87d560a2cee218b852f6498c8be61966f3cd02ead971e48d14 \
-    --hash=sha256:bbc43aca292369ccc6cbc8a921991ecf2538a3587ab5a116eff06c321d647155
+pypdf==6.20.0 \
+    --hash=sha256:72b1e897fef7f5bbed7f2a93881a4861d98dbf25ae39981c8a023583239edbda \
+    --hash=sha256:f003fc2014814d264fe7dd3f9d435c158e23e1a85a2233f87a0a2d6d21c914ad
     # via -r requirements.in
 pyppmd==1.3.1 \
     --hash=sha256:011f845de195d60fe973a635a1f4be981b7d80f357a8acb1b2d83bdf5087c808 \
